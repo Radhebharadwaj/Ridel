@@ -1,0 +1,69 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+
+# IntelliJ / Android Studio
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Visual Studio Code
+.vscode/
+
+# Flutter/Dart/Pub
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins-dependencies
+
+# Android - Generated Artifacts (Ye important hai!)
+android/build/
+android/app/build/
+android/.gradle
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/local.properties
+android/**/generated/
+
+# Android - Assets
+android/app/src/main/assets/
+
+# iOS
+ios/*.mode1v3
+ios/*.mode2v3
+ios/*.moved-aside
+ios/*.pbuser
+ios/*.perspectivev3
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Generated.xcconfig
+ios/Pods/
+ios/.symlinks/
+ios/build/
+
+# Exceptions (Files we MUST keep)
+!android/build.gradle
+!android/app/build.gradle
+!android/gradle/wrapper/gradle-wrapper.properties
+!android/settings.gradle
+!android/settings.gradle.kts
+
+# Python Virtual Environment (Junk)
+venv/
+env/
+.env
+__pycache__/
+*.pyc

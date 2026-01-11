@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "141150485050",
+    "project_id": "ridel-483615",
+    "storage_bucket": "ridel-483615.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:141150485050:android:cda65a1f9ac4bc75471303",
+        "android_client_info": {
+          "package_name": "com.ridel"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "141150485050-tb6is1kksj7j433hfrkho9aq4hh7bo98.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDvWCkXP2LY_iiC2jojpKUQ_x7cxLF7fyA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "141150485050-tb6is1kksj7j433hfrkho9aq4hh7bo98.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "141150485050-mh2n6tqplbs865tgnkki4vvkpdqjsr5o.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.ridel"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

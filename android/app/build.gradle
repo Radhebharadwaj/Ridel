@@ -1,0 +1,51 @@
+// android/app/build.gradle
+
+// NOTE: Plugins block MUST be at the very top of the file
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+    id "com.google.gms.google-services" // Firebase Services
+}
+
+// NOTE: Flutter properties ko define karne ka safe tareeka
+// In properties ko 'defaultConfig' mein direct access kiya jayega
+def flutterVersionCode = project.hasProperty('flutterVersionCode') ? project.property('flutterVersionCode').toInteger() : 1
+def flutterVersionName = project.hasProperty('flutterVersionName') ? project.property('flutterVersionName') : '1.0.0'
+
+android {
+    namespace "com.ridel"
+    
+    // Flutter Extension properties ko direct access
+    compileSdkVersion flutter.compileSdkVersion.toInteger()
+    // ndkVersion "27.0.12077973"
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    kotlinOptions {
+        jvmTarget = '11'
+    }
+
+    defaultConfig {
+        applicationId "com.ridel"
+        minSdkVersion flutter.minSdkVersion
+        targetSdkVersion flutter.targetSdkVersion.toInteger()
+        
+        // Upar define kiye gaye variables ko direct use karein
+        versionCode flutterVersionCode
+        versionName flutterVersionName
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source '../..'
+}

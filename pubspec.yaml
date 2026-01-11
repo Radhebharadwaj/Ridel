@@ -1,0 +1,84 @@
+name: ridel
+description: "Ridel - Smart Metro & Tour App"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- 1. UTILITIES (CORE) ---
+  universal_io: ^2.3.1       # ✅ Corrected (2.3.2 exist nahi karta)
+  provider: ^6.1.1
+  flutter_screenutil: ^5.9.0
+  intl: ^0.19.0
+  collection: ^1.18.0
+  string_similarity: ^2.0.0
+  cupertino_icons: ^1.0.6
+  path: ^1.9.0
+
+  # --- 2. DATABASE ---
+  sqflite: ^2.3.3              # Latest Stable
+  sqflite_common_ffi_web: ^0.4.5  # ✅ Corrected (0.4.6 exist nahi karta)
+  sqlite3: ^2.1.0
+
+  # --- 3. FIREBASE ---
+  firebase_core: ^3.0.0
+  cloud_firestore: ^5.0.0
+  firebase_storage: ^12.0.0
+  http: ^1.2.0
+  supabase_flutter: ^2.12.0
+  google_sign_in: ^6.2.1
+  flutter_typeahead: ^5.2.0
+  animated_text_kit: ^4.3.0
+  image_picker: ^1.1.2
+  image_cropper: ^11.0.0
+  local_auth: ^2.1.6
+  flutter_secure_storage: ^9.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+  # --- ICON & SPLASH GENERATORS ---
+  flutter_native_splash: ^2.4.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icon/
+    - assets/delhi_metro.db  # ✅ Asset DB
+
+# --- APP ICON CONFIGURATION ---
+# --- APP ICON CONFIGURATION ---
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/icon.png" # <-- Make sure this matches your file
+  min_sdk_android: 21
+  remove_alpha_ios: true
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/icon/icon.png" # <-- Logo should be centered
+
+# --- SPLASH SCREEN CONFIGURATION ---
+flutter_native_splash:
+  color: "#000000"
+  image: "assets/icon/logo.png"
+  branding: "assets/icon/branding.png"
+  
+  color_dark: "#000000"
+  image_dark: "assets/icon/logo.png"
+  branding_dark: "assets/icon/branding.png"
+
+  android_12:
+    image: "assets/icon/logo.png"
+    icon_background_color: "#000000"
+    branding: "assets/icon/branding.png"
+  
+  fullscreen: false # <-- Isse smooth transition milega
