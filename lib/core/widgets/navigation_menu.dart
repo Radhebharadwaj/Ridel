@@ -86,11 +86,11 @@ class _NavigationMenuState extends State<NavigationMenu> with SingleTickerProvid
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _buildNavItem(Icons.home_rounded, Icons.home_outlined, 0),
-                      _buildNavItem(Icons.directions_subway_filled_rounded, Icons.directions_subway_outlined, 1), 
-                      _buildNavItem(Icons.explore_rounded, Icons.explore_outlined, 2), 
-                      _buildNavItem(Icons.directions_bus_rounded, Icons.directions_bus_outlined, 3), 
-                      _buildNavItem(Icons.person_rounded, Icons.person_outline_rounded, 4),
+                      Expanded(child: _buildNavItem(Icons.home_rounded, Icons.home_outlined, 0)),
+                      Expanded(child: _buildNavItem(Icons.directions_subway_filled_rounded, Icons.directions_subway_outlined, 1)),
+                      Expanded(child: _buildNavItem(Icons.explore_rounded, Icons.explore_outlined, 2)),
+                      Expanded(child: _buildNavItem(Icons.directions_bus_rounded, Icons.directions_bus_outlined, 3)),
+                      Expanded(child: _buildNavItem(Icons.person_rounded, Icons.person_outline_rounded, 4)),
                     ],
                   ),
                 ),

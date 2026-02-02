@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'pin_screen.dart';
 
@@ -158,6 +159,18 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   // --- Auto Lock Timeout ---
                   _buildDropdownTile(),
                 ],
+
+                const SizedBox(height: 20),
+
+                // --- Permissions ---
+                _buildActionTile(
+                  title: "Manage System Permissions",
+                  icon: Icons.settings_applications,
+                  onTap: () {
+                    AppHaptics.lightImpact();
+                    openAppSettings();
+                  },
+                ),
               ],
             ),
           ),

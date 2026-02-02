@@ -29,6 +29,20 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   bool _isGuest = false;
   bool _isLoading = true;
 
+  Color _parseColor(String? hexCode) {
+    try {
+      if (hexCode == null || hexCode.toString().toLowerCase() == 'nan' || hexCode.isEmpty) {
+        return Colors.cyan; // Default neon color
+      }
+      final buffer = StringBuffer();
+      if (hexCode.length == 6 || hexCode.length == 7) buffer.write('ff');
+      buffer.write(hexCode.replaceFirst('#', ''));
+      return Color(int.parse(buffer.toString(), radix: 16));
+    } catch (e) {
+      return Colors.cyan; // Fallback
+    }
+  }
+
   // Animation
   late AnimationController _glowController;
   late Animation<double> _glowAnimation;
@@ -74,10 +88,24 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   Future<void> _loadData() async {
     try {
       final data = await _repo.getProfile();
+      
+      // Zombie User Check: If user exists in Auth but profile is deleted/null
+      if (data == null) {
+        debugPrint("Profile missing, logging out...");
+        await Supabase.instance.client.auth.signOut();
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+            (route) => false,
+          );
+        }
+        return;
+      }
+
       if (mounted) {
         setState(() {
           _profileData = data;
-          _isNeonActive = data?['is_profile_completed'] ?? false;
+          _isNeonActive = data['is_profile_completed'] ?? false;
           _isLoading = false;
         });
         
@@ -228,8 +256,9 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   Widget _buildProfileUI(Map<String, dynamic> profileData) {
     final String userName = profileData['full_name'] ?? 'Traveler';
     final String userPhone = profileData['phone_primary'] ?? 'Complete Profile to Unlock';
-    final String avatarUrl = profileData['avatar_url'] ?? ''; 
+    final String avatarUrl = profileData['avatar_url'] ?? '';
     final bool hasAvatar = avatarUrl.isNotEmpty;
+    final Color profileColor = _parseColor(profileData['color_hex']);
 
     final Widget avatarWidget = hasAvatar
         ? CircleAvatar(
@@ -253,7 +282,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                 color: Colors.transparent,
                 boxShadow: [
                   BoxShadow(
-                    color: (_isNeonActive ? Colors.cyanAccent : Colors.blueAccent).withOpacity(0.15),
+                    color: (_isNeonActive ? profileColor : Colors.blueAccent).withOpacity(0.15),
                     blurRadius: 150,
                     spreadRadius: 50,
                   )
@@ -297,7 +326,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                                         shape: BoxShape.circle,
                                         boxShadow: _isNeonActive ? [
                                           BoxShadow(
-                                            color: Colors.cyan.withOpacity(0.4),
+                                            color: profileColor.withOpacity(0.4),
                                             blurRadius: _glowAnimation.value,
                                             spreadRadius: 2,
                                           )
@@ -308,7 +337,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                                         decoration: BoxDecoration(
                                           shape: BoxShape.circle,
                                           border: Border.all(
-                                            color: _isNeonActive ? Colors.cyan : Colors.grey.withOpacity(0.3), 
+                                            color: _isNeonActive ? profileColor : Colors.grey.withOpacity(0.3),
                                             width: 2
                                           ),
                                         ),

@@ -60,5 +60,11 @@
 		<false/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>Ridel needs your location to verify your Travel ID and auto-fill your address.</string>
+		<key>NSCameraUsageDescription</key>
+		<string>Ridel needs camera access to let you take a profile picture.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Ridel needs gallery access to let you select a profile picture.</string>
 	</dict>
 </plist>

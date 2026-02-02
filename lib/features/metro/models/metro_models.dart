@@ -78,10 +78,17 @@ class MetroLine {
     );
   }
 
-  static Color _hexToColor(String hex) {
-    hex = hex.replaceAll('#', '');
-    if (hex.length == 6) hex = 'FF$hex';
-    return Color(int.parse(hex, radix: 16));
+  static Color _hexToColor(String? hex) {
+    if (hex == null || hex.toString().toLowerCase() == 'nan' || hex.isEmpty) {
+      return Colors.grey;
+    }
+    try {
+      String cleanHex = hex.replaceAll('#', '');
+      if (cleanHex.length == 6) cleanHex = 'FF$cleanHex';
+      return Color(int.parse(cleanHex, radix: 16));
+    } catch (e) {
+      return Colors.grey;
+    }
   }
 }
 

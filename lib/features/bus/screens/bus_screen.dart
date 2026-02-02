@@ -443,72 +443,89 @@ class _BusScreenState extends State<BusScreen> with TickerProviderStateMixin, Au
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         // LEFT SIDE: Icon + Text
-        Row(
-          children: [
-            Container(
-              height: 48, width: 48,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.1), border: Border.all(color: Colors.white.withValues(alpha: 0.1))),
-              child: const Icon(Icons.directions_bus_rounded, color: Colors.orange, size: 24),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(greeting, style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w500)),
-                const SizedBox(height: 2),
-                const Text("Traveler", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ],
+        // Isko Flexible banaya taaki ye space adjust kare
+        Flexible(
+          flex: 2,
+          child: Row(
+            mainAxisSize: MainAxisSize.min, // Added
+            children: [
+              Container(
+                height: 44, width: 44, // Thoda chota kiya (48 -> 44)
+                decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.1), border: Border.all(color: Colors.white.withOpacity(0.1))),
+                child: const Icon(Icons.directions_bus_rounded, color: Colors.orange, size: 22),
+              ),
+              const SizedBox(width: 8), // Gap kam kiya (12 -> 8)
+              Flexible( // Text ko overflow hone se bachane ke liye
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(greeting, style: TextStyle(color: Colors.grey.shade400, fontSize: 11, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    const Text("Traveler", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         
         // RIGHT SIDE: Location + SOS + History
-        Row(
-          children: [
-            // 1. Location Pill
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white.withValues(alpha: 0.1))),
-              child: Row(
-                children: [
-                  const Text("Delhi", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                  const SizedBox(width: 4),
-                  Icon(Icons.keyboard_arrow_down_rounded, color: Colors.blue.shade300, size: 16)
-                ],
-              ),
-            ),
-            
-            const SizedBox(width: 10),
-
-            // 2. SOS BUTTON (Added Back)
-            GestureDetector(
-              onTap: () { 
-                AppHaptics.mediumImpact(); 
-                // Add SOS Logic here if needed
-              }, 
-              child: Container(
-                height: 40, width: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle, 
-                  color: Colors.red.withValues(alpha: 0.15), 
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3))
+        // Isko bhi Flexible banaya
+        Flexible(
+          flex: 3,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end, // Right align
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 1. Location Pill (Flexible width)
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), // Padding kam ki
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.08), borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white.withOpacity(0.1))),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible( // Text wrap/ellipsis
+                        child: const Text("Delhi", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.ellipsis)
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(Icons.keyboard_arrow_down_rounded, color: Colors.blue.shade300, size: 14)
+                    ],
+                  ),
                 ),
-                child: const Icon(Icons.sos_rounded, color: Colors.redAccent, size: 18),
               ),
-            ),
+              
+              const SizedBox(width: 6), // Gap kam kiya (10 -> 6)
 
-            const SizedBox(width: 10),
-
-            // 3. History Button
-            GestureDetector(
-              onTap: _toggleHistoryPanel,
-              child: Container(
-                height: 40, width: 40,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.08), border: Border.all(color: Colors.white.withValues(alpha: 0.1))),
-                child: const Icon(Icons.history_rounded, color: Colors.white, size: 20),
+              // 2. SOS BUTTON
+              GestureDetector(
+                onTap: () { 
+                  AppHaptics.mediumImpact(); 
+                }, 
+                child: Container(
+                  height: 36, width: 36, // Size kam kiya (40 -> 36)
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle, 
+                    color: Colors.red.withOpacity(0.15), 
+                    border: Border.all(color: Colors.red.withOpacity(0.3))
+                  ),
+                  child: const Icon(Icons.sos_rounded, color: Colors.redAccent, size: 16),
+                ),
               ),
-            ),
-          ],
+
+              const SizedBox(width: 6), // Gap kam kiya
+
+              // 3. History Button
+              GestureDetector(
+                onTap: _toggleHistoryPanel,
+                child: Container(
+                  height: 36, width: 36, // Size kam kiya (40 -> 36)
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.08), border: Border.all(color: Colors.white.withOpacity(0.1))),
+                  child: const Icon(Icons.history_rounded, color: Colors.white, size: 18),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -582,15 +599,16 @@ class _BusScreenState extends State<BusScreen> with TickerProviderStateMixin, Au
     );
   }
 
-  // --- 2. THE KEY FIX: TYPE AHEAD INPUT WITH DARK INNER BOX ---
+  // --- 2. THE KEY FIX: TYPE AHEAD INPUT WITH FLEXIBLE HEIGHT ---
   Widget _buildTypeAheadInput(String hint, IconData icon, Color iconColor, TextEditingController externalController, {required bool isFromField, required bool isMicActive, required VoidCallback onMicTap}) {
-    // ✅ Updated to match Metro Design (Darker Inner Container)
+    // ✅ Updated: Removed fixed height, added constraints and padding to prevent overflow
     return Container(
-      height: 50,
+      constraints: const BoxConstraints(minHeight: 50), // Fixed height hataya, minHeight lagaya
+      padding: const EdgeInsets.symmetric(vertical: 4), // Thodi padding di taaki text kate na
       decoration: BoxDecoration(
-        color: const Color(0xFF0F0F0F), // ✅ Inner Dark Color (Metro Style)
+        color: const Color(0xFF0F0F0F),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Row(
         children: [
@@ -606,7 +624,6 @@ class _BusScreenState extends State<BusScreen> with TickerProviderStateMixin, Au
               builder: (context, value, child) {
                 return TypeAheadField<Map<String, dynamic>>(
                   builder: (context, typeAheadController, focusNode) {
-                    // Sync controllers logic preserved
                     if (typeAheadController.text != externalController.text) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (typeAheadController.text != externalController.text) {
@@ -629,7 +646,6 @@ class _BusScreenState extends State<BusScreen> with TickerProviderStateMixin, Au
                       },
                       style: const TextStyle(color: Colors.white, fontSize: 15),
                       cursorColor: Colors.orange,
-                      // ✅ Decoration Simplified (No Borders, No Prefix Icon)
                       decoration: InputDecoration(
                         hintText: hint,
                         hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 14),
@@ -666,7 +682,6 @@ class _BusScreenState extends State<BusScreen> with TickerProviderStateMixin, Au
                     setState(() {});
                     FocusScope.of(context).unfocus();
                     
-                    // Auto-trigger search logic preserved
                     Future.delayed(const Duration(milliseconds: 200), () {
                       if (mounted && _fromController.text.trim().isNotEmpty && _toController.text.trim().isNotEmpty) {
                         _searchRoutes();
@@ -690,7 +705,7 @@ class _BusScreenState extends State<BusScreen> with TickerProviderStateMixin, Au
             ),
           ),
 
-          // Mic Icon (Aligned Right inside the box)
+          // Mic Icon
           GestureDetector(
             onTap: onMicTap,
             child: AnimatedBuilder(
@@ -701,8 +716,8 @@ class _BusScreenState extends State<BusScreen> with TickerProviderStateMixin, Au
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: isMicActive ? Colors.orange.withValues(alpha: 0.2) : Colors.transparent,
-                    boxShadow: isMicActive ? [BoxShadow(color: Colors.orange.withValues(alpha: 0.5), blurRadius: 5 + (_micGlowController.value * 8))] : [],
+                    color: isMicActive ? Colors.orange.withOpacity(0.2) : Colors.transparent,
+                    boxShadow: isMicActive ? [BoxShadow(color: Colors.orange.withOpacity(0.5), blurRadius: 5 + (_micGlowController.value * 8))] : [],
                   ),
                   child: Icon(Icons.mic_rounded, color: isMicActive ? Colors.orange : Colors.grey.shade600, size: 20),
                 );
