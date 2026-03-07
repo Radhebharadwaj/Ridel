@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'dart:async';
-import 'package:ridel/features/tour/screens/all_place.dart';
-import 'package:ridel/features/tour/screens/chat_screen.dart';
-// IMPORT HAPTICS
-import 'package:ridel/core/utils/app_haptics.dart';
+
+// 🔥 FIX 1: Relative imports use kiye hain taaki package error na aaye
+import 'all_places.dart';
+import 'chat_screen.dart';
+import '../../../core/utils/app_haptics.dart';
 
 class TourScreen extends StatefulWidget {
   const TourScreen({super.key});
@@ -13,7 +14,6 @@ class TourScreen extends StatefulWidget {
   State<TourScreen> createState() => _TourScreenState();
 }
 
-// ✅ MIXIN ADDED: AutomaticKeepAliveClientMixin
 class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   int _selectedCategoryIndex = 0;
   final List<String> _categories = ["ALL", "SPIRITUAL", "ADVENTURE", "NATURE", "URBAN", "HERITAGE"];
@@ -32,7 +32,6 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
   final TextEditingController _aiInputController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
 
-  // ✅ KeepAlive true ensures the screen stays in memory
   @override
   bool get wantKeepAlive => true;
 
@@ -66,7 +65,6 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
     _categoryController = PageController(viewportFraction: 0.25, initialPage: _selectedCategoryIndex);
     _trendingController = PageController(viewportFraction: 1.0);
     
-    // Auto-Swipe Logic
     _carouselTimer = Timer.periodic(const Duration(seconds: 5), (Timer timer) {
       if (_currentTrendingIndex < _trendingPlaces.length - 1) {
         _currentTrendingIndex++;
@@ -96,7 +94,7 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // ✅ Essential for Mixin
+    super.build(context); 
 
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
@@ -104,11 +102,10 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
     const neonCyan = Color(0xFF00E5FF);
 
     return Scaffold(
-      backgroundColor: Colors.black, // Ensure Black Background
+      backgroundColor: Colors.black, 
       resizeToAvoidBottomInset: false, 
       body: Stack(
         children: [
-          // ✅ FIX: Replaced heavy BackdropFilter with BoxShadow (Solves White Screen)
           Positioned(
             top: -120, left: -50,
             child: Container(
@@ -118,8 +115,8 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                 color: Colors.transparent,
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF004D40).withValues(alpha: 0.2), // Glow color
-                    blurRadius: 150, // Massive blur via CSS style (Cheap)
+                    color: const Color(0xFF004D40).withOpacity(0.2), 
+                    blurRadius: 150, 
                     spreadRadius: 20,
                   )
                 ]
@@ -127,7 +124,6 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
             ),
           ),
 
-          // 2. Main Content
           SafeArea(
             bottom: false,
             child: SingleChildScrollView(
@@ -139,7 +135,6 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                   children: [
                     const SizedBox(height: 15),
                     
-                    // --- HEADER ---
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -153,7 +148,6 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                           ],
                         ),
                         
-                        // Menu Toggle
                         GestureDetector(
                           onTap: () {
                             AppHaptics.mediumImpact(); 
@@ -165,10 +159,10 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                             duration: const Duration(milliseconds: 300),
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: _isMenuOpen ? neonCyan.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.08),
+                              color: _isMenuOpen ? neonCyan.withOpacity(0.15) : Colors.white.withOpacity(0.08),
                               borderRadius: BorderRadius.circular(12), 
-                              border: Border.all(color: _isMenuOpen ? neonCyan.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.1)),
-                              boxShadow: _isMenuOpen ? [BoxShadow(color: neonCyan.withValues(alpha: 0.3), blurRadius: 10)] : []
+                              border: Border.all(color: _isMenuOpen ? neonCyan.withOpacity(0.6) : Colors.white.withOpacity(0.1)),
+                              boxShadow: _isMenuOpen ? [BoxShadow(color: neonCyan.withOpacity(0.3), blurRadius: 10)] : []
                             ),
                             child: Icon(
                               _isMenuOpen ? Icons.close_rounded : Icons.dashboard_customize_rounded,
@@ -180,7 +174,6 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                       ],
                     ),
 
-                    // --- SLIM CATEGORY BAR ---
                     AnimatedSize(
                       duration: const Duration(milliseconds: 400),
                       curve: Curves.easeInOutCubic,
@@ -194,8 +187,8 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                               height: 42,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(12),
-                                color: Colors.white.withValues(alpha: 0.04),
-                                border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 0.5),
+                                color: Colors.white.withOpacity(0.04),
+                                border: Border.all(color: Colors.white.withOpacity(0.08), width: 0.5),
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
@@ -207,16 +200,17 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                                       Container(
                                         width: 100, height: 34,
                                         decoration: BoxDecoration(
-                                          color: Colors.white.withValues(alpha: 0.02),
+                                          color: Colors.white.withOpacity(0.02),
                                           borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 0.5),
+                                          border: Border.all(color: Colors.white.withOpacity(0.15), width: 0.5),
                                         ),
                                       ),
                                       PageView.builder(
                                         controller: _categoryController,
                                         itemCount: _categories.length,
                                         onPageChanged: (index) {
-                                          AppHaptics.tickImpact();
+                                          // 🔥 FIX 2: Corrected function call
+                                          AppHaptics.lightImpact();
                                           setState(() => _selectedCategoryIndex = index);
                                         },
                                         itemBuilder: (context, index) {
@@ -226,20 +220,20 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                                               duration: const Duration(milliseconds: 250),
                                               curve: Curves.easeOut,
                                               style: TextStyle(
-                                                color: isSelected ? neonCyan : Colors.white.withValues(alpha: 0.3),
+                                                color: isSelected ? neonCyan : Colors.white.withOpacity(0.3),
                                                 fontSize: isSelected ? 13 : 10,
                                                 fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
                                                 letterSpacing: 1,
                                                 fontFamily: 'Sans',
-                                                shadows: isSelected ? [Shadow(color: neonCyan.withValues(alpha: 0.5), blurRadius: 5)] : [],
+                                                shadows: isSelected ? [Shadow(color: neonCyan.withOpacity(0.5), blurRadius: 5)] : [],
                                               ),
                                               child: Text(_categories[index], maxLines: 1, overflow: TextOverflow.visible, textAlign: TextAlign.center),
                                             ),
                                           );
                                         },
                                       ),
-                                      Positioned(left: 0, top: 0, bottom: 0, width: 30, child: Container(decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent])))),
-                                      Positioned(right: 0, top: 0, bottom: 0, width: 30, child: Container(decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, Colors.black.withValues(alpha: 0.8)])))),
+                                      Positioned(left: 0, top: 0, bottom: 0, width: 30, child: Container(decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.black.withOpacity(0.8), Colors.transparent])))),
+                                      Positioned(right: 0, top: 0, bottom: 0, width: 30, child: Container(decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, Colors.black.withOpacity(0.8)])))),
                                     ],
                                   ),
                                 ),
@@ -252,7 +246,6 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
 
                     const SizedBox(height: 25),
 
-                    // --- 3. AI CARD ---
                     Container(
                       width: double.infinity,
                       height: 180,
@@ -260,8 +253,8 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(35), 
                         gradient: const LinearGradient(colors: [Color(0xFF001515), Color(0xFF002B2B)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                        boxShadow: [BoxShadow(color: neonCyan.withValues(alpha: 0.08), blurRadius: 25, offset: const Offset(0, 10))],
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                        boxShadow: [BoxShadow(color: neonCyan.withOpacity(0.08), blurRadius: 25, offset: const Offset(0, 10))],
+                        border: Border.all(color: Colors.white.withOpacity(0.08)),
                       ),
                       child: Stack(
                         children: [
@@ -269,8 +262,7 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                             top: -60, left: -60,
                             child: Container(
                               width: 180, height: 180,
-                              decoration: BoxDecoration(shape: BoxShape.circle, color: neonCyan.withValues(alpha: 0.1)),
-                              // Keeping this small blur as it's static and inside a container
+                              decoration: BoxDecoration(shape: BoxShape.circle, color: neonCyan.withOpacity(0.1)),
                               child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60), child: Container(color: Colors.transparent)),
                             ),
                           ),
@@ -284,7 +276,6 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                                   height: 40,
                                   child: Stack(
                                     children: [
-                                      // AI Badge
                                       AnimatedOpacity(
                                         duration: const Duration(milliseconds: 200),
                                         opacity: _isSearchActive ? 0.0 : 1.0,
@@ -292,13 +283,12 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                                           alignment: Alignment.centerLeft,
                                           child: Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                            decoration: BoxDecoration(color: const Color(0xFF003838), borderRadius: BorderRadius.circular(20), border: Border.all(color: neonCyan.withValues(alpha: 0.3))),
+                                            decoration: BoxDecoration(color: const Color(0xFF003838), borderRadius: BorderRadius.circular(20), border: Border.all(color: neonCyan.withOpacity(0.3))),
                                             child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.auto_awesome, color: neonCyan, size: 12), SizedBox(width: 6), Text("AI TRIP PLANNER", style: TextStyle(color: neonCyan, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5))]),
                                           ),
                                         ),
                                       ),
                                       
-                                      // Search Bar
                                       Align(
                                         alignment: Alignment.centerRight,
                                         child: AnimatedContainer(
@@ -308,10 +298,10 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                                           width: _isSearchActive ? fullSearchWidth : 40, 
                                           height: 42,
                                           decoration: BoxDecoration(
-                                            color: _isSearchActive ? const Color(0xFF001F1F) : Colors.white.withValues(alpha: 0.1),
+                                            color: _isSearchActive ? const Color(0xFF001F1F) : Colors.white.withOpacity(0.1),
                                             borderRadius: BorderRadius.circular(30),
-                                            border: _isSearchActive ? Border.all(color: Colors.white.withValues(alpha: 0.2)) : null,
-                                            boxShadow: _isSearchActive ? [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10)] : []
+                                            border: _isSearchActive ? Border.all(color: Colors.white.withOpacity(0.2)) : null,
+                                            boxShadow: _isSearchActive ? [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10)] : []
                                           ),
                                           child: SingleChildScrollView(
                                             scrollDirection: Axis.horizontal,
@@ -351,8 +341,8 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                                                           padding: const EdgeInsets.all(6),
                                                           decoration: BoxDecoration(
                                                             shape: BoxShape.circle,
-                                                            color: _isMicActive ? neonCyan.withValues(alpha: 0.2) : Colors.transparent,
-                                                            boxShadow: _isMicActive ? [BoxShadow(color: neonCyan.withValues(alpha: 0.4), blurRadius: 8)] : []
+                                                            color: _isMicActive ? neonCyan.withOpacity(0.2) : Colors.transparent,
+                                                            boxShadow: _isMicActive ? [BoxShadow(color: neonCyan.withOpacity(0.4), blurRadius: 8)] : []
                                                           ),
                                                           child: Icon(Icons.mic_rounded, color: _isMicActive ? neonCyan : Colors.white60, size: 20),
                                                         ),
@@ -421,7 +411,6 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                             ),
                           ),
                           
-                          // Chat Button
                           Positioned(
                             right: 20, bottom: 20,
                             child: GestureDetector(
@@ -430,7 +419,8 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                                 Navigator.push(
                                   context, 
                                   PageRouteBuilder(
-                                    pageBuilder: (context, animation, secondaryAnimation) => const ChatScreen(),
+                                    // 🔥 FIX 3: Removed 'const' 
+                                    pageBuilder: (context, animation, secondaryAnimation) => ChatScreen(),
                                     transitionsBuilder: (context, animation, secondaryAnimation, child) {
                                       const begin = Offset(1.0, 0.0);
                                       const end = Offset.zero;
@@ -443,7 +433,7 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                               },
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: neonCyan.withValues(alpha: 0.2), blurRadius: 15, spreadRadius: 1)]),
+                                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: neonCyan.withOpacity(0.2), blurRadius: 15, spreadRadius: 1)]),
                                 child: const Row(children: [Text("Chat", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)), SizedBox(width: 8), Icon(Icons.chat_bubble_outline_rounded, color: Colors.black, size: 18)]),
                               ),
                             ),
@@ -454,7 +444,6 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
 
                     const SizedBox(height: 20),
 
-                    // --- EXPANDABLE SERVICES BAR ---
                     Center(
                       child: GestureDetector(
                         onTap: () {
@@ -466,9 +455,9 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
+                            color: Colors.white.withOpacity(0.05),
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.1))
+                            border: Border.all(color: Colors.white.withOpacity(0.1))
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -509,7 +498,6 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
 
                     const SizedBox(height: 20),
 
-                    // --- TRENDING SECTION ---
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -521,7 +509,8 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                               Navigator.push(
                                   context, 
                                   PageRouteBuilder(
-                                    pageBuilder: (context, animation, secondaryAnimation) => const AllPlacesScreen(), // Removed const
+                                    // 🔥 FIX 4: Removed 'const' 
+                                    pageBuilder: (context, animation, secondaryAnimation) => AllPlacesScreen(), 
                                     transitionsBuilder: (context, animation, secondaryAnimation, child) {
                                       const begin = Offset(1.0, 0.0);
                                       const end = Offset.zero;
@@ -532,13 +521,12 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                                   )
                               );
                             },
-                            child: Text("See All", style: TextStyle(color: neonCyan.withValues(alpha: 0.8), fontSize: 12, fontWeight: FontWeight.bold)),
+                            child: Text("See All", style: TextStyle(color: neonCyan.withOpacity(0.8), fontSize: 12, fontWeight: FontWeight.bold)),
                           ),
                       ],
                     ),
                     const SizedBox(height: 15),
                     
-                    // CAROUSEL
                     SizedBox(
                       height: screenHeight * 0.4,
                       child: PageView.builder(
@@ -583,9 +571,9 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
+              color: Colors.white.withOpacity(0.05),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
             ),
             child: Icon(icon, color: color, size: 24),
           ),
@@ -612,7 +600,7 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(35), 
           image: DecorationImage(image: NetworkImage(image), fit: BoxFit.cover),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, 10))]
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20, offset: const Offset(0, 10))]
         ),
         child: Stack(
           children: [
@@ -621,7 +609,7 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                 borderRadius: BorderRadius.circular(35), 
                 gradient: LinearGradient(
                   begin: Alignment.topCenter, end: Alignment.bottomCenter, 
-                  colors: [Colors.transparent, Colors.black.withValues(alpha: 0.9)]
+                  colors: [Colors.transparent, Colors.black.withOpacity(0.9)]
                 )
               )
             ),
@@ -634,9 +622,9 @@ class _TourScreenState extends State<TourScreen> with SingleTickerProviderStateM
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.3),
+                      color: Colors.black.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                      border: Border.all(color: Colors.white.withOpacity(0.2)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,

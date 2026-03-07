@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ridel/features/auth/screens/login_screen.dart';
-import 'package:ridel/core/widgets/navigation_menu.dart';
+import 'package:ridel/layout/main_layout.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthWrapper extends StatefulWidget {
@@ -27,7 +27,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final session = Supabase.instance.client.auth.currentSession;
     if (session != null) {
       Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const NavigationMenu()));
+          MaterialPageRoute(builder: (context) => const MainLayout()));
     } else {
       Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const LoginScreen()));

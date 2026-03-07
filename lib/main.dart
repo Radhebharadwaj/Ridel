@@ -1,132 +1,109 @@
-import 'package:ridel/features/auth/screens/auth_wrapper.dart';
+import 'package:flutter/foundation.dart'; // kIsWeb ke liye
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import 'dart:ui';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart'; // Provider Package
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// ✅ CORE CONFIG & SERVICES
-import 'package:ridel/core/config/supabase_config.dart';
-import 'package:ridel/core/services/mic_service.dart';
-import 'package:ridel/core/widgets/navigation_menu.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+// ✅ Database Imports (Web Support)
+import 'package:sqflite/sqflite.dart'; 
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
-// Note: db_mobile/web imports hata diye gaye hain kyunki ab hum Supabase use kar rahe hain.
+// ✅ Project Imports
+import 'core/config/supabase_config.dart';
+import 'core/map/map_provider.dart'; 
+import 'core/services/theme_service.dart';
+import 'core/theme/app_theme.dart';
+import 'features/commute/metro/services/metro_service.dart';
+import 'features/commute/metro/map/metro_data_provider.dart'; 
+
+import 'layout/main_layout.dart'; 
+
+import 'core/services/global_location_service.dart';
+import 'package:ridel/core/providers/app_navigation_provider.dart';
+
+// 🚀 NAYA IMPORT: Humari Local Notification Service
+import 'core/services/notification_service.dart';
 
 void main() async {
-  // 1. Bindings Initialize
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Self-Healing Logic for App Lock
-  const storage = FlutterSecureStorage();
-  final appLock = await storage.read(key: 'isAppLockEnabled');
-  if (appLock == 'true') {
-    final pin = await storage.read(key: 'userPin');
-    if (pin == null) {
-      await storage.write(key: 'isAppLockEnabled', value: 'false');
-    }
-  }
-
-  // 2. Supabase Initialize (Tera Backend Engine)
-  await Supabase.initialize(
-    url: SupabaseConfig.url,
-    anonKey: SupabaseConfig.anonKey,
-  );
-
-  // 3. Firebase Initialize (Agar Web/Mobile notification chahiye future mein)
-  // (Currently kept as per your previous setup)
+  // 🌍 1. WEB DATABASE INIT (CRITICAL FIX FOR SQL WARNINGS)
   if (kIsWeb) {
-    await Firebase.initializeApp(
-      options: const FirebaseOptions(
-        apiKey: "AIzaSyCTiS3sywccJHHF8oAM0SoKeSr-3caFH50",
-        authDomain: "delhi-metro-7a93c.firebaseapp.com",
-        databaseURL: "https://delhi-metro-7a93c-default-rtdb.firebaseio.com",
-        projectId: "delhi-metro-7a93c",
-        storageBucket: "delhi-metro-7a93c.firebasestorage.app",
-        messagingSenderId: "551048844061",
-        appId: "1:551048844061:web:dd559e3c33d2a92d6f47f4",
-      ),
-    );
-  } else {
-    await Firebase.initializeApp();
+    databaseFactory = databaseFactoryFfiWeb;
+    print("🌍 Web Database Factory Initialized!");
   }
 
-  // 4. Status Bar Style (Transparent)
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: Colors.transparent,
-    systemNavigationBarIconBrightness: Brightness.light,
-  ));
+  // 🚀 2. SUPABASE INITIALIZATION
+  try {
+    await Supabase.initialize(
+      url: SupabaseConfig.supabaseUrl,
+      anonKey: SupabaseConfig.supabaseAnonKey,
+    );
+    print("✅ Supabase Initialized Successfully");
+  } catch (e) {
+    print("❌ Supabase Init Error: $e");
+  }
+
+  // 🚇 3. METRO DATABASE (Background Load)
+  MetroService().initialize();
+
+  // 🔔 4. NOTIFICATION DATABASE (Load Old Notifications & Auto-Clean Expired)
+  await NotificationService().init();
+  print("✅ Local Notification Database Initialized");
+
+  // 🎨 5. UI SETTINGS (Premium Edge-to-Edge)
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent, 
+      systemNavigationBarColor: Colors.transparent, 
+      statusBarIconBrightness: Brightness.dark, 
+      systemNavigationBarIconBrightness: Brightness.dark,
+    ),
+  );
+  
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => MicService()),
+        // 🔥 GLOBAL MAP PROVIDER 
+        ChangeNotifierProvider(create: (_) => MapProvider()),
+
+        // 🔥 METRO DATA PROVIDER 
+        ChangeNotifierProvider(create: (_) => MetroDataProvider()),
+
+        // 🚀 THE NEW BRAIN: GLOBAL LOCATION PROVIDER
+        ChangeNotifierProvider(
+          create: (_) => GlobalLocationService()..initializeEcoLocation(),
+        ),
+
+        // 🚀 NAVIGATION PROVIDER
+        ChangeNotifierProvider(create: (_) => AppNavigationProvider()),
       ],
-      child: const MyApp(),
+      child: const RidelApp(),
     ),
   );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class RidelApp extends StatelessWidget {
+  const RidelApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ScreenUtilInit(
-      designSize: const Size(360, 690),
-      minTextAdapt: true,
-      splitScreenMode: true,
-      builder: (_, child) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([ThemeService.themeNotifier, ThemeService.fontNotifier]),
+      builder: (context, _) {
+        final currentMode = ThemeService.themeNotifier.value;
+        final currentFont = ThemeService.fontNotifier.value;
+
         return MaterialApp(
           title: 'Ridel',
           debugShowCheckedModeBanner: false,
-          theme: ThemeData(
-            brightness: Brightness.dark,
-            primaryColor: const Color(0xFF00E5FF),
-            scaffoldBackgroundColor: Colors.black,
-            useMaterial3: true,
-            fontFamily: 'Sans',
-          ),
-
-          // ✅ GLOBAL UI STACK (Black BG + Glass Status Bar)
-          builder: (context, child) {
-            return Stack(
-              children: [
-                // 1. Solid Black Base (Prevents Glitches)
-                Positioned.fill(
-                  child: Container(color: Colors.black),
-                ),
-
-                // 2. The App Content
-                child!,
-
-                // 3. Glass Status Bar Overlay
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: MediaQuery.of(context).padding.top + 10,
-                  child: IgnorePointer(
-                    child: ClipRect(
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                        child: Container(
-                          color: Colors.black.withValues(alpha: 0.2),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-
-          home: const AuthWrapper(),
+          theme: AppTheme.getLightTheme(currentFont),
+          darkTheme: AppTheme.getDarkTheme(currentFont),
+          themeMode: currentMode,
+          
+          home: const MainLayout(), 
         );
       },
     );

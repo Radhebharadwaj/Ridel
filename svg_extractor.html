@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Delhi Metro - SVG God Mode Extractor</title>
+    <style>
+        body { margin: 0; background: #1a1a1a; color: #fff; font-family: sans-serif; padding-bottom: 80px; }
+        #svg-container { width: 100vw; height: 100vh; overflow: auto; cursor: crosshair; }
+        
+        /* Map ke background ko dark rakhne ke liye */
+        svg { background-color: #111; display: block; margin: 0 auto; }
+        
+        /* 🔥 Hover Magic: Jispe mouse jayega wo chamkega! */
+        circle:hover, ellipse:hover, path:hover, text:hover, tspan:hover {
+            stroke: #00FF00 !important;
+            stroke-width: 8px !important;
+            cursor: pointer;
+            opacity: 0.8;
+        }
+
+        .controls {
+            position: fixed; top: 15px; left: 15px; z-index: 1000;
+            background: rgba(0, 0, 0, 0.9); padding: 15px 25px; 
+            border-radius: 12px; border: 2px solid #444; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        
+        .bottom-bar {
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            background: rgba(0, 0, 0, 0.95); border-top: 3px solid #00FF00;
+            padding: 15px; text-align: center; z-index: 1000;
+            display: flex; justify-content: center; align-items: center; gap: 20px;
+        }
+        
+        .output-box {
+            background: #222; color: #00FF00; padding: 12px 25px;
+            border-radius: 8px; font-family: monospace; font-size: 24px;
+            min-width: 350px; text-align: center; border: 1px solid #555;
+            box-shadow: inset 0 0 10px #000;
+        }
+        
+        button { background: #00FF00; color: #000; border: none; padding: 10px 20px; font-size: 16px; font-weight: bold; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #00cc00; }
+        input[type="file"] { margin-top: 10px; color: white; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <h2 style="margin: 0 0 10px 0; color: #00FF00;">🚇 SVG Extractor</h2>
+        <label><b>1. Select your 'delhi_map_clean.svg' file:</b></label><br>
+        <input type="file" id="fileInput" accept=".svg">
+        <p style="margin: 10px 0 0 0; font-size: 14px; color: #aaa;">Zoom: Ctrl + Mouse Wheel.<br>Hover & Click any Dot or Text!</p>
+    </div>
+
+    <div id="svg-container">
+        <h3 style="text-align: center; margin-top: 20vh; color: #555;">Please select your SVG file from the top left corner to begin.</h3>
+    </div>
+
+    <div class="bottom-bar">
+        <div style="font-size: 20px; font-weight: bold;">📋 Copied Coordinate:</div>
+        <div class="output-box" id="output">Waiting for click...</div>
+    </div>
+
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const svgContainer = document.getElementById('svg-container');
+                svgContainer.innerHTML = e.target.result; // Put SVG directly in HTML
+
+                const svgElement = svgContainer.querySelector('svg');
+                if(svgElement) {
+                    // Saare elements par click listener lagayenge
+                    const elements = svgElement.querySelectorAll('*');
+                    
+                    elements.forEach(el => {
+                        el.addEventListener('click', function(event) {
+                            event.stopPropagation(); // Peeche wale background ko click hone se rokna
+                            
+                            const tag = el.tagName.toLowerCase();
+                            // Faltu elements (groups) ko ignore karo
+                            if (tag === 'g' || tag === 'svg' || tag === 'style' || tag === 'defs') return;
+
+                            let cx = 0, cy = 0;
+
+                            // 🎯 Agar Text hai toh uske exact x, y attributes utha lo
+                            if (tag === 'text' || tag === 'tspan') {
+                                const attrX = el.getAttribute('x');
+                                const attrY = el.getAttribute('y');
+                                if (attrX && attrY) {
+                                    cx = parseFloat(attrX).toFixed(2);
+                                    cy = parseFloat(attrY).toFixed(2);
+                                } else {
+                                    // Bounding Box fallback
+                                    const bbox = el.getBBox();
+                                    cx = bbox.x.toFixed(2);
+                                    cy = bbox.y.toFixed(2);
+                                }
+                            } 
+                            // 🎯 Agar Dot (circle/path/rect) hai toh uska exact Center Point utha lo
+                            else {
+                                // SVG ka getBBox() exact mathematical size aur position deta hai!
+                                const bbox = el.getBBox();
+                                cx = (bbox.x + bbox.width / 2).toFixed(2);
+                                cy = (bbox.y + bbox.height / 2).toFixed(2);
+                            }
+
+                            // SQL format ready karna
+                            const sqlText = `[{"x":${cx}, "y":${cy}}]`;
+
+                            // Niche green box me show karna
+                            const outputBox = document.getElementById('output');
+                            outputBox.innerText = sqlText;
+                            outputBox.style.background = "#004400"; // Flash effect
+
+                            setTimeout(() => { outputBox.style.background = "#222"; }, 200);
+
+                            // Clipboard me copy karna
+                            navigator.clipboard.writeText(sqlText).catch(err => {
+                                alert("Copy failed! Allow clipboard permissions.");
+                            });
+                        });
+                    });
+                }
+            };
+            reader.readAsText(file); // SVG ko locally read karna
+        });
+    </script>
+</body>
+</html>

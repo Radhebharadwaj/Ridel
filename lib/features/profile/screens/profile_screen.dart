@@ -1,562 +1,406 @@
-import 'dart:io';
-import 'dart:math';
-import '../services/profile_repository.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart'; 
+import 'package:intl/intl.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/features/auth/screens/login_screen.dart';
-import 'package:ridel/features/profile/widgets/smart_pass_card.dart';
-import 'package:image_cropper/image_cropper.dart';
-import '../widgets/premium_avatar_dialog.dart';
-import 'personal_info_screen.dart';
+import 'package:ridel/core/utils/toast_service.dart';
+import 'package:ridel/core/services/identity_service.dart';
+import 'package:ridel/core/services/theme_service.dart';
+import '../services/profile_repository.dart';
+
+import 'package:provider/provider.dart';
+import 'package:ridel/core/services/global_location_service.dart';
+import 'package:ridel/core/services/place_service.dart';
+
+import '../../../core/widgets/ridel_sheet.dart';
+import '../../../core/widgets/ridel_glass_modal.dart';
+import '../../../core/widgets/ridel_glass_dropdown.dart';
+import '../../../core/widgets/city_selector_sheet.dart';
+
 import 'security_screen.dart';
+import 'mobile_verification_screen.dart';
+import 'edit_profile_dialog.dart';
+import 'appearance_dialog.dart';
 
-class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+import '../widgets/permissions_center_sheet.dart'; 
 
+class ProfileSheetContent extends StatefulWidget {
+  const ProfileSheetContent({super.key});
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  State<ProfileSheetContent> createState() => _ProfileSheetContentState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+class _ProfileSheetContentState extends State<ProfileSheetContent> {
   late final ProfileRepository _repo;
+  final IdentityService _identityService = IdentityService();
   
-  // Logic Variables
   Map<String, dynamic>? _profileData;
-  bool _isNeonActive = false; // ✨ Logic for Glow
+  bool _isDataLoaded = false;
+  
+  final TextEditingController _userIdCtrl = TextEditingController();
+  String? _email, _selectedGender;
+  DateTime? _selectedDOB;
   bool _isGuest = false;
-  bool _isLoading = true;
-
-  Color _parseColor(String? hexCode) {
-    try {
-      if (hexCode == null || hexCode.toString().toLowerCase() == 'nan' || hexCode.isEmpty) {
-        return Colors.cyan; // Default neon color
-      }
-      final buffer = StringBuffer();
-      if (hexCode.length == 6 || hexCode.length == 7) buffer.write('ff');
-      buffer.write(hexCode.replaceFirst('#', ''));
-      return Color(int.parse(buffer.toString(), radix: 16));
-    } catch (e) {
-      return Colors.cyan; // Fallback
-    }
-  }
-
-  // Animation
-  late AnimationController _glowController;
-  late Animation<double> _glowAnimation;
-
-  @override
-  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
     _repo = ProfileRepository();
-    _initAnimations();
-    _checkUserAndLoadData();
+    _checkUserStatus();
   }
 
-  void _initAnimations() {
-    _glowController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat(reverse: true);
-
-    _glowAnimation = Tween<double>(begin: 0.0, end: 25.0).animate(
-      CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
-    );
-  }
-
-  Future<void> _checkUserAndLoadData() async {
+  Future<void> _checkUserStatus() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
-      if (mounted) {
-        setState(() {
-          _isGuest = true;
-          _isNeonActive = false;
-          _isLoading = false;
-        });
-      }
-      _glowController.stop();
+      if (mounted) setState(() { _isGuest = true; _isDataLoaded = true; });
     } else {
-      await _loadData();
+      _loadData();
     }
   }
 
   Future<void> _loadData() async {
-    try {
-      final data = await _repo.getProfile();
-      
-      // Zombie User Check: If user exists in Auth but profile is deleted/null
-      if (data == null) {
-        debugPrint("Profile missing, logging out...");
-        await Supabase.instance.client.auth.signOut();
-        if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const LoginScreen()),
-            (route) => false,
-          );
-        }
-        return;
-      }
-
-      if (mounted) {
-        setState(() {
-          _profileData = data;
-          _isNeonActive = data['is_profile_completed'] ?? false;
-          _isLoading = false;
-        });
-        
-        if (!_isNeonActive) {
-          _glowController.stop();
-          _glowController.value = 0;
-        } else {
-          _glowController.repeat(reverse: true);
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        // Silently fail or show snackbar if needed, but for profile load just stop loading
-      }
+    final data = await _repo.getProfile();
+    if (mounted) {
+      setState(() {
+        _profileData = data;
+        _email = data?['email'];
+        _userIdCtrl.text = data?['user_id_custom'] ?? '';
+        _selectedGender = data?['gender'];
+        if (data?['dob'] != null) try { _selectedDOB = DateTime.parse(data!['dob']); } catch (_) {}
+        _isDataLoaded = true;
+      });
     }
   }
 
-  // --- 📸 IMAGE PICKER & UPLOAD LOGIC ---
-  Future<void> _pickAndUploadAvatar() async {
-    if (_isGuest) return; // Prevent guest from uploading avatar
-
-    AppHaptics.heavyImpact();
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 600, // Resize for faster uploads
-      maxHeight: 600,
-      imageQuality: 85, // Compress image
-    );
-
-    if (pickedFile == null) return;
-
-    XFile? fileToUpload = pickedFile;
-
-    if (!kIsWeb) {
-      final croppedFile = await ImageCropper().cropImage(
-        sourcePath: pickedFile.path,
-        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-        uiSettings: [
-          AndroidUiSettings(
-            toolbarTitle: 'Edit Photo',
-            toolbarColor: Colors.black,
-            toolbarWidgetColor: Colors.white,
-            initAspectRatio: CropAspectRatioPreset.square,
-            lockAspectRatio: true,
-            backgroundColor: Colors.black,
-          ),
-          IOSUiSettings(
-            title: 'Edit Photo',
-            aspectRatioLockEnabled: true,
-            resetAspectRatioEnabled: false,
-          ),
-        ],
-      );
+  // 🚀 NAYA CLEAN LOCATION LOGIC (Replaced the old locData block)
+  Future<void> _fetchAutoLocation() async {
+    ProfileRepository.userCity.value = "Locating...";
+    
+    try {
+      final locationService = Provider.of<GlobalLocationService>(context, listen: false);
       
-      if (croppedFile != null) {
-        fileToUpload = XFile(croppedFile.path);
+      if (!locationService.hasValidLocation) {
+        await locationService.initializeEcoLocation();
+      }
+
+      final pos = locationService.currentPosition;
+      
+      if (pos != null && !pos.isMocked) {
+        final detectedCity = await PlaceService.getCityFromCoordinates(pos.latitude, pos.longitude);
+        
+        if (detectedCity != null) {
+          if (!_isGuest) {
+            await _repo.updateProfile({
+              'current_city': detectedCity,
+              // NOTE: state_code aur country_code hata diye hain kyunki 
+              // naya PlaceService sirf accurate city name deta hai (Cost saving).
+            });
+          } else {
+            ProfileRepository.userCity.value = detectedCity;
+          }
+          
+          if (mounted) {
+            ToastService.showSuccess(context, "Location updated: $detectedCity");
+            _loadData();
+          }
+        } else {
+           ProfileRepository.userCity.value = "Select City";
+           if (mounted) ToastService.showError(context, "Could not detect location. Select manually.");
+        }
       } else {
-        // User cancelled cropping
-        return;
-      }
-    }
-
-    try {
-      final newAvatarUrl = await _repo.uploadAvatar(fileToUpload);
-      await _repo.updateProfile({'avatar_url': newAvatarUrl});
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("Profile picture updated!"),
-          backgroundColor: Colors.green,
-        ));
+        ProfileRepository.userCity.value = "Select City";
+        if (mounted) ToastService.showError(context, "Could not get GPS fix.");
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Upload failed: ${e.toString()}"),
-          backgroundColor: Colors.red,
-        ));
-      }
+      debugPrint("⚠️ Profile Location Update Error: $e");
+      ProfileRepository.userCity.value = "Select City";
+      if (mounted) ToastService.showError(context, "Location service error.");
     }
   }
 
-
-  @override
-  void dispose() {
-    _glowController.dispose();
-    super.dispose();
+  void _redirectToLogin() {
+    AppHaptics.heavyImpact();
+    Navigator.pop(context); 
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
 
-  void _openPersonalInfo(Map<String, dynamic> profileData) async {
-    AppHaptics.mediumImpact();
-    // Wait for the result from PersonalInfoScreen
-    final result = await Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, sec) => PersonalInfoScreen(
-          repository: _repo
-        ),
-        transitionsBuilder: (context, anim, sec, child) {
-          return SlideTransition(
-            position: anim.drive(Tween(begin: const Offset(1, 0), end: Offset.zero).chain(CurveTween(curve: Curves.fastOutSlowIn))),
-            child: child
-          );
-        },
+  Future<void> _updateField(String key, dynamic value) async {
+    if (_isGuest) return;
+    await _repo.updateProfile({key: value});
+    if (mounted) ToastService.showSuccess(context, "Saved!");
+    _loadData();
+  }
+
+  void _showGenderMenu() {
+    if (_isGuest) return;
+    RidelGlassDropdown.show(context, options: ["Male", "Female", "Prefer not to say"], selectedValue: _selectedGender, onSelected: (val) {
+      setState(() => _selectedGender = val);
+      _updateField('gender', val);
+    });
+  }
+
+  void _showDatePicker() {
+    if (_isGuest) return;
+    AppHaptics.selectionClick();
+    
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    DateTime tempDate = _selectedDOB ?? DateTime(2000);
+    
+    RidelGlassModal.show(context, height: 350, child: Column(children: [
+      Text("Select Birthdate", style: GoogleFonts.inter(
+        color: isDark ? Colors.white : Colors.black, 
+        fontSize: 18, 
+        fontWeight: FontWeight.bold
+      )),
+      const SizedBox(height: 20),
+      Expanded(
+        child: CupertinoTheme(
+          data: CupertinoThemeData(
+            brightness: isDark ? Brightness.dark : Brightness.light,
+            textTheme: CupertinoTextThemeData(
+              dateTimePickerTextStyle: GoogleFonts.inter(
+                color: isDark ? Colors.white : Colors.black,
+                fontSize: 18
+              ),
+            ),
+          ), 
+          child: CupertinoDatePicker(
+            mode: CupertinoDatePickerMode.date, 
+            initialDateTime: tempDate, 
+            minimumDate: DateTime(1950), 
+            maximumDate: DateTime.now(), 
+            onDateTimeChanged: (val) => tempDate = val
+          )
+        )
       ),
-    );
+      SizedBox(
+        width: double.infinity, 
+        child: ElevatedButton(
+          onPressed: () { 
+            Navigator.pop(context); 
+            setState(() => _selectedDOB = tempDate); 
+            _updateField('dob', DateFormat('yyyy-MM-dd').format(tempDate)); 
+          }, 
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isDark ? Colors.white : Colors.black, 
+            foregroundColor: isDark ? Colors.black : Colors.white
+          ), 
+          child: const Text("Save Date")
+        )
+      ),
+    ]));
+  }
 
-    // If we got updated data map back
-    if (result != null && result is Map<String, dynamic>) {
-        setState(() {
-           _profileData = result;
-           _isNeonActive = result['is_profile_completed'] ?? false;
-        });
-        
-        if (!_isNeonActive) {
-          _glowController.stop();
-          _glowController.value = 0;
-        } else {
-          _glowController.repeat(reverse: true);
-        }
+  void _openEditProfile() {
+    if (_isGuest) {
+      _redirectToLogin();
     } else {
-       // Fallback: If returned null but we suspect changes or just to be safe (though ideally we rely on returned data)
-       // For now, only update if data is returned to avoid blink.
+      AppHaptics.lightImpact();
+      RidelGlassModal.show(context, child: EditProfileContent(initialData: _profileData, repository: _repo, onSaved: _loadData));
     }
+  }
+
+  // ✅ Helper Function for Initials
+  String _getInitials(String name) {
+    if (name.isEmpty) return "U";
+    List<String> parts = name.trim().split(' ');
+    if (parts.length > 1) {
+      return "${parts[0][0]}${parts.last[0]}".toUpperCase();
+    }
+    return parts[0].isNotEmpty ? parts[0][0].toUpperCase() : "U";
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
-
-    if (_isGuest) {
-      return _buildGuestUI();
-    }
-
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.cyan));
-    }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    if (_profileData == null || _profileData!.isEmpty) {
-        return const Center(child: Text('No profile data found.', style: TextStyle(color: Colors.white)));
-    }
+    final Color cardColor = isDark ? Colors.white.withOpacity(0.08) : Colors.white;
+    final Color textColor = isDark ? Colors.white : Colors.black;
+    final Color subTextColor = isDark ? Colors.grey : Colors.grey.shade600;
+    final Color iconColor = isDark ? Colors.white : Colors.black;
+    final Color dividerColor = isDark ? Colors.white.withOpacity(0.08) : Colors.black12;
 
-    return _buildProfileUI(_profileData!);
-  }
+    final String fName = _isGuest ? "Guest User" : (_profileData?['full_name'] ?? 'User');
+    final String avatar = _profileData?['avatar_url'] ?? '';
 
-  Widget _buildProfileUI(Map<String, dynamic> profileData) {
-    final String userName = profileData['full_name'] ?? 'Traveler';
-    final String userPhone = profileData['phone_primary'] ?? 'Complete Profile to Unlock';
-    final String avatarUrl = profileData['avatar_url'] ?? '';
-    final bool hasAvatar = avatarUrl.isNotEmpty;
-    final Color profileColor = _parseColor(profileData['color_hex']);
-
-    final Widget avatarWidget = hasAvatar
-        ? CircleAvatar(
-            radius: 35,
-            backgroundColor: const Color(0xFF1A1A1A),
-            backgroundImage: NetworkImage(avatarUrl),
-          )
-        : const Icon(Icons.account_circle, size: 70, color: Colors.grey);
-
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // Background Glow
-          Positioned(
-            top: -80, right: -80,
-            child: Container(
-              width: 300, height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.transparent,
-                boxShadow: [
-                  BoxShadow(
-                    color: (_isNeonActive ? profileColor : Colors.blueAccent).withOpacity(0.15),
-                    blurRadius: 150,
-                    spreadRadius: 50,
-                  )
-                ]
-              ),
-            ),
-          ),
-
-          SafeArea(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 20),
-                  
-                  // --- HEADER (With Neon Logic) ---
-                  Row(
-                    children: [
-                      RepaintBoundary(
-                        child: Stack(
-                          alignment: Alignment.bottomRight,
-                          children: [
-                            GestureDetector(
-                              onTap: () {
-                                if (hasAvatar) {
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) => PremiumAvatarDialog(imageUrl: avatarUrl),
-                                  );
-                                }
-                              },
-                              child: Hero(
-                                tag: 'profileAvatar',
-                                child: AnimatedBuilder(
-                                  animation: _glowAnimation,
-                                  builder: (context, child) {
-                                    return Container(
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        boxShadow: _isNeonActive ? [
-                                          BoxShadow(
-                                            color: profileColor.withOpacity(0.4),
-                                            blurRadius: _glowAnimation.value,
-                                            spreadRadius: 2,
-                                          )
-                                        ] : [], // No Glow if not complete
-                                      ),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(3),
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: _isNeonActive ? profileColor : Colors.grey.withOpacity(0.3),
-                                            width: 2
-                                          ),
-                                        ),
-                                        child: hasAvatar ? avatarWidget : CircleAvatar(
-                                            radius: 35,
-                                            backgroundColor: const Color(0xFF1A1A1A),
-                                            child: avatarWidget, // Show the default icon/placeholder
-                                          ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 20),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(userName, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                            const SizedBox(height: 6),
-                            Text(userPhone, style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 35),
-
-                  // --- SMART PASS ---
-                  _buildTravelPass(profileData),
-
-                  const SizedBox(height: 35),
-
-                  // --- PREFERENCES ---
-                  _buildSectionTitle("Preferences"),
-                  _buildMenuTile(
-                    icon: Icons.person_outline_rounded, 
-                    title: "Personal Info", 
-                    subtitle: "Name, Email & Mobile",
-                    onTap: () => _openPersonalInfo(profileData), 
-                  ),
-                  _buildMenuTile(
-                    icon: Icons.notifications_none_rounded,
-                    title: "Notifications",
-                    subtitle: "Ride alerts & offers",
-                    onTap: (){ AppHaptics.lightImpact(); }
-                  ),
-                  _buildMenuTile(
-                    icon: Icons.security_rounded,
-                    title: "Security & Privacy",
-                    subtitle: "App Lock, PIN & Biometrics",
-                    onTap: (){
-                      AppHaptics.mediumImpact();
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => const SecurityScreen()));
-                    }
-                  ),
-
-                  const SizedBox(height: 30),
-
-                  // --- LOGOUT BUTTON ---
-                  _buildSectionTitle("Account"),
-                     _buildMenuTile(
-                      icon: Icons.logout_rounded, 
-                      title: "Log Out", 
-                      subtitle: "Sign out of Ridel", 
-                       onTap: () async {
-                        AppHaptics.heavyImpact();
-                        await Supabase.instance.client.auth.signOut();
-                        if (mounted) {
-                          Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(builder: (context) => const LoginScreen()),
-                            (route) => false
-                          );
-                        }
-                      }
-                    ),
-                  
-                  const SizedBox(height: 100),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildGuestUI() {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
+    return Material(
+      color: Colors.transparent,
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false, overscroll: false),
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  const CircleAvatar(
-                    radius: 35,
-                    backgroundColor: Color(0xFF1A1A1A),
-                    child: Icon(Icons.account_circle, size: 70, color: Colors.grey),
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Guest User', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                        const SizedBox(height: 6),
-                        Text('Sign in to access all features', style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 12),
-                        ElevatedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const LoginScreen()),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.cyan,
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          ),
-                          child: const Text("Login / Sign Up", style: TextStyle(fontWeight: FontWeight.bold)),
+          padding: const EdgeInsets.fromLTRB(20, 95, 20, 50),
+          child: Column(children: [
+            
+            // 1. Header with FIXED IMAGE LOGIC (Placed correctly inside build)
+            CircleAvatar(
+              radius: 45, 
+              backgroundColor: cardColor, 
+              child: ClipOval(
+                child: SizedBox(
+                  width: 90, height: 90,
+                  child: (!_isGuest && avatar.isNotEmpty)
+                    ? Image.network(
+                        avatar,
+                        fit: BoxFit.cover,
+                        // 🛑 Error Builder: Shows Initials if image fails
+                        errorBuilder: (context, error, stackTrace) {
+                          return Center(
+                            child: Text(
+                              _getInitials(fName),
+                              style: GoogleFonts.inter(color: textColor, fontSize: 28, fontWeight: FontWeight.bold)
+                            ),
+                          );
+                        },
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(child: CircularProgressIndicator(strokeWidth: 2, color: iconColor));
+                        },
+                      )
+                    : Center(
+                        child: Text(
+                          _isGuest ? "G" : _getInitials(fName), 
+                          style: GoogleFonts.inter(color: textColor, fontSize: 28, fontWeight: FontWeight.bold)
                         ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 35),
-              _buildTravelPass(null),
-              const SizedBox(height: 35),
-              _buildSectionTitle("Preferences"),
-              _buildMenuTile(
-                icon: Icons.person_outline_rounded, 
-                title: "Personal Info", 
-                subtitle: "Name, Email & Mobile",
-                onTap: () {}, 
-              ),
-              _buildMenuTile(
-                icon: Icons.notifications_none_rounded, 
-                title: "Notifications", 
-                subtitle: "Ride alerts & offers", 
-                onTap: (){ AppHaptics.lightImpact(); }
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // --- WIDGETS ---
-
-  Widget _buildTravelPass(Map<String, dynamic>? profileData) {
-    return SmartPassCard(profileData: profileData);
-  }
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 12),
-      child: Text(title.toUpperCase(), style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
-    );
-  }
-
-  Widget _buildMenuTile({required IconData icon, required String title, required String subtitle, required VoidCallback onTap}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Material(
-          color: const Color(0xFF131313),
-          child: InkWell(
-            onTap: onTap,
-            splashColor: Colors.white.withOpacity(0.15),
-            highlightColor: Colors.white.withOpacity(0.05),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white.withOpacity(0.05)),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(icon, color: Colors.white, size: 20),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 3),
-                        Text(subtitle, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey.shade800, size: 14),
-                ],
+                      ),
+                ),
               ),
             ),
-          ),
+            const SizedBox(height: 12),
+            Text(fName, style: GoogleFonts.inter(color: textColor, fontSize: 24, fontWeight: FontWeight.bold)),
+            
+            TextButton(
+              onPressed: _openEditProfile, 
+              child: Text(_isGuest ? "Log in to Ridel" : "Edit Profile", style: const TextStyle(color: Colors.cyan, fontWeight: FontWeight.bold))
+            ),
+            
+            const SizedBox(height: 30),
+
+            // 2. Personal Info
+            if (!_isGuest) ...[
+              _section("Account"),
+              _card(cardColor, isDark, Theme(
+                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent, unselectedWidgetColor: iconColor), 
+                  child: ExpansionTile(
+                    initiallyExpanded: true, collapsedShape: const Border(), shape: const Border(),
+                    leading: Icon(Icons.person, color: iconColor), 
+                    title: Text("Personal Info", style: TextStyle(color: textColor)),
+                    iconColor: iconColor, collapsedIconColor: iconColor,
+                    children: [
+                      _row("Email", _email ?? "Loading...", textColor, subTextColor, readOnly: true),
+                      _row("User ID", _userIdCtrl.text.isEmpty ? "Set ID" : _userIdCtrl.text, textColor, subTextColor, isLink: true, onTap: _openEditProfile),
+                      _row("Birthdate", _selectedDOB != null ? DateFormat('dd MMM yyyy').format(_selectedDOB!) : "Not set", textColor, subTextColor, isLink: true, onTap: _showDatePicker),
+                      _row("Gender", _selectedGender ?? "Not set", textColor, subTextColor, isLink: true, onTap: _showGenderMenu),
+                    ]
+                  )
+              )),
+              const SizedBox(height: 20),
+            ],
+
+            // 3. Travel Setup
+            _section("Travel"),
+            _card(cardColor, isDark, Column(children: [
+                _tile(
+                  Icons.phone, 
+                  "Mobile", 
+                  _isGuest ? "Login to verify" : (_profileData?['phone_primary'] ?? 'Unverified'), 
+                  iconColor, 
+                  textColor, 
+                  subTextColor, 
+                  () {
+                    if (_isGuest) {
+                      _redirectToLogin();
+                    } else {
+                      AppHaptics.lightImpact();
+                      RidelGlassModal.show(
+                        context, 
+                        child: MobileVerificationModal(repository: _repo)
+                      ).then((_) => _loadData());
+                    }
+                  }
+                ),
+                Divider(height: 1, color: dividerColor),
+                
+                // ✅ FIXED: Correct City Selector Call
+                _tile(Icons.gps_fixed, "City", _isGuest ? (ProfileRepository.userCity.value == "Locating..." ? "Select City" : ProfileRepository.userCity.value) : (_profileData?['current_city'] ?? 'Set'), iconColor, textColor, subTextColor, () => RidelSheet.show(
+                    context, 
+                    title: "Select City", 
+                    showBackButton: true, 
+                    child: const CitySelectorSheet()
+                  )
+                ),
+            ])),
+
+            const SizedBox(height: 20),
+
+            // 4. Preferences (Permissions added here)
+            _section("Preferences"),
+            _card(cardColor, isDark, Column(children: [
+                
+                // Appearance
+                _tile(Icons.palette, "Appearance", ThemeService.themeNotifier.value == ThemeMode.dark ? "Dark" : (ThemeService.themeNotifier.value == ThemeMode.light ? "Light" : "System"), iconColor, textColor, subTextColor, () {
+                     RidelGlassModal.show(context, child: const AppearanceDialog());
+                }),
+                
+                Divider(height: 1, color: dividerColor),
+                
+                // 🛡️ NAYA: Permissions & Alerts (Available for both Guest and Logged in)
+                _tile(Icons.shield_outlined, "Permissions", "Manage", iconColor, textColor, subTextColor, () {
+                  AppHaptics.lightImpact();
+                  RidelGlassModal.show(
+                    context, 
+                    child: const PermissionsCenterSheet()
+                  );
+                }),
+
+                // Security (Only for logged in users)
+                if (!_isGuest) ...[
+                  Divider(height: 1, color: dividerColor),
+                  _tile(Icons.security, "Security", "", iconColor, textColor, subTextColor, () => RidelSheet.show(context, title: "Security", showBackButton: true, child: const SecuritySheetContent())),
+                ]
+            ])),
+
+            // 🔥 Increased distance from 30 to 60 as requested
+            const SizedBox(height: 60),
+            
+            // 5. Log Out / Log In Button
+            _card(cardColor, isDark, ListTile(
+                title: Text(_isGuest ? "Log In" : "Log Out", style: TextStyle(color: _isGuest ? Colors.cyan : Colors.red)), 
+                leading: Icon(_isGuest ? Icons.login : Icons.logout, color: _isGuest ? Colors.cyan : Colors.red), 
+                onTap: () async { 
+                  if (!_isGuest) await Supabase.instance.client.auth.signOut(); 
+                  if(mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_)=> const LoginScreen())); 
+                }
+            )),
+            
+            const SizedBox(height: 50),
+          ]),
         ),
       ),
     );
   }
+
+  Widget _section(String t) => Align(alignment: Alignment.centerLeft, child: Padding(padding: const EdgeInsets.only(left: 10, bottom: 8), child: Text(t, style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold))));
+  
+  Widget _card(Color bgColor, bool isDark, Widget child) => Material(
+  color: bgColor,
+  borderRadius: BorderRadius.circular(30),
+  clipBehavior: Clip.antiAlias, 
+  elevation: 0, 
+  child: Container(
+    decoration: BoxDecoration(
+      border: Border.all(
+        color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05), 
+        width: 1
+      ),
+    ),
+    child: child,
+    ),
+  );
+  
+  Widget _row(String label, String val, Color textColor, Color subColor, {bool readOnly = false, bool isLink = false, VoidCallback? onTap}) => ListTile(title: Text(label, style: TextStyle(color: textColor, fontSize: 14)), trailing: Row(mainAxisSize: MainAxisSize.min, children: [Text(val, style: TextStyle(color: isLink ? Colors.cyan : subColor, fontSize: 14)), if(isLink) Icon(Icons.chevron_right, color: subColor, size: 16)]), onTap: onTap);
+  Widget _tile(IconData icon, String title, String sub, Color iconColor, Color textColor, Color subColor, VoidCallback onTap) => ListTile(leading: Icon(icon, color: iconColor), title: Text(title, style: TextStyle(color: textColor)), trailing: Row(mainAxisSize: MainAxisSize.min, children: [Text(sub, style: TextStyle(color: subColor)), Icon(Icons.chevron_right, color: subColor, size: 16)]), onTap: onTap);
 }

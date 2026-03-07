@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/cupertino.dart';
 import 'dart:ui';
+// 🔥 Relative path for haptics
 import '../../../core/utils/app_haptics.dart'; 
 
 class AllPlacesScreen extends StatefulWidget {
@@ -227,7 +228,6 @@ class _AllPlacesScreenState extends State<AllPlacesScreen> {
           backgroundColor: Colors.transparent,
           body: Stack(
             children: [
-              // 1. Blur Background (Tap to Close)
               Positioned.fill(
                 child: GestureDetector(
                   onTap: () => Navigator.pop(context),
@@ -237,8 +237,6 @@ class _AllPlacesScreenState extends State<AllPlacesScreen> {
                   ),
                 ),
               ),
-              
-              // 2. Center Popup Card
               Center(
                 child: Container(
                   width: MediaQuery.of(context).size.width * 0.85,
@@ -252,7 +250,6 @@ class _AllPlacesScreenState extends State<AllPlacesScreen> {
                   ),
                   child: Column(
                     children: [
-                      // Image Area
                       ClipRRect(
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
                         child: Stack(
@@ -262,8 +259,7 @@ class _AllPlacesScreenState extends State<AllPlacesScreen> {
                               height: 320, 
                               width: double.infinity, 
                               fit: BoxFit.cover,
-                              cacheWidth: 800, // Optimized for popup
-                              // ✅ Smooth Fade In
+                              cacheWidth: 800, 
                               frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
                                 if (wasSynchronouslyLoaded) return child;
                                 return AnimatedOpacity(
@@ -300,8 +296,6 @@ class _AllPlacesScreenState extends State<AllPlacesScreen> {
                           ],
                         ),
                       ),
-                      
-                      // Live Status Bar
                       Container(
                         margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         padding: const EdgeInsets.all(15),
@@ -320,8 +314,6 @@ class _AllPlacesScreenState extends State<AllPlacesScreen> {
                           ],
                         ),
                       ),
-                      
-                      // Placeholder
                       Expanded(
                         child: Container(
                            padding: const EdgeInsets.all(20),
@@ -421,10 +413,15 @@ class _AllPlacesScreenState extends State<AllPlacesScreen> {
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOut,
-            top: topPadding + 10,
+            // 🔥 Safety Padding Fix
+            top: topPadding > 0 ? topPadding + 10 : 40,
             left: _isSearchActive ? -80 : 20,
             child: GestureDetector(
-              onTap: () => Navigator.pop(context),
+              // 🔥 SAFE POP FIX: Use maybePop to prevent black screens
+              onTap: () {
+                AppHaptics.lightImpact();
+                Navigator.maybePop(context); 
+              },
               child: _buildGlassButton(icon: Icons.arrow_back_ios_new_rounded, isCircle: true),
             ),
           ),
@@ -433,7 +430,8 @@ class _AllPlacesScreenState extends State<AllPlacesScreen> {
           AnimatedPositioned(
             duration: const Duration(milliseconds: 400),
             curve: Curves.easeOutBack,
-            top: topPadding + 10,
+            // 🔥 Safety Padding Fix
+            top: topPadding > 0 ? topPadding + 10 : 40,
             right: 20,
             width: _isBarExpanded 
                 ? (_isSearchActive ? screenWidth - 40 : glassBarWidth) 
@@ -479,7 +477,6 @@ class _AllPlacesScreenState extends State<AllPlacesScreen> {
     );
   }
 
-  // --- UPDATED SEARCH BAR LAYOUT ---
   Widget _buildExpandedBarContent() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.start, 
@@ -587,7 +584,6 @@ class _AllPlacesScreenState extends State<AllPlacesScreen> {
     );
   }
 
-  // --- PREMIUM FILTER POPUP ---
   void _showFilterPopup() {
     showModalBottomSheet(
       context: context,
@@ -695,7 +691,6 @@ class _AllPlacesScreenState extends State<AllPlacesScreen> {
   }
 }
 
-// --- OPTIMIZED CARD (FIXED MEMORY & FPS) ---
 class PlaceCard extends StatefulWidget {
   final Map<String, dynamic> place;
   final Color neonCyan;
@@ -773,16 +768,14 @@ class _PlaceCardState extends State<PlaceCard> with SingleTickerProviderStateMix
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
           color: const Color(0xFF1E1E1E),
-          // ✅ OPTIMIZATION 1: Cached Width + Smooth Fade-In
           image: DecorationImage(
             image: NetworkImage(widget.place['image']),
             fit: BoxFit.cover,
-            filterQuality: FilterQuality.low, // Fastest rendering
+            filterQuality: FilterQuality.low, 
           ),
         ),
         child: Stack(
           children: [
-            // Gradient
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(24),
@@ -803,7 +796,6 @@ class _PlaceCardState extends State<PlaceCard> with SingleTickerProviderStateMix
                 ),
               ),
 
-            // ✅ OPTIMIZATION 2: Removed Blur from Pin Button (FPS Boost)
             Positioned(
               top: 10, right: 10,
               child: GestureDetector(
@@ -813,7 +805,7 @@ class _PlaceCardState extends State<PlaceCard> with SingleTickerProviderStateMix
                   decoration: BoxDecoration(
                     color: isPinned 
                         ? widget.neonCyan.withValues(alpha:0.8) 
-                        : Colors.black.withValues(alpha:0.5), // Transparent Black instead of Blur
+                        : Colors.black.withValues(alpha:0.5), 
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
@@ -825,7 +817,6 @@ class _PlaceCardState extends State<PlaceCard> with SingleTickerProviderStateMix
               ),
             ),
 
-            // Text Content
             Positioned(
               bottom: 12, left: 12, right: 40,
               child: Column(
