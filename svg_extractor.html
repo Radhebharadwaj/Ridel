@@ -24,22 +24,42 @@
             border-radius: 12px; border: 2px solid #444; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
         
+        /* 🔥 Updated Bottom Bar for 3 Sections */
         .bottom-bar {
             position: fixed; bottom: 0; left: 0; width: 100%;
             background: rgba(0, 0, 0, 0.95); border-top: 3px solid #00FF00;
-            padding: 15px; text-align: center; z-index: 1000;
-            display: flex; justify-content: center; align-items: center; gap: 20px;
+            padding: 10px; text-align: center; z-index: 1000;
+            display: flex; justify-content: center; align-items: center; gap: 30px; flex-wrap: wrap;
+        }
+
+        .coord-group {
+            display: flex; align-items: center; gap: 10px;
+        }
+
+        .coord-label {
+            font-size: 18px; font-weight: bold; color: #ccc;
         }
         
         .output-box {
-            background: #222; color: #00FF00; padding: 12px 25px;
-            border-radius: 8px; font-family: monospace; font-size: 24px;
-            min-width: 350px; text-align: center; border: 1px solid #555;
-            box-shadow: inset 0 0 10px #000;
+            background: #222; color: #00FF00; padding: 10px 15px;
+            border-radius: 8px; font-family: monospace; font-size: 20px;
+            text-align: center; border: 1px solid #555;
+            box-shadow: inset 0 0 10px #000; transition: background 0.2s;
+            min-width: 80px;
         }
+
+        #out-xy { min-width: 280px; }
         
-        button { background: #00FF00; color: #000; border: none; padding: 10px 20px; font-size: 16px; font-weight: bold; border-radius: 5px; cursor: pointer; }
-        button:hover { background: #00cc00; }
+        /* 🔥 New Copy Button Style */
+        .copy-btn { 
+            background: #333; color: #fff; border: 1px solid #555; 
+            padding: 8px 12px; font-size: 18px; border-radius: 5px; cursor: pointer; 
+            transition: all 0.2s ease-in-out;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .copy-btn:hover { background: #00FF00; color: #000; border-color: #00FF00; transform: scale(1.05); }
+        .copy-btn:active { transform: scale(0.95); }
+        
         input[type="file"] { margin-top: 10px; color: white; }
     </style>
 </head>
@@ -57,11 +77,52 @@
     </div>
 
     <div class="bottom-bar">
-        <div style="font-size: 20px; font-weight: bold;">📋 Copied Coordinate:</div>
-        <div class="output-box" id="output">Waiting for click...</div>
+        <div class="coord-group">
+            <span class="coord-label">X:</span>
+            <div class="output-box" id="out-x">-</div>
+            <button class="copy-btn" onclick="copyData('x')" title="Copy X Coordinate">📋</button>
+        </div>
+        
+        <div class="coord-group">
+            <span class="coord-label">Y:</span>
+            <div class="output-box" id="out-y">-</div>
+            <button class="copy-btn" onclick="copyData('y')" title="Copy Y Coordinate">📋</button>
+        </div>
+
+        <div class="coord-group">
+            <span class="coord-label">XY Array:</span>
+            <div class="output-box" id="out-xy">Waiting...</div>
+            <button class="copy-btn" onclick="copyData('xy')" title="Copy Both as JSON">📋</button>
+        </div>
     </div>
 
     <script>
+        // Global variables coordinates store karne ke liye
+        let currentX = "";
+        let currentY = "";
+        let currentXY = "";
+
+        // 🔥 Copy Function (Direct 1-Click Copy)
+        function copyData(type) {
+            let textToCopy = "";
+            let boxId = "";
+
+            if (type === 'x') { textToCopy = currentX; boxId = 'out-x'; }
+            else if (type === 'y') { textToCopy = currentY; boxId = 'out-y'; }
+            else if (type === 'xy') { textToCopy = currentXY; boxId = 'out-xy'; }
+
+            if (!textToCopy) return; // Agar click nahi hua hai toh copy mat karo
+
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                // Flash effect dikhane ke liye jis box ka copy hua hai
+                const box = document.getElementById(boxId);
+                box.style.background = "#004400"; 
+                setTimeout(() => { box.style.background = "#222"; }, 200);
+            }).catch(err => {
+                alert("Copy failed! Allow clipboard permissions.");
+            });
+        }
+
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -108,20 +169,15 @@
                                 cy = (bbox.y + bbox.height / 2).toFixed(2);
                             }
 
-                            // SQL format ready karna
-                            const sqlText = `[{"x":${cx}, "y":${cy}}]`;
+                            // Update global variables
+                            currentX = cx;
+                            currentY = cy;
+                            currentXY = `[{"x":${cx}, "y":${cy}}]`;
 
-                            // Niche green box me show karna
-                            const outputBox = document.getElementById('output');
-                            outputBox.innerText = sqlText;
-                            outputBox.style.background = "#004400"; // Flash effect
-
-                            setTimeout(() => { outputBox.style.background = "#222"; }, 200);
-
-                            // Clipboard me copy karna
-                            navigator.clipboard.writeText(sqlText).catch(err => {
-                                alert("Copy failed! Allow clipboard permissions.");
-                            });
+                            // Boxes me display karna
+                            document.getElementById('out-x').innerText = currentX;
+                            document.getElementById('out-y').innerText = currentY;
+                            document.getElementById('out-xy').innerText = currentXY;
                         });
                     });
                 }

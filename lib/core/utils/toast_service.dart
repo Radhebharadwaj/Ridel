@@ -20,8 +20,6 @@ class ToastService {
   }
 
   static void _show(BuildContext context, String message, {required _ToastType type}) {
-    // Agar pehle se koi toast hai to smooth dismiss logic widget khud handle karega
-    // Lekin yahan overlay force clear kar dete hain naya dikhane ke liye
     if (_overlayEntry != null) {
       _overlayEntry?.remove();
       _overlayEntry = null;

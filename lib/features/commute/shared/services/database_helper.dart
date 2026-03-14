@@ -13,7 +13,8 @@ class DatabaseHelper {
   static Database? _database;
   static Future<Database>? _dbFuture;
 
-  static const String _supabaseDbUrl = "https://oysalcuewxfxbgeiqcpr.supabase.co/storage/v1/object/public/city_packages/delhi_v1.db";
+  // ✅ Yeh 100% Sahi URL hai
+static const String _supabaseDbUrl = "https://oysalcuewxfxbgeiqcpr.supabase.co/storage/v1/object/public/city_packages/delhi/delhi_v1.db";
 
   factory DatabaseHelper() => _instance;
 
@@ -294,7 +295,7 @@ class DatabaseHelper {
     await _ensureCacheTableExists();
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
-      'map_tiles_cache_hd',
+      'map_tiles',
       columns: ['tile_data'],
       where: 'z = ? AND x = ? AND y = ?',
       whereArgs: [z, x, y],
@@ -309,7 +310,7 @@ class DatabaseHelper {
     await _ensureCacheTableExists();
     final db = await database;
     await db.insert(
-      'map_tiles_cache_hd',
+      'map_tiles',
       {'z': z, 'x': x, 'y': y, 'tile_data': tileData},
       conflictAlgorithm: ConflictAlgorithm.replace,
     );

@@ -309,7 +309,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             child: GestureDetector(
               onLongPress: () {
                 Clipboard.setData(ClipboardData(text: text));
-                AppHaptics.tickImpact();
+                AppHaptics.lightImpact(); // 🔥 Yahan change kiya
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Copied"), duration: Duration(milliseconds: 800)));
               },
               child: Container(

@@ -2,12 +2,17 @@ package com.ridel
 
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
-import com.ola.maps.navigation.v5.navigation.OlaMapView
-import com.ola.maps.navigation.v5.navigation.listeners.MapStatusCallback
-import com.ola.maps.navigation.v5.navigation.OlaMapsConfig
+
+// Standard Ola Maps Imports
+import com.ola.maps.navigation.v5.*
+import com.ola.maps.navigation.v5.navigation.*
+import com.ola.maps.navigation.ui.v5.*
+
+// 🚀 THE MAGIC IMPORT (Jo humne decompile karke nikala!)
+import com.ola.maps.mapslibrary.models.OlaMapsConfig
 
 class OlaNavigationActivity : AppCompatActivity(), MapStatusCallback {
-    
+
     private var olaMapView: OlaMapView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -17,30 +22,30 @@ class OlaNavigationActivity : AppCompatActivity(), MapStatusCallback {
         olaMapView = findViewById(R.id.olaMapView)
         olaMapView?.onCreate(savedInstanceState)
 
-        // 🚀 Initialize SDK
+        // Ab compiler ko exactly pata hai OlaMapsConfig kahan se lana hai
         olaMapView?.initialize(
-            mapStatusCallback = this,
-            olaMapsConfig = OlaMapsConfig.Builder(applicationContext)
+            this,
+            OlaMapsConfig.Builder(applicationContext)
                 .setMapBaseUrl("https://api.olamaps.io")
-                .setApiKey("LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs") 
+                .setApiKey("LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs")
                 .setProjectId("RidelNav")
                 .build()
         )
     }
 
+    override fun onMapLoadFailed(error: String?) {
+        println("❌ OLA MAP LOAD FAILED: $error")
+    }
+
     override fun onMapReady() {
         println("✅ OLA 3D MAP IS READY!")
-        
-        // 1. Get Coordinates from Flutter (MainActivity)
+
         val oLat = intent.getDoubleExtra("originLat", 0.0)
         val oLng = intent.getDoubleExtra("originLng", 0.0)
         val dLat = intent.getDoubleExtra("destLat", 0.0)
         val dLng = intent.getDoubleExtra("destLng", 0.0)
-
-        // (Agle step me hum yahan Turn-by-Turn start karne ka route fetch karenge)
     }
 
-    // Lifecycle methods (Map ko crash hone se bachane ke liye)
     override fun onStart() { super.onStart(); olaMapView?.onStart() }
     override fun onResume() { super.onResume(); olaMapView?.onResume() }
     override fun onPause() { super.onPause(); olaMapView?.onPause() }

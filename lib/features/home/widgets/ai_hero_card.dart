@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/utils/app_haptics.dart';
 import '../../../../core/utils/toast_service.dart'; 
 import '../../../../core/widgets/ridel_sheet.dart'; 
+import 'package:ridel/features/tour/screens/chat_screen.dart';
 import 'package:ridel/core/widgets/notification_sheet.dart'; 
 import 'package:ridel/core/services/universal_mic_button.dart';
 import 'package:ridel/core/services/notification_service.dart';
@@ -149,11 +150,22 @@ class _AiHeroCardState extends State<AiHeroCard> {
     _focusNode.requestFocus();
   }
 
-  // 🔥 FULL SCREEN CHAT BUTTON FUNCTION
-  void _openFullScreenChat() {
-    AppHaptics.heavyImpact();
-    ToastService.showSuccess(context, "Opening Full Screen AI Chat...");
-  }
+void _openFullScreenChat() {
+  AppHaptics.heavyImpact();
+  Navigator.push(
+    context,
+    PageRouteBuilder(
+      pageBuilder: (context, animation, secondaryAnimation) => ChatScreen(),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        const begin = Offset(0.0, 1.0); // Niche se upar aayega
+        const end = Offset.zero;
+        const curve = Curves.fastOutSlowIn;
+        var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+        return SlideTransition(position: animation.drive(tween), child: child);
+      },
+    )
+  );
+}
 
   void _deactivateChat() {
     AppHaptics.lightImpact();

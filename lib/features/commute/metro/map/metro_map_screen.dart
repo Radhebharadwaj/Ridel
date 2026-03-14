@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
@@ -9,72 +7,54 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:path_drawing/path_drawing.dart';
 import 'package:provider/provider.dart';
-import 'package:http/http.dart' as http;
 
 import 'package:ridel/features/commute/shared/services/database_helper.dart'; 
 import 'package:ridel/features/commute/metro/map/metro_data_provider.dart';
 import 'package:ridel/features/commute/metro/map/map_models.dart';
+import 'package:ridel/core/services/global_location_service.dart';
 
-const double MAP_BASE_SIZE = 11000.0; 
+const double TILE_CANVAS_SIZE = 16384.0; 
 const double TWEAK_X = 0.0; 
 const double TWEAK_Y = 0.0; 
 
-// =========================================================================
-// 🛡️ THE BULLETPROOF TILE PROVIDER
-// =========================================================================
-class DatabaseTileProvider extends TileProvider {
-  final Uint8List _transparentPixel = base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
+class SmartWebTileProvider extends TileProvider {
+  final bool isTMS = false;       
+  final bool isXYSwapped = true;
 
   @override
   ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
-    return _DatabaseImageProvider(coordinates, options, _transparentPixel);
-  }
-}
+    final int z = coordinates.z.toInt();
+    int x = coordinates.x.toInt();
+    int y = coordinates.y.toInt();
 
-class _DatabaseImageProvider extends ImageProvider<_DatabaseImageProvider> {
-  final TileCoordinates coordinates;
-  final TileLayer options;
-  final Uint8List fallbackPixel;
-
-  _DatabaseImageProvider(this.coordinates, this.options, this.fallbackPixel);
-
-  @override
-  Future<_DatabaseImageProvider> obtainKey(ImageConfiguration configuration) => SynchronousFuture<_DatabaseImageProvider>(this);
-
-  @override
-  ImageStreamCompleter loadImage(_DatabaseImageProvider key, ImageDecoderCallback decode) {
-    return MultiFrameImageStreamCompleter(
-      codec: _loadAsync(key, decode), scale: 1.0, informationCollector: () => [DiagnosticsProperty('TileCoordinates', coordinates)],
-    );
-  }
-
-  Future<ui.Codec> _loadAsync(_DatabaseImageProvider key, ImageDecoderCallback decode) async {
-    final int z = coordinates.z; final int x = coordinates.x; final int y = coordinates.y;
-
-    if (z < 0) return decode(await ui.ImmutableBuffer.fromUint8List(fallbackPixel));
+    if (z < 0 || x < 0 || y < 0 || z > 6) {
+      return const NetworkImage('https://oysalcuewxfxbgeiqcpr.supabase.co/storage/v1/object/public/city_packages/delhi/map_tiles/blank.png');
+    }
+    
     final int maxTile = (1 << z) - 1; 
-    if (x < 0 || x > maxTile || y < 0 || y > maxTile) return decode(await ui.ImmutableBuffer.fromUint8List(fallbackPixel));
+    if (x > maxTile || y > maxTile) {
+      return const NetworkImage('https://oysalcuewxfxbgeiqcpr.supabase.co/storage/v1/object/public/city_packages/delhi/map_tiles/blank.png');
+    }
 
-    try {
-      final cachedBytes = await DatabaseHelper().getCachedTile(z, x, y);
-      if (cachedBytes != null && cachedBytes.isNotEmpty) return decode(await ui.ImmutableBuffer.fromUint8List(cachedBytes));
+    int finalX = x;
+    int finalY = y;
 
-      final url = options.urlTemplate!.replaceAll('{z}', z.toString()).replaceAll('{x}', x.toString()).replaceAll('{y}', y.toString());
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
-      if (response.statusCode == 200) {
-        final bytes = response.bodyBytes;
-        await DatabaseHelper().saveTileToCache(z, x, y, bytes);
-        return decode(await ui.ImmutableBuffer.fromUint8List(bytes));
-      }
-    } catch (e) {}
+    if (isTMS) finalY = maxTile - y; 
+    if (isXYSwapped) {
+      int temp = finalX;
+      finalX = finalY;
+      finalY = temp;
+    }
 
-    return decode(await ui.ImmutableBuffer.fromUint8List(fallbackPixel));
+    final url = options.urlTemplate!
+        .replaceAll('{z}', z.toString())
+        .replaceAll('{x}', finalX.toString())
+        .replaceAll('{y}', finalY.toString());
+
+    return NetworkImage(url);
   }
 }
 
-// =========================================================================
-// 🗺️ MAIN METRO MAP SCREEN
-// =========================================================================
 class MetroMapScreen extends StatefulWidget {
   final List<String> highlightedLineIds;
   const MetroMapScreen({super.key, this.highlightedLineIds = const []});
@@ -83,99 +63,247 @@ class MetroMapScreen extends StatefulWidget {
   State<MetroMapScreen> createState() => _MetroMapScreenState();
 }
 
-class _MetroMapScreenState extends State<MetroMapScreen> {
+class _MetroMapScreenState extends State<MetroMapScreen> with TickerProviderStateMixin {
   final MapController _mapController = MapController();
   MapStation? fromStation;
   MapStation? toStation;
   List<MapStation> currentRoute = [];
+  bool _isMapCentered = false;
+  bool _isMapReady = false;
+  bool _isZoomedToLocation = false;
+  
+  // 🚀 NAYA: Animation ko control karne ke liye
+  AnimationController? _animController; 
+
+  LatLng getLatLngFromSvg(double x, double y) {
+    return LatLng(-(y / TILE_CANVAS_SIZE), (x / TILE_CANVAS_SIZE));
+  }
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<MetroDataProvider>(context, listen: false).fetchMapData();
+  void dispose() {
+    _animController?.dispose();
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  void _centerOnNewDelhi() {
+    if (!_isMapReady || _isMapCentered) return;
+    try {
+      // 🚀 INITIAL ZOOM LEVEL: Set to 1.2 so it doesn't look too tiny
+      _mapController.move(getLatLngFromSvg(7700, 7000), 1.2); 
+      _isMapCentered = true;
+    } catch (e) {
+      debugPrint("Map Center Initialization Blocked: $e");
+    }
+  }
+
+  void _zoomToFit() {
+    _animatedMapMove(getLatLngFromSvg(7700, 7000), 1.2); 
+    setState(() {
+      _isZoomedToLocation = false; 
     });
   }
 
-  void _onMapTapped(TapPosition tapPosition, LatLng latlng, List<MapStation> stations) {
-    final camera = _mapController.camera;
-    final topLeftScreen = camera.getOffsetFromOrigin(const LatLng(0, 0));
-    final tapPixel = camera.getOffsetFromOrigin(latlng);
-    
-    final double mapSize = 256.0 * math.pow(2, camera.zoom);
-    final double scale = MAP_BASE_SIZE / mapSize; 
-    
-    final double tapX = ((tapPixel.dx - topLeftScreen.dx) * scale) - TWEAK_X;
-    final double tapY = ((tapPixel.dy - topLeftScreen.dy) * scale) - TWEAK_Y;
-    final tapPos = Offset(tapX, tapY);
+  void _animatedMapMove(LatLng destLocation, double destZoom) {
+    // 🚀 Purani ruki hui animation ko pehle clear karo
+    _animController?.stop();
+    _animController?.dispose();
 
-    MapStation? clickedStation;
-    double minDistance = 120.0; 
-    double closestDist = 9999.0;
+    // Nayi fresh animation start karo
+    _animController = AnimationController(duration: const Duration(milliseconds: 1000), vsync: this);
+    final Animation<double> animation = CurvedAnimation(parent: _animController!, curve: Curves.fastOutSlowIn);
 
+    final latTween = Tween<double>(begin: _mapController.camera.center.latitude, end: destLocation.latitude);
+    final lngTween = Tween<double>(begin: _mapController.camera.center.longitude, end: destLocation.longitude);
+    final zoomTween = Tween<double>(begin: _mapController.camera.zoom, end: destZoom);
+
+    _animController!.addListener(() {
+      _mapController.move(
+        LatLng(latTween.evaluate(animation), lngTween.evaluate(animation)),
+        zoomTween.evaluate(animation)
+      );
+    });
+
+    _animController!.addStatusListener((status) {
+      if (status == AnimationStatus.completed || status == AnimationStatus.dismissed) {
+        _animController!.dispose();
+        _animController = null;
+      }
+    });
+
+    _animController!.forward();
+  }
+
+  void _locateNearestStation() async {
+    final locationService = Provider.of<GlobalLocationService>(context, listen: false);
+    final position = locationService.currentPosition;
+
+    if (position == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Fetching GPS... Please try again.")));
+      return;
+    }
+
+    final provider = Provider.of<MetroDataProvider>(context, listen: false);
+    final stations = provider.mapData?.stations ?? [];
+
+    if (stations.isEmpty) return;
+
+    MapStation? closestStation;
+    double minDistance = double.infinity;
+    const distanceCalc = Distance(); // 🚀 Latlong2 package se distance calculator
+
+    // 🚀 DART-NATIVE GPS LOGIC: Zero errors, guaranteed exact match!
     for (var station in stations) {
-      // 🔥 MULTI-DOT TAP MAGIC: Ek station ke har dot ki distance check karo!
-      for (var dot in station.allDots) {
-        final distToDot = (dot - tapPos).distance;
-        if (distToDot < minDistance && distToDot < closestDist) {
-          closestDist = distToDot;
-          clickedStation = station; // Koi bhi dot pakdo, station wahi select hoga
+      if (station.lat != 0.0 && station.lng != 0.0) {
+        double d = distanceCalc.distance(
+          LatLng(position.latitude, position.longitude),
+          LatLng(station.lat, station.lng),
+        );
+        if (d < minDistance) {
+          minDistance = d;
+          closestStation = station;
         }
       }
     }
 
-    if (clickedStation != null) _showRoutingBottomSheet(clickedStation);
-  }
+    if (closestStation != null) {
+      setState(() {
+        fromStation = closestStation;
+        toStation = null;
+        currentRoute = [closestStation!];
+        _isZoomedToLocation = true; 
+      });
 
-  void _calculateRoute() {
-    if (fromStation != null && toStation != null) {
-      setState(() { currentRoute = [fromStation!, toStation!]; });
+      _animatedMapMove(getLatLngFromSvg(closestStation.x, closestStation.y), 3.5); 
+    } else {
+      debugPrint("Nearest station geometry not found in memory!");
     }
   }
 
-  void _showRoutingBottomSheet(MapStation station) {
-    showModalBottomSheet(
-      context: context, backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(station.name.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent), onPressed: () { setState(() => fromStation = station); Navigator.pop(context); _calculateRoute(); }, icon: const Icon(Icons.trip_origin, color: Colors.white), label: const Text("FROM", style: TextStyle(color: Colors.white))),
-                  ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent), onPressed: () { setState(() => toStation = station); Navigator.pop(context); _calculateRoute(); }, icon: const Icon(Icons.location_on, color: Colors.white), label: const Text("TO", style: TextStyle(color: Colors.white))),
-                ],
-              ),
-              if (fromStation != null || toStation != null) ...[
-                const SizedBox(height: 15),
-                TextButton(onPressed: () { setState(() { fromStation = null; toStation = null; currentRoute = []; }); Navigator.pop(context); }, child: const Text("Clear Route", style: TextStyle(color: Colors.red)))
-              ]
-            ],
-          ),
-        );
-      },
-    );
-  }
+  void _onMapTapped(TapPosition tapPosition, LatLng latlng, List<MapStation> stations) {
+    final double tapX = (latlng.longitude * TILE_CANVAS_SIZE) - TWEAK_X;
+    final double tapY = (-latlng.latitude * TILE_CANVAS_SIZE) - TWEAK_Y;
+    final tapPos = Offset(tapX, tapY);
 
-  void _centerMap() => _mapController.move(const LatLng(-0.5, 0.5), 1.5);
+    MapStation? clickedStation;
+    double closestDist = 9999.0;
+    
+    final double dotHitRadius = 100.0;
+
+    for (var station in stations) {
+      for (var dot in station.allDots) {
+        final distToDot = (dot - tapPos).distance;
+        if (distToDot < dotHitRadius && distToDot < closestDist) {
+          closestDist = distToDot;
+          clickedStation = station;
+        }
+      }
+
+      final textPainter = TextPainter(
+        text: TextSpan(text: station.name, style: const TextStyle(fontSize: 45.0, fontWeight: FontWeight.bold)),
+        textDirection: ui.TextDirection.ltr,
+      )..layout();
+
+      final Rect textHitBox = Rect.fromLTWH(
+        station.textX, 
+        station.textY - (textPainter.height * 0.8), 
+        textPainter.width, 
+        textPainter.height * 2.5 
+      );
+
+      if (textHitBox.contains(tapPos)) {
+        final distToTextCenter = (Offset(textHitBox.center.dx, textHitBox.center.dy) - tapPos).distance;
+        if (distToTextCenter < closestDist) {
+          closestDist = distToTextCenter;
+          clickedStation = station;
+        }
+      }
+    }
+
+    if (clickedStation != null) {
+      setState(() {
+        if (fromStation == null) {
+          fromStation = clickedStation;
+          currentRoute = [clickedStation!];
+        } else if (toStation == null && clickedStation!.id != fromStation!.id) {
+          toStation = clickedStation;
+          currentRoute = [fromStation!, toStation!];
+        } else {
+          fromStation = clickedStation;
+          toStation = null;
+          currentRoute = [clickedStation!];
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Determine overlay opacity based on route selection
+    double overlayOpacity = 0.0;
+    if (widget.highlightedLineIds.isNotEmpty) {
+      overlayOpacity = 0.8; // Deep dark blur for active route
+    } else if (fromStation != null) {
+      overlayOpacity = 0.4; // Mild dim focus on single tap
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF0B0E17), 
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, centerTitle: true, iconTheme: const IconThemeData(color: Colors.white), title: const Text("11K Network Map", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
-      floatingActionButton: FloatingActionButton(onPressed: _centerMap, backgroundColor: const Color(0xFF00E5FF), child: const Icon(Icons.my_location, color: Colors.black)),
-      
+      extendBodyBehindAppBar: true, 
+
+      appBar: AppBar(
+        backgroundColor: Colors.transparent, 
+        elevation: 0,
+        centerTitle: true,
+        
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Container(
+            decoration: BoxDecoration(color: const Color(0xFF1C1C1E).withOpacity(0.8), shape: BoxShape.circle),
+            child: IconButton(
+              icon: const Padding(padding: EdgeInsets.only(right: 2.0), child: Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18)),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+        ),
+
+        title: const Text("Network Map", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        
+        actions: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Container(
+              decoration: BoxDecoration(color: const Color(0xFF1C1C1E).withOpacity(0.8), shape: BoxShape.circle),
+              child: IconButton(
+                icon: const Icon(Icons.fullscreen_rounded, color: Colors.white, size: 22),
+                tooltip: "Zoom to Fit",
+                onPressed: _zoomToFit,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
+
+        flexibleSpace: ClipRect(
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0), 
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  colors: [const Color(0xFF0B0E17).withOpacity(0.9), const Color(0xFF0B0E17).withOpacity(0.5), const Color(0xFF0B0E17).withOpacity(0.0)],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
       body: SizedBox.expand(
         child: Consumer<MetroDataProvider>(
           builder: (context, provider, child) {
-            if (provider.mapData == null) return const Center(child: CircularProgressIndicator(color: Color(0xFF00E5FF)));
+            if (provider.mapData == null) {
+              return const Center(child: CircularProgressIndicator(color: Color(0xFF00E5FF)));
+            }
 
             return Stack(
               children: [
@@ -183,19 +311,47 @@ class _MetroMapScreenState extends State<MetroMapScreen> {
                   child: FlutterMap(
                     mapController: _mapController,
                     options: MapOptions(
-                      backgroundColor: const Color(0xFF0B0E17), crs: const CrsSimple(), 
-                      initialCenter: const LatLng(-0.5, 0.5), initialZoom: 1.5, minZoom: 0.0, maxZoom: 6.0,
+                      backgroundColor: const Color(0xFF0B0E17), 
+                      crs: const CrsSimple(), 
+                      initialCenter: getLatLngFromSvg(7700, 7000),
+                      
+                      initialZoom: 1.2, 
+                      minZoom: 1.0,
+                      maxZoom: 6.0, 
+                      // 🚀 BOUNDS KO THODA BADA KIYA TAAKI ZOOM BLOCK NA HO
+                      cameraConstraint: CameraConstraint.contain(
+                        bounds: LatLngBounds(
+                          const LatLng(-1.5, -0.5), // Extra South-West padding
+                          const LatLng(0.5, 1.5),   // Extra North-East padding
+                        ),
+                      ),
+                      
                       interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
                       onTap: (tapPosition, latlng) => _onMapTapped(tapPosition, latlng, provider.mapData!.stations),
+                      onMapReady: () {
+                        setState(() { _isMapReady = true; });
+                        _centerOnNewDelhi(); 
+                      },
                     ),
                     children: [
+                      // VISUAL LAYER: Map Tiles 
                       TileLayer(
-                        urlTemplate: 'https://oysalcuewxfxbgeiqcpr.supabase.co/storage/v1/object/public/city_packages/map_tiles_hd/{z}/{x}/{y}.jpg',
-                        userAgentPackageName: 'com.ridel', tileProvider: DatabaseTileProvider(), 
+                        urlTemplate: 'https://oysalcuewxfxbgeiqcpr.supabase.co/storage/v1/object/public/city_packages/delhi/map_tiles/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.ridel',
+                        tileProvider: SmartWebTileProvider(),
                       ),
+                      
+                      // 🚀 CINEMATIC MAP DIM OVERLAY (Active hone par dark ho jayega)
+                      IgnorePointer(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 400),
+                          color: Colors.black.withOpacity(overlayOpacity),
+                        ),
+                      ),
+
+                      // INVISIBLE LOGIC & NEON HIGHLIGHT LAYER
                       Builder(
                         builder: (BuildContext mapContext) {
-                          final camera = MapCamera.of(mapContext);
                           return IgnorePointer(
                             child: SizedBox.expand(
                               child: CustomPaint(
@@ -203,7 +359,8 @@ class _MetroMapScreenState extends State<MetroMapScreen> {
                                   allLines: provider.mapData!.lines,
                                   allStations: provider.mapData!.stations,
                                   activeLineIds: widget.highlightedLineIds,
-                                  routeStations: currentRoute, camera: camera, 
+                                  routeStations: currentRoute, 
+                                  camera: MapCamera.of(mapContext), 
                                 ),
                               ),
                             ),
@@ -213,20 +370,64 @@ class _MetroMapScreenState extends State<MetroMapScreen> {
                     ],
                   ),
                 ),
-                
-                if (fromStation != null || toStation != null)
+
+                Positioned(
+                  bottom: (fromStation != null) ? 140 : 40,
+                  right: 20,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: BackdropFilter(
+                      filter: ui.ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                      child: InkWell(
+                        onTap: _isZoomedToLocation ? _zoomToFit : _locateNearestStation,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          width: 56, height: 56,
+                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.15))),
+                          child: Center(
+                            child: Icon(_isZoomedToLocation ? Icons.zoom_out_map_rounded : Icons.my_location, color: const Color(0xFF00E5FF), size: 26),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                if (fromStation != null)
                   Positioned(
-                    top: 10, left: 15, right: 15,
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: const Color(0xFF1C1C1E).withOpacity(0.95), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white24)),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("FROM", style: TextStyle(color: Colors.white54, fontSize: 10)), Text(fromStation?.name ?? "...", style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1)])),
-                          const Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Icon(Icons.arrow_forward_rounded, color: Colors.white54, size: 24)),
-                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [const Text("TO", style: TextStyle(color: Colors.white54, fontSize: 10)), Text(toStation?.name ?? "...", textAlign: TextAlign.right, style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1)])),
-                        ],
+                    bottom: 30, left: 15, right: 15,
+                    child: Center(
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 500),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        decoration: BoxDecoration(color: const Color(0xFF1C1C1E).withOpacity(0.95), borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white24), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20, spreadRadius: 5)]),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("FROM", style: TextStyle(color: Colors.white54, fontSize: 10, letterSpacing: 1)), Text(fromStation!.name, style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis)])),
+                                const Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Icon(Icons.arrow_forward_rounded, color: Colors.white54, size: 24)),
+                                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [const Text("TO", style: TextStyle(color: Colors.white54, fontSize: 10, letterSpacing: 1)), Text(toStation?.name ?? "Tap map to select...", textAlign: TextAlign.right, style: TextStyle(color: toStation == null ? Colors.white38 : const Color(0xFFFF3B30), fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis)])),
+                                IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => setState(() { fromStation = null; toStation = null; currentRoute = []; })),
+                              ],
+                            ),
+                            if (fromStation != null && toStation != null) ...[
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E5FF), foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                                  onPressed: () {
+                                    debugPrint("Navigating to Route: ${fromStation!.name} -> ${toStation!.name}");
+                                  }, 
+                                  child: const Text("GO", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 2))
+                                ),
+                              )
+                            ]
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -239,15 +440,15 @@ class _MetroMapScreenState extends State<MetroMapScreen> {
   }
 }
 
-// =========================================================================
-// 🎨 MULTI-DOT ILLUSION PAINTER (100% Native Coordinates)
-// =========================================================================
 class MultiDotIllusionPainter extends CustomPainter {
   final List<MapLine> allLines;
   final List<MapStation> allStations; 
   final List<String> activeLineIds; 
   final List<MapStation> routeStations; 
   final MapCamera? camera; 
+
+  static final Paint _routeCenterPaint = Paint()..color = Colors.white;
+  static final Paint _routeShadowPaint = Paint()..color = Colors.black.withOpacity(0.8)..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 8.0);
 
   MultiDotIllusionPainter({
     required this.allLines, required this.allStations, this.activeLineIds = const [], this.routeStations = const [], this.camera, 
@@ -260,43 +461,48 @@ class MultiDotIllusionPainter extends CustomPainter {
 
     final pos = camera!.getOffsetFromOrigin(const LatLng(0, 0));
     final double mapSize = 256.0 * math.pow(2, camera!.zoom);
-    final double scale = mapSize / MAP_BASE_SIZE; 
+    final double scale = mapSize / TILE_CANVAS_SIZE; 
     
     canvas.translate(pos.dx + (TWEAK_X * scale), pos.dy + (TWEAK_Y * scale));
     canvas.scale(scale, scale);
 
-    // 1️⃣ DRAW LINES
-    for (var line in allLines) {
-      bool isActive = activeLineIds.isEmpty || activeLineIds.contains(line.lineId);
-      if (isActive) {
-        try {
-          final ui.Path path = parseSvgPathData(line.pathD);
-          final corePaint = Paint()..color = line.color..style = PaintingStyle.stroke..strokeWidth = 15.0..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
-          canvas.drawPath(path, corePaint);
-        } catch (e) { }
+    // 🚀 NEON HIGHLIGHT DRAWING ENGINE
+    if (activeLineIds.isNotEmpty) {
+      for (var line in allLines) {
+        if (activeLineIds.contains(line.lineId)) {
+          try {
+            final ui.Path path = parseSvgPathData(line.pathD);
+            
+            // Glowing Aura
+            final glowPaint = Paint()
+              ..color = line.color.withOpacity(0.8)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 25.0
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round
+              ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 12.0);
+
+            // Bright Core
+            final corePaint = Paint()
+              ..color = line.color
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 8.0
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round;
+
+            canvas.drawPath(path, glowPaint);
+            canvas.drawPath(path, corePaint);
+          } catch (e) { }
+        }
       }
     }
 
-    // 2️⃣ DRAW ALL DOTS FOR EVERY STATION (For testing alignment)
-    final stationDotPaint = Paint()..color = Colors.yellowAccent..style = PaintingStyle.fill; 
-
-    for (var station in allStations) {
-      // 🔥 Ek station ke paas jitne dots hain, sabko render karo!
-      for (var dot in station.allDots) {
-        canvas.drawCircle(dot, 15.0, stationDotPaint);
-      }
-    }
-
-    // 3️⃣ HIGHLIGHT SELECTED ROUTE PINS (If any dot of the station is part of the route, highlight it)
     if (routeStations.isNotEmpty) {
-      final double radius = 30.0; 
-      final centerPaint = Paint()..color = Colors.white;
-      final shadowPaint = Paint()..color = Colors.black.withOpacity(0.8)..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 8.0);
-
+      const double radius = 30.0; 
       for (var station in routeStations) {
         for (var dot in station.allDots) {
-          canvas.drawCircle(dot, radius * 1.5, shadowPaint);
-          canvas.drawCircle(dot, radius, centerPaint);
+          canvas.drawCircle(dot, radius * 1.5, _routeShadowPaint);
+          canvas.drawCircle(dot, radius, _routeCenterPaint);
         }
       }
     }
@@ -305,5 +511,5 @@ class MultiDotIllusionPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant MultiDotIllusionPainter oldDelegate) => true;
+  bool shouldRepaint(covariant MultiDotIllusionPainter oldDelegate) => true; 
 }

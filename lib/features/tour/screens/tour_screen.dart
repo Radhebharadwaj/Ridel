@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'dart:async';
-
-// 🔥 FIX 1: Relative imports use kiye hain taaki package error na aaye
-import 'all_places.dart';
+import 'package:ridel/features/tour/screens/all_place.dart';
 import 'chat_screen.dart';
 import '../../../core/utils/app_haptics.dart';
 

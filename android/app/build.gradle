@@ -13,6 +13,11 @@ def flutterVersionCode = project.hasProperty('flutterVersionCode') ? project.pro
 def flutterVersionName = project.hasProperty('flutterVersionName') ? project.property('flutterVersionName') : '1.0.0'
 
 android {
+    repositories {
+        flatDir {
+            dirs 'libs'
+        }
+    }
     namespace "com.ridel"
     
     // Flutter Extension properties ko direct access
@@ -32,7 +37,7 @@ android {
         applicationId "com.ridel"
         
         // 🚀 THE FIX: OLA Navigation SDK ke liye isko 23 set kar diya gaya hai
-        minSdkVersion 23 
+        minSdkVersion flutter.minSdkVersion 
         
         targetSdkVersion flutter.targetSdkVersion.toInteger()
         
@@ -54,7 +59,7 @@ flutter {
 
 dependencies {
     // OlaMap SDK
-    implementation(files("libs/OlaMapNavigationSDK-1.0.217.aar"))
+    implementation name: 'OlaMapNavigationSDK-1.0.217', ext: 'aar'
     
     // Required for OlaMap SDK
     implementation "org.maplibre.gl:android-sdk:11.13.1"
