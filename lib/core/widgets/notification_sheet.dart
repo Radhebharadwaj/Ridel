@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -303,34 +304,36 @@ class _ExpandableNotificationPillState
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 350),
         curve: Curves.easeOutCubic,
-        // Jab pill ho toh side padding thodi kam, jab card ban jaye toh puri perfect padding
-        padding: EdgeInsets.only(
-          left: 8,
-          right: 16,
-          top: _isExpanded ? 16 : 8,
-          bottom: _isExpanded ? 16 : 8,
-        ),
         decoration: BoxDecoration(
-          color: widget.isDark ? const Color(0xFF1E2129) : Colors.white,
-          // 🚀 MAGIC: Jab Collapse hoga tab 100 (Pill), Jab open hoga tab 24 (Card)
-          borderRadius: BorderRadius.circular(_isExpanded ? 24 : 100),
-          border: Border.all(
-            color: widget.isDark
-                ? Colors.white.withValues(alpha: 0.12)
-                : Colors.black.withValues(alpha: 0.05),
-            width: 1.0,
-          ),
+          borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: widget.isDark ? 0.3 : 0.05),
-              blurRadius: _isExpanded ? 20 : 12,
-              offset: Offset(0, _isExpanded ? 6 : 2),
+              color: Colors.black.withValues(alpha: widget.isDark ? 0.2 : 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             )
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(30),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10), // Glass blur intensity
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                // Dynamic color: Light mode gets light frost, Dark mode gets deep charcoal frost
+                color: Theme.of(context).brightness == Brightness.light 
+                    ? Colors.white.withValues(alpha: 0.6) 
+                    : Colors.black.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.2), // Subtle glass edge
+                  width: 0.5,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
             // 🚀 TOP HEADER ROW (Always visible)
             Row(
               children: [
@@ -375,7 +378,7 @@ class _ExpandableNotificationPillState
                         child: Text(
                           widget.notif.title,
                           style: GoogleFonts.inter(
-                            color: widget.textColor,
+                            color: Theme.of(context).textTheme.bodyMedium?.color ?? widget.textColor,
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
                           ),
@@ -390,7 +393,7 @@ class _ExpandableNotificationPillState
                 Text(
                   _formatTime(widget.notif.timestamp),
                   style: GoogleFonts.inter(
-                    color: widget.subColor,
+                    color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.6) ?? widget.subColor,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -414,7 +417,7 @@ class _ExpandableNotificationPillState
                             child: Text(
                               widget.notif.message,
                               style: GoogleFonts.inter(
-                                color: widget.subColor,
+                                color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.8) ?? widget.subColor,
                                 fontSize: 13,
                                 height: 1.5,
                               ),
@@ -452,6 +455,9 @@ class _ExpandableNotificationPillState
             ),
           ],
         ),
+              ),
+            ),
+          ),
       ),
     );
   }
