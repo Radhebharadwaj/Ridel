@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "20390923828",
+    "project_id": "pixra-ridel",
+    "storage_bucket": "pixra-ridel.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:20390923828:android:0cd35b332bbd92ba790461",
+        "android_client_info": {
+          "package_name": "com.ridel"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC1osKMsLVOiWdb74wp7jV9-RNN6WVndJY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

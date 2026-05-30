@@ -1,0 +1,77 @@
+// android/app/build.gradle
+
+// NOTE: Plugins block MUST be at the very top of the file
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+    id "com.google.gms.google-services" // Firebase Services
+}
+
+// NOTE: Flutter properties ko define karne ka safe tareeka
+def flutterVersionCode = project.hasProperty('flutterVersionCode') ? project.property('flutterVersionCode').toInteger() : 1
+def flutterVersionName = project.hasProperty('flutterVersionName') ? project.property('flutterVersionName') : '1.0.0'
+
+android {
+    repositories {
+        flatDir {
+            dirs 'libs'
+        }
+    }
+    namespace "com.ridel"
+    
+    // Flutter Extension properties ko direct access
+    compileSdkVersion flutter.compileSdkVersion.toInteger()
+    ndkVersion = "28.2.13676358"
+
+    compileOptions {
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    defaultConfig {
+        applicationId "com.ridel"
+        minSdkVersion flutter.minSdkVersion // 🚀 Fixed for Firebase & OLA SDK
+        targetSdkVersion flutter.targetSdkVersion.toInteger()
+        versionCode flutterVersionCode
+        versionName flutterVersionName
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source '../..'
+}
+
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+    // OlaMap SDK
+    implementation name: 'OlaMapNavigationSDK-1.0.217', ext: 'aar'
+    
+    // Required for OlaMap SDK (Updated to match modern opengl plugin requirements)
+    implementation "org.maplibre.gl:android-sdk-opengl:13.0.2" //  FIXED!
+    implementation "org.maplibre.gl:android-sdk-directions-models:5.9.0"
+    implementation "org.maplibre.gl:android-sdk-services:5.9.0"
+    implementation "org.maplibre.gl:android-sdk-turf:5.9.0"
+    implementation "org.maplibre.gl:android-plugin-markerview-v9:3.0.2"
+    implementation "org.maplibre.gl:android-plugin-annotation-v9:3.0.2"
+    implementation "com.moengage:moe-android-sdk:14.02.02"
+    
+    // UI Helpers
+    implementation "androidx.lifecycle:lifecycle-extensions:2.0.0"
+    implementation "androidx.lifecycle:lifecycle-compiler:2.0.0"
+    implementation "androidx.core:core-ktx:1.10.1"
+    implementation "androidx.appcompat:appcompat:1.5.1"
+    implementation "com.google.android.material:material:1.7.0"
+    implementation "androidx.constraintlayout:constraintlayout:2.1.4"
+}

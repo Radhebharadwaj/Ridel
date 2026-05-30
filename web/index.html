@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <base href="/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="google-signin-client_id"
+    content="141150485050-tb6is1kksj7j433hfrkho9aq4hh7bo98.apps.googleusercontent.com">
+  <meta name="description" content="Ridel - Your Travel Companion">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Ridel">
+
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%2300E5FF' d='M15.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM5 12c-2.8 0-5 2.2-5 5s2.2 5 5 5 5-2.2 5-5-2.2-5-5-5zm0 8.5c-1.9 0-3.5-1.6-3.5-3.5s1.6-3.5 3.5-3.5 3.5 1.6 3.5 3.5-1.6 3.5-3.5 3.5zm5.8-10l2.4-2.4.8.8c1.3 1.3 3 2.1 5.1 2.1V9c-1.5 0-2.7-.6-3.6-1.5l-1.9-1.9c-.5-.4-1-.6-1.6-.6s-1.1.2-1.4.6L7.8 8.4c-.4.4-.6.9-.6 1.4 0 .6.2 1.1.6 1.4L11 14v5h2v-6.2l-2.2-2.3zM19 12c-2.8 0-5 2.2-5 5s2.2 5 5 5 5-2.2 5-5-2.2-5-5-5zm0 8.5c-1.9 0-3.5-1.6-3.5-3.5s1.6-3.5 3.5-3.5 3.5 1.6 3.5 3.5-1.6 3.5-3.5 3.5z'/></svg>">
+
+  <title>Ridel</title>
+  <link rel="manifest" href="manifest.json">
+
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js" crossorigin="anonymous"
+    integrity="PLACEHOLDER_MAPLIBRE_JS"></script>
+  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" crossorigin="anonymous"
+    integrity="PLACEHOLDER_MAPLIBRE_CSS" />
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.css"
+    crossorigin="anonymous" referrerpolicy="no-referrer" integrity="PLACEHOLDER_CROPPER_CSS">
+
+  <style>
+    /* Neon Theme for Web Cropper */
+    .cropper-crop-box {
+      box-shadow: 0 0 10px cyan !important;
+      outline: 2px solid cyan !important;
+    }
+
+    .cropper-view-box {
+      outline: 1px solid cyan !important;
+    }
+
+    .cropper-point {
+      background-color: cyan !important;
+      width: 8px !important;
+      height: 8px !important;
+    }
+
+    .cropper-line {
+      background-color: transparent !important;
+    }
+
+    .cropper-modal {
+      background-color: rgba(0, 0, 0, 0.85) !important;
+      backdrop-filter: blur(5px);
+    }
+
+    .cropper-point.point-ne,
+    .cropper-point.point-nw,
+    .cropper-point.point-se,
+    .cropper-point.point-sw {
+      background-color: cyan !important;
+    }
+
+    .cropper-point.point-n,
+    .cropper-point.point-s,
+    .cropper-point.point-e,
+    .cropper-point.point-w {
+      display: none !important;
+    }
+
+    /* MAPLIBRE FIX 2: Force Map to take full height/width inside Flutter's canvas */
+    .maplibregl-map {
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    .maplibregl-canvas {
+      outline: none !important;
+    }
+
+    /* Force Hide Map Attribution & Buttons */
+    .maplibregl-ctrl-bottom-right,
+    .maplibregl-ctrl-attrib {
+      display: none !important;
+      opacity: 0 !important;
+      visibility: hidden !important;
+    }
+  </style>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style id="splash-screen-style">
+    html {
+      height: 100%
+    }
+
+    body {
+      margin: 0;
+      min-height: 100%;
+      /* MAPLIBRE FIX 3: Changed to Dark Grey so we know if the map is actually rendering */
+      background-color: #1E1E1E;
+      background-size: 100% 100%;
+    }
+
+    .center {
+      margin: 0;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      -ms-transform: translate(-50%, -50%);
+      transform: translate(-50%, -50%);
+    }
+
+    .contain {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .stretch {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .cover {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .bottom {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      -ms-transform: translate(-50%, 0);
+      transform: translate(-50%, 0);
+    }
+
+    .bottomLeft {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+    }
+
+    .bottomRight {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+    }
+  </style>
+  <script id="splash-screen-script">
+    function removeSplashFromWeb() {
+      document.getElementById("splash")?.remove();
+      document.getElementById("splash-branding")?.remove();
+      document.body.style.background = "transparent";
+    }
+  </script>
+</head>
+
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js" crossorigin="anonymous"
+    referrerpolicy="no-referrer" integrity="PLACEHOLDER_CROPPER_JS"></script>
+  <script src="flutter_bootstrap.js" async=""></script>
+</body>
+
+</html>

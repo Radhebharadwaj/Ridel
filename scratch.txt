@@ -1,0 +1,8 @@
+--- ridel_liquid_button.dart change ---
+TargetContent: "  @override\n  Widget build(BuildContext context) {\n    final isCircle = widget.shapeType == LiquidShapeType.circle;\n    final borderRadius = isCircle ? widget.width / 2 : widget.height / 2;\n    f
+--- ridel_liquid_button.dart change ---
+TargetContent: "  @override\n  Widget build(BuildContext context) {\n    final isCircle = widget.shapeType == LiquidShapeType.circle;\n    final borderRadius = isCircle ? widget.width / 2 : widget.height / 2;\n    f
+--- ridel_liquid_button.dart change ---
+TargetContent: N/A
+--- ridel_liquid_button.dart change ---
+TargetContent: "    // 🔥 Clean Light Mode Theme Logic\n    final isLightMode = Theme.of(context).brightness == Brightness.light;\n\n    // Subcontracted and softer, almost colorless light tint\n    final effectiveGl

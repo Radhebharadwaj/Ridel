@@ -1,0 +1,45 @@
+// 🚀 FILE: android/build.gradle (Root level - Replace entire content)
+buildscript {
+    ext.kotlin_version = '2.1.0' // Aapke current setup ke hisaab se
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.9.1' // Latest stable version
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        // CRITICAL: Firebase Services Plugin
+        classpath 'com.google.gms:google-services:4.4.1' 
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    // 🔥 FIXED: configurations.all wala block poora saaf kar diya hai!
+}
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+    
+    // Absolute Resolution Strategy: Intercept and substitute legacy MapLibre SDK
+    project.configurations.all {
+        resolutionStrategy.dependencySubstitution {
+            substitute module("org.maplibre.gl:android-sdk") using module("org.maplibre.gl:android-sdk-opengl:13.0.2")
+        }
+        
+        // Also ensure the opengl module is locked to 13.0.2 just in case
+        resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+            if (details.requested.group == 'org.maplibre.gl' && details.requested.name == 'android-sdk-opengl') {
+                details.useVersion '13.0.2'
+            }
+        }
+    }
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
