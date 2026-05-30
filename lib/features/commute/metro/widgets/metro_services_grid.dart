@@ -13,7 +13,6 @@ import '../../shared/widgets/smart_ticketing_overlay.dart';
 import '../../shared/widgets/station_selector_sheet.dart';
 import '../../shared/services/database_helper.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:ridel/core/utils/ridel_bounce_button.dart';
 import 'package:ridel/core/widgets/ridel_liquid_button.dart';
 import 'package:ridel/core/utils/app_shadows.dart';
 
@@ -175,7 +174,6 @@ class MetroServicesGrid extends StatelessWidget {
         final isLightMode = Theme.of(context).brightness == Brightness.light;
         final isDark = !isLightMode;
         final modalBgColor = isLightMode ? Colors.white : const Color(0xFF0B0E17);
-        final borderColor = isLightMode ? Colors.black.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.08);
         final primaryText = isLightMode ? Colors.black87 : Colors.white;
         final secondaryText = isLightMode ? Colors.black54 : Colors.white54;
 
