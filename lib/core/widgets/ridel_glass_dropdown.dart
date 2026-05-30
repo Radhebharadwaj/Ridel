@@ -15,12 +15,6 @@ class RidelGlassDropdown {
     final size = renderBox.size;
     final offset = renderBox.localToGlobal(Offset.zero);
 
-    final isDark = Theme.of(tileContext).brightness == Brightness.dark;
-    final bgColor = isDark
-        ? const Color(0xFF1E1E1E).withValues(alpha: 0.85)
-        : Colors.white.withValues(alpha: 0.90);
-    final textColor = isDark ? Colors.white : Colors.black;
-
     // Menu width & position logic
     const double menuWidth = 200.0;
     double top = offset.dy + size.height; // Open below tile
@@ -35,6 +29,12 @@ class RidelGlassDropdown {
       context: tileContext,
       barrierColor: Colors.transparent, // Invisible barrier to close on tap out
       builder: (BuildContext context) {
+        final isLightMode = Theme.of(context).brightness == Brightness.light;
+        final bgColor = isLightMode
+            ? Colors.white.withValues(alpha: 0.95)
+            : const Color(0xFF1C1F26).withValues(alpha: 0.95);
+        final textColor = isLightMode ? Colors.black87 : Colors.white;
+        
         return Stack(
           children: [
             Positioned(
@@ -43,55 +43,76 @@ class RidelGlassDropdown {
               width: menuWidth,
               child: Material(
                 color: Colors.transparent,
-                child: RidelGlass(
-                  borderRadius: BorderRadius.circular(20),
-                  blurSigma: 25.0,
-                  baseColor: bgColor,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: options.map((option) {
-                      final isSelected = option == selectedValue;
-                      return InkWell(
-                        onTap: () {
-                          AppHaptics.selectionClick();
-                          Navigator.pop(context);
-                          onSelected(option);
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 14),
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.05)
-                                    : Colors.black.withValues(alpha: 0.05),
-                                width: option != options.last ? 1 : 0,
-                              ),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                option,
-                                style: GoogleFonts.inter(
-                                  color: textColor,
-                                  fontSize: 14,
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 850),
+                  switchInCurve: Curves.easeInOutQuart,
+                  switchOutCurve: Curves.easeInOutQuart,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: isLightMode ? 0.08 : 0.2),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: RidelGlass(
+                      key: ValueKey(isLightMode),
+                      borderRadius: BorderRadius.circular(24),
+                      blurSigma: 25.0,
+                      baseColor: bgColor,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: options.map((option) {
+                            final isSelected = option == selectedValue;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 2.0),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(16),
+                                onTap: () {
+                                  AppHaptics.selectionClick();
+                                  Navigator.pop(context);
+                                  onSelected(option);
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 12),
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    color: isSelected 
+                                      ? (isLightMode ? Colors.black.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.05))
+                                      : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        option,
+                                        style: GoogleFonts.inter(
+                                          color: textColor,
+                                          fontSize: 14,
+                                          fontWeight: isSelected
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                      if (isSelected)
+                                        const Icon(Icons.check_circle_rounded,
+                                            color: Colors.cyan, size: 18),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              if (isSelected)
-                                const Icon(Icons.check_circle_rounded,
-                                    color: Colors.cyan, size: 18),
-                            ],
-                          ),
+                            );
+                          }).toList(),
                         ),
-                      );
-                    }).toList(),
+                      ),
+                    ),
                   ),
                 ),
               ),

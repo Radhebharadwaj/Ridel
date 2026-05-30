@@ -57,7 +57,9 @@ class RidelSheet extends StatefulWidget {
 
           return Align(
             alignment: Alignment.centerRight,
-            child: Container(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 700),
+              curve: Curves.easeInOutCubic,
               width: 400,
               height: MediaQuery.of(context).size.height - 48,
               margin: const EdgeInsets.only(right: 24, top: 24, bottom: 24),
@@ -211,8 +213,8 @@ class _RidelSheetState extends State<RidelSheet> {
     final iconColor = (isDark || isCustomDark) ? Colors.white : Colors.black87;
 
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeOutCubic,
+      duration: const Duration(milliseconds: 850),
+      curve: Curves.easeInOutQuart,
       height: currentHeight,
       decoration: BoxDecoration(
         color: finalBgColor,
@@ -262,7 +264,9 @@ class _RidelSheetState extends State<RidelSheet> {
                   child: BackdropFilter(
                     filter: ImageFilter.blur(
                         sigmaX: 20, sigmaY: 20), // 💎 Heavy Apple glass blur
-                    child: Container(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 850),
+                      curve: Curves.easeInOutQuart,
                       alignment: Alignment.topCenter,
                       padding: EdgeInsets.fromLTRB(
                           20,
@@ -285,9 +289,14 @@ class _RidelSheetState extends State<RidelSheet> {
                           stops: const [0.0, 0.5, 1.0],
                         ),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 850),
+                        switchInCurve: Curves.easeInOutQuart,
+                        switchOutCurve: Curves.easeInOutQuart,
+                        child: Row(
+                          key: ValueKey(isDark),
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
                           SizedBox(
                               width: 44,
                               height: 44,
@@ -348,6 +357,7 @@ class _RidelSheetState extends State<RidelSheet> {
                                         )
                                       : null),
                         ],
+                        ),
                       ),
                     ),
                   ),

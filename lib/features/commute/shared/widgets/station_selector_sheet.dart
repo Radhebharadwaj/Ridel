@@ -218,7 +218,12 @@ class _StationSelectorSheetState extends State<StationSelectorSheet> {
       return;
     }
 
-    widget.onStationSelected(station, _isCurrentlySelectingSource);
+    final updatedStation = Map<String, dynamic>.from(station);
+    if (_selectedLineColor != null) {
+      updatedStation['line_color'] = _selectedLineColor;
+    }
+
+    widget.onStationSelected(updatedStation, _isCurrentlySelectingSource);
 
     final isDestinationEmpty = widget.currentToStation == null;
 

@@ -100,180 +100,180 @@ class _PermissionsCenterSheetState extends State<PermissionsCenterSheet>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final subColor = isDark ? Colors.white54 : Colors.black54;
+    final isLightMode = Theme.of(context).brightness == Brightness.light;
+    final textColor = isLightMode ? Colors.black87 : Colors.white;
+    final subColor = isLightMode ? Colors.black54 : Colors.white54;
     const activeColor = Color(0xFF00E5FF); // Neon Cyan
 
     return Material(
-      color: Colors.transparent,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 🔹 Premium Minimal Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text("Permissions",
-                  style: GoogleFonts.inter(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                      letterSpacing: -0.5)),
-              GestureDetector(
-                onTap: () {
-                  AppHaptics.lightImpact();
-                  Navigator.pop(context);
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.05),
-                    shape: BoxShape.circle,
+      color: isLightMode ? Colors.white : const Color(0xFF16181D),
+      borderRadius: BorderRadius.circular(24),
+      child: Padding(
+        padding: const EdgeInsets.all(0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 🔹 Premium Minimal Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("Permissions",
+                    style: GoogleFonts.inter(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                        letterSpacing: -0.5)),
+                GestureDetector(
+                  onTap: () {
+                    AppHaptics.lightImpact();
+                    Navigator.pop(context);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: isLightMode ? Colors.black12 : Colors.white12,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.close, color: textColor, size: 14),
                   ),
-                  child: Icon(Icons.close, color: textColor, size: 14),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // 🔹 Ultra-Sleek Glassmorphic List Container
+            Container(
+              decoration: BoxDecoration(
+                color: isLightMode ? Colors.black.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(20),
+                // 🔥 Hairline border for that crisp glass edge
+                border: Border.all(
+                  color: isLightMode
+                      ? Colors.black.withValues(alpha: 0.05)
+                      : Colors.white.withValues(alpha: 0.08),
+                  width: 0.5,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
+              child: Column(
+                children: _permissionsList.asMap().entries.map((entry) {
+                  int idx = entry.key;
+                  var item = entry.value;
+                  final perm = item['permission'] as Permission;
+                  final status = _statuses[perm] ?? PermissionStatus.denied;
+                  final isGranted = status.isGranted;
+                  final isLast = idx == _permissionsList.length - 1;
 
-          // 🔹 Ultra-Sleek Glassmorphic List Container
-          Container(
-            decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.02)
-                  : Colors.black.withValues(alpha: 0.01),
-              borderRadius: BorderRadius.circular(20),
-              // 🔥 Hairline border for that crisp glass edge
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.05),
-                width: 0.5,
-              ),
-            ),
-            child: Column(
-              children: _permissionsList.asMap().entries.map((entry) {
-                int idx = entry.key;
-                var item = entry.value;
-                final perm = item['permission'] as Permission;
-                final status = _statuses[perm] ?? PermissionStatus.denied;
-                final isGranted = status.isGranted;
-                final isLast = idx == _permissionsList.length - 1;
-
-                return Column(
-                  children: [
-                    InkWell(
-                      onTap: () => _handlePermissionToggle(perm),
-                      borderRadius: BorderRadius.circular(isLast ? 20 : 0),
-                      highlightColor: isDark
-                          ? Colors.white.withValues(alpha: 0.03)
-                          : Colors.black.withValues(alpha: 0.02),
-                      splashColor: isDark
-                          ? Colors.white.withValues(alpha: 0.03)
-                          : Colors.black.withValues(alpha: 0.02),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                        child: Row(
-                          children: [
-                            // 💎 Sleek Icon Box (Smaller & cleaner)
-                            Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: isGranted
-                                    ? activeColor.withValues(alpha: 0.12)
-                                    : (isDark
-                                        ? Colors.white.withValues(alpha: 0.05)
-                                        : Colors.black.withValues(alpha: 0.04)),
-                                borderRadius: BorderRadius.circular(10),
+                  return Column(
+                    children: [
+                      InkWell(
+                        onTap: () => _handlePermissionToggle(perm),
+                        borderRadius: BorderRadius.circular(isLast ? 20 : 0),
+                        highlightColor: isLightMode
+                            ? Colors.black.withValues(alpha: 0.02)
+                            : Colors.white.withValues(alpha: 0.03),
+                        splashColor: isLightMode
+                            ? Colors.black.withValues(alpha: 0.02)
+                            : Colors.white.withValues(alpha: 0.03),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          child: Row(
+                            children: [
+                              // 💎 Sleek Icon Box (Smaller & cleaner)
+                              Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  color: isGranted
+                                      ? activeColor.withValues(alpha: 0.12)
+                                      : (isLightMode
+                                          ? Colors.black.withValues(alpha: 0.04)
+                                          : Colors.white.withValues(alpha: 0.05)),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(item['icon'],
+                                    color: isGranted
+                                        ? activeColor
+                                        : textColor.withValues(alpha: 0.7),
+                                    size: 16),
                               ),
-                              child: Icon(item['icon'],
-                                  color: isGranted
-                                      ? activeColor
-                                      : textColor.withValues(alpha: 0.7),
-                                  size: 16),
-                            ),
-                            const SizedBox(width: 12),
+                              const SizedBox(width: 12),
 
-                            // 💎 Text (maxLines 1 added to prevent wrapping)
-                            Expanded(
-                              child: Text(item['title'],
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                              // 💎 Text (maxLines 1 added to prevent wrapping)
+                              Expanded(
+                                child: Text(item['title'],
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                        color: textColor,
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 14)),
+                              ),
+
+                              // 💎 Micro Status Badge (Pill shaped, elegant)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                    color: isGranted
+                                        ? Colors.greenAccent
+                                            .withValues(alpha: 0.1)
+                                        : (isLightMode
+                                            ? Colors.black
+                                                .withValues(alpha: 0.05)
+                                            : Colors.white.withValues(alpha: 0.05)),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                        color: isGranted
+                                            ? Colors.greenAccent
+                                                .withValues(alpha: 0.2)
+                                            : Colors.transparent,
+                                        width: 0.5)),
+                                child: Text(
+                                  isGranted ? "Allowed" : "Denied",
                                   style: GoogleFonts.inter(
-                                      color: textColor,
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14)),
-                            ),
-
-                            // 💎 Micro Status Badge (Pill shaped, elegant)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                  color: isGranted
-                                      ? Colors.greenAccent
-                                          .withValues(alpha: 0.1)
-                                      : (isDark
-                                          ? Colors.white.withValues(alpha: 0.05)
-                                          : Colors.black
-                                              .withValues(alpha: 0.05)),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                      color: isGranted
-                                          ? Colors.greenAccent
-                                              .withValues(alpha: 0.2)
-                                          : Colors.transparent,
-                                      width: 0.5)),
-                              child: Text(
-                                isGranted ? "Allowed" : "Denied",
-                                style: GoogleFonts.inter(
-                                  color:
-                                      isGranted ? Colors.greenAccent : subColor,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
+                                    color:
+                                        isGranted ? Colors.greenAccent : subColor,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
-                            ),
 
-                            const SizedBox(width: 10),
-                            Icon(Icons.arrow_forward_ios_rounded,
-                                color: subColor.withValues(alpha: 0.4),
-                                size: 12),
-                          ],
+                              const SizedBox(width: 10),
+                              Icon(Icons.arrow_forward_ios_rounded,
+                                  color: subColor.withValues(alpha: 0.4),
+                                  size: 12),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    if (!isLast)
-                      Divider(
-                          color: subColor.withValues(alpha: 0.1),
-                          height: 1,
-                          indent: 55,
-                          endIndent: 15),
-                  ],
-                );
-              }).toList(),
+                      if (!isLast)
+                        Divider(
+                            color: subColor.withValues(alpha: 0.1),
+                            height: 1,
+                            indent: 55,
+                            endIndent: 15),
+                    ],
+                  );
+                }).toList(),
+              ),
             ),
-          ),
 
-          const SizedBox(height: 15),
+            const SizedBox(height: 15),
 
-          // 🔹 Footer Info (Web vs Mobile dynamic text)
-          Text(
-            kIsWeb
-                ? "Use your browser's address bar (🔒) to manage site permissions."
-                : "For security, some permissions must be managed in your device settings.",
-            style:
-                GoogleFonts.inter(color: subColor, fontSize: 11, height: 1.4),
-            textAlign: TextAlign.center,
-          ),
-        ],
+            // 🔹 Footer Info (Web vs Mobile dynamic text)
+            Text(
+              kIsWeb
+                  ? "Use your browser's address bar (🔒) to manage site permissions."
+                  : "For security, some permissions must be managed in your device settings.",
+              style:
+                  GoogleFonts.inter(color: subColor, fontSize: 11, height: 1.4),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

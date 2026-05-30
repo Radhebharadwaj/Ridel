@@ -24,8 +24,8 @@ class MapStyleHelper {
     final String styleName =
         useDark ? "default-dark-standard" : "default-light-standard";
 
-    // 🚀 CACHE KEY v306 (Fresh download for production stability)
-    final String cacheKey = "ola_v306_$styleName";
+    // 🚀 CACHE KEY v307 (Force re-download with null-color sanitizer)
+    final String cacheKey = "ola_v307_$styleName";
 
     final prefs = await SharedPreferences.getInstance();
     final String? cachedStyle = prefs.getString(cacheKey);
@@ -197,6 +197,17 @@ class MapStyleHelper {
                 }
               }
             }
+          }
+
+          // 🚀 4. NULL-COLOR SANITIZER — Prevents "Could not parse color from value 'null'" crash
+          // Some layers from the Ola Maps API have null paint/layout values that crash MapLibre.
+          if (layer.containsKey('paint') && layer['paint'] is Map) {
+            final Map<String, dynamic> paint = layer['paint'];
+            paint.removeWhere((key, value) => value == null);
+          }
+          if (layer.containsKey('layout') && layer['layout'] is Map) {
+            final Map<String, dynamic> layout = layer['layout'];
+            layout.removeWhere((key, value) => value == null);
           }
 
           return true; // Baki render hoga

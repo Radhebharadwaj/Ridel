@@ -549,7 +549,7 @@ class _MetroMapScreenState extends State<MetroMapScreen>
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0E17),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       extendBodyBehindAppBar: true,
       appBar: (widget.activeRoute != null || isDesktop || !widget.showAppBar)
           ? null

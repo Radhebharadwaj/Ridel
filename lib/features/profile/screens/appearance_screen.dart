@@ -20,9 +20,14 @@ class AppearanceSheetContent extends StatelessWidget {
         return ScrollConfiguration(
           // ✅ HIDES SCROLL BAR (Side Line)
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 850),
+            switchInCurve: Curves.easeInOutQuart,
+            switchOutCurve: Curves.easeInOutQuart,
+            child: Column(
+              key: ValueKey(isDark),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               // ---------------------------------------------
               // 🟢 CLEAN HEADER (Back Arrow Only)
               // ---------------------------------------------
@@ -56,7 +61,9 @@ class AppearanceSheetContent extends StatelessWidget {
               // ---------------------------------------------
               _sectionLabel("THEME MODE"),
               const SizedBox(height: 10),
-              Container(
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 850),
+                curve: Curves.easeInOutQuart,
                 height: 55,
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
@@ -112,7 +119,8 @@ class AppearanceSheetContent extends StatelessWidget {
                 isDark: isDark,
                 onTap: () => ThemeService.switchFont('Classic'),
               ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -152,7 +160,8 @@ class _ThemeTab extends StatelessWidget {
         onTap();
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 850),
+        curve: Curves.easeInOutQuart,
         decoration: BoxDecoration(
           color: isSelected
               ? (isDark ? const Color(0xFF2A2A2D) : Colors.white)
@@ -212,7 +221,8 @@ class _FontTile extends StatelessWidget {
         onTap();
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 850),
+        curve: Curves.easeInOutQuart,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected

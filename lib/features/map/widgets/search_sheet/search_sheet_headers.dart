@@ -517,18 +517,26 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
         : Colors.white.withValues(alpha: 0.9);
     final borderColor = Colors.white.withValues(alpha: 0.05);
 
-    // Dynamic Morphing Values
-    final horizontalPadding = lerpDouble(8.0, 16.0, progress) ?? 8.0;
-    final dynamicHeight = lerpDouble(46.0, 52.0, progress) ?? 46.0;
-    final dynamicRadius = lerpDouble(100.0, 24.0, progress) ?? 100.0;
+    // Original closed state was 8.0, new open is 24.0
+    final horizontalPadding = lerpDouble(8.0, 24.0, progress) ?? 8.0;
+    // Original closed state was 46.0, new open is 54.0
+    final dynamicHeight = lerpDouble(46.0, 54.0, progress) ?? 46.0;
+    // Original closed state was 100.0, new open is 20.0
+    final dynamicRadius = lerpDouble(100.0, 20.0, progress) ?? 100.0;
+    
+    // Original closed top padding was statically 6.0, new open pushes down to 18.0
+    final topPadding = lerpDouble(6.0, 18.0, progress) ?? 6.0;
+    // Bottom padding was always 10.0 in the original code
+    const bottomPadding = 10.0;
 
     return SizedBox(
       key: const ValueKey('search_header'),
       height: headerHeight,
       child: Padding(
+        // Use the new dynamic top padding here
         padding: EdgeInsets.only(
-            top: 6,
-            bottom: 10,
+            top: topPadding, 
+            bottom: bottomPadding,
             left: horizontalPadding,
             right: horizontalPadding),
         child: ClipRRect(
@@ -562,10 +570,22 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 5),
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          FocusScope.of(context).requestFocus(_searchFocus);
+                          if (_sheetController.isAttached) {
+                            _sheetController.animateTo(
+                              _safeMaxSize,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeOutCubic,
+                            );
+                          }
+                        },
+                        child: TextField(
+                          controller: _searchCtrl,
+                          focusNode: _searchFocus,
+                          textAlignVertical: TextAlignVertical.center,
                           onTap: () {
                             FocusScope.of(context).requestFocus(_searchFocus);
                             if (_sheetController.isAttached) {
@@ -576,40 +596,25 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                               );
                             }
                           },
-                          child: TextField(
-                            controller: _searchCtrl,
-                            focusNode: _searchFocus,
-                            textAlignVertical: TextAlignVertical.center,
-                            onTap: () {
-                              FocusScope.of(context).requestFocus(_searchFocus);
-                              if (_sheetController.isAttached) {
-                                _sheetController.animateTo(
-                                  _safeMaxSize,
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeOutCubic,
-                                );
-                              }
-                            },
-                            style: TextStyle(
-                              color: isDark ? Colors.white : Colors.black,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w400,
-                            ),
-                            textInputAction: TextInputAction.search,
-                            decoration: InputDecoration(
-                              hintText: 'Search Ridel Maps',
-                              hintStyle: TextStyle(
-                                color: isDark ? Colors.white54 : Colors.black54,
-                                fontSize: 16,
-                              ),
-                              border: InputBorder.none,
-                              isDense: true,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            onSubmitted: (value) {
-                              _handleSearchExecution(value);
-                            },
+                          style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w400,
                           ),
+                          textInputAction: TextInputAction.search,
+                          decoration: InputDecoration(
+                            hintText: 'Ridel Maps',
+                            hintStyle: TextStyle(
+                              color: isDark ? Colors.white54 : Colors.black54,
+                              fontSize: 16,
+                            ),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.only(bottom: 2),
+                          ),
+                          onSubmitted: (value) {
+                            _handleSearchExecution(value);
+                          },
                         ),
                       ),
                     ),

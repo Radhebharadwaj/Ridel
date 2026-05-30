@@ -1,4 +1,4 @@
-import 'dart:isolate';
+// Note: Isolate.run() was removed — GeoJSON builders are trivially fast and Isolate.run() crashes on web.
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:ridel/features/map/models/place_model.dart';
@@ -134,8 +134,7 @@ class MapLayerController {
         return [point.longitude, point.latitude];
       }).toList();
 
-      final geoJson =
-          await Isolate.run(() => _buildRouteGeoJson(geoJsonCoordinates));
+      final geoJson = _buildRouteGeoJson(geoJsonCoordinates);
 
       if (_map == null) return;
       await _map!.addGeoJsonSource(_routeSourceId, geoJson);
@@ -216,10 +215,10 @@ class MapLayerController {
         '#${pinColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
 
     try {
-      final geoJson = await Isolate.run(() => _buildPointGeoJson({
+      final geoJson = _buildPointGeoJson({
             'lat': target.latitude,
             'lng': target.longitude,
-          }));
+          });
 
       if (_map == null) return;
       await _map!.addGeoJsonSource(_pinSourceId, geoJson);
@@ -272,10 +271,10 @@ class MapLayerController {
     if (_map == null) return;
     String hexColor = "#0A84FF";
     try {
-      final geoJson = await Isolate.run(() => _buildPointGeoJson({
+      final geoJson = _buildPointGeoJson({
             'lat': target.latitude,
             'lng': target.longitude,
-          }));
+          });
 
       if (_map == null) return;
       await _map!.addGeoJsonSource(_pinSourceId, geoJson);

@@ -366,14 +366,15 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor =
-        isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final subTextColor = isDark ? Colors.grey : Colors.grey.shade600;
-    final iconColor = isDark ? Colors.white : Colors.black;
-    final dividerColor =
-        isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black12;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cardColor = isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white;
+    final textColor = theme.textTheme.titleLarge?.color ?? (isDark ? Colors.white : Colors.black);
+    final subTextColor = theme.textTheme.bodyMedium?.color ?? (isDark ? Colors.grey : Colors.grey.shade600);
+    final iconColor = theme.iconTheme.color ?? (isDark ? Colors.white : Colors.black);
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
 
     final displayFName = _isGuest
         ? 'Guest User'
@@ -397,8 +398,13 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
           physics: const BouncingScrollPhysics(),
           // Padding top 105 is kept so content flows smoothly under the master RidelSheet header
           padding: const EdgeInsets.fromLTRB(20, 105, 20, 50),
-          child: Column(
-            children: [
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 850),
+            switchInCurve: Curves.easeInOutQuart,
+            switchOutCurve: Curves.easeInOutQuart,
+            child: Column(
+              key: ValueKey(theme.brightness),
+              children: [
               Container(
                 width: 95,
                 height: 95,
@@ -710,6 +716,7 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
             ],
           ),
         ),
+        ),
       ),
     );
   }
@@ -723,16 +730,19 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
                   color: Colors.grey,
                   fontSize: 12,
                   fontWeight: FontWeight.bold))));
-  Widget _card(Color bgColor, bool isDark, Widget child) => Material(
-      color: bgColor,
-      borderRadius: BorderRadius.circular(30),
+  Widget _card(Color bgColor, bool isDark, Widget child) => AnimatedContainer(
+      duration: const Duration(milliseconds: 850),
+      curve: Curves.easeInOutQuart,
+      decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05))),
       clipBehavior: Clip.antiAlias,
-      child: Container(
-          decoration: BoxDecoration(
-              border: Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.08)
-                      : Colors.black.withValues(alpha: 0.05))),
+      child: Material(
+          color: Colors.transparent,
           child: child));
   Widget _row(String label, String val, Color textColor, Color subColor,
           {bool readOnly = false,

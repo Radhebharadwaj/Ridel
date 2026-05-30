@@ -73,6 +73,11 @@ class MapProvider extends ChangeNotifier {
   bool _isDestinationSelected = false;
   bool get isDestinationSelected => _isDestinationSelected;
 
+  void setTargetDestination(LatLng? target) {
+    targetDestination = target;
+    notifyListeners();
+  }
+
   bool isFlying = false;
 
   // Stops the camera instantly if the user taps the screen
@@ -107,6 +112,14 @@ class MapProvider extends ChangeNotifier {
   void setDestinationSelected(bool value) {
     if (_isDestinationSelected != value) {
       _isDestinationSelected = value;
+
+      // 🧭 State Machine: place selected → placeSelected, deselected → idle
+      if (value && engine.mapUIState.value == MapUIState.idle) {
+        engine.setUIState(MapUIState.placeSelected);
+      } else if (!value && engine.mapUIState.value == MapUIState.placeSelected) {
+        engine.setUIState(MapUIState.idle);
+      }
+
       notifyListeners();
     }
   }
@@ -126,7 +139,16 @@ class MapProvider extends ChangeNotifier {
     engine.state.addListener(() {
       notifyListeners();
     });
+
+    // 🧭 Forward UI state machine changes to ChangeNotifier listeners
+    engine.mapUIState.addListener(() {
+      notifyListeners();
+    });
   }
+
+  /// Public accessor for the UI state machine.
+  ValueNotifier<MapUIState> get mapUIState => engine.mapUIState;
+  MapUIState get currentUIState => engine.mapUIState.value;
 
   void setTappedPlace(PlaceModel place) {
     _tappedPlaceFromMap = place;
@@ -190,6 +212,12 @@ class MapProvider extends ChangeNotifier {
     }
     
     clearTappedPlace();
+
+    // 🧭 State Machine: Full reset to idle
+    await engine.resetUIState();
+    _lastRouteData = null;
+    isActiveNavigation = false;
+
     notifyListeners(); // Force UI components and FAB to revert to standard states
     debugPrint("Map session completely cleared.");
   }
@@ -558,20 +586,18 @@ class MapProvider extends ChangeNotifier {
     if (!_isMapReady) return;
     final target = LatLng(lat, lng);
     targetDestination = target;
+    notifyListeners(); // 🧭 Triggers Consumer → AnimatedMapPin overlay appears
     
     isFlying = true;
     try {
-      engine.layers?.showSearchPin(target);
-      
-      controller?.animateCamera(
+      await controller?.animateCamera(
         CameraUpdate.newLatLngZoom(target, 16.0),
       );
       
       AppHaptics.mediumImpact();
     } catch (e) {
-      debugPrint("flyToPlace Error: $e");
+      debugPrint("⚠️ flyToPlace Error: $e");
     } finally {
-      // Ensure the state unlocks when the flight finishes naturally
       isFlying = false; 
     }
   }
@@ -625,8 +651,13 @@ class MapProvider extends ChangeNotifier {
       );
 
       if (route != null) {
+        _lastRouteData = route;
+
         // 3. Draw the Route on the Map
         await RouteVisualizer.drawRoute(controller, route.coordinates, _currentTheme);
+
+        // 🧭 State Machine: Route drawn successfully
+        engine.setUIState(MapUIState.routeDrawn);
 
         // 4. Smoothly animate camera to fit the entire route bounds
         final double minLat = math.min(originLoc.latitude, targetDestination!.latitude);
@@ -662,7 +693,20 @@ class MapProvider extends ChangeNotifier {
       return;
     }
 
-    final originLoc = LatLng(pos.latitude, pos.longitude);
+    // Use existing route data or fetch a new one
+    if (_lastRouteData == null) {
+      final originLoc = LatLng(pos.latitude, pos.longitude);
+      _lastRouteData = await _routingService.getRoute(
+        originLoc,
+        targetDestination!,
+        mode: currentNavMode,
+      );
+    }
+
+    if (_lastRouteData == null) {
+      debugPrint("Cannot start navigation: No route data.");
+      return;
+    }
 
     // Set state
     isActiveNavigation = true;
@@ -670,18 +714,8 @@ class MapProvider extends ChangeNotifier {
 
     AppHaptics.heavyImpact();
 
-    // 🚀 APPLE MAPS STYLE 3D CAMERA TILT & ZOOM
-    await controller!.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: originLoc, 
-          zoom: 18.5,        // Street level zoom
-          tilt: 60.0,        // 3D Tilt
-          bearing: pos.heading, // Face user's direction
-        ),
-      ),
-      duration: const Duration(seconds: 2),
-    );
+    // 🚀 Delegate to MapEngine's active navigation lifecycle
+    await engine.startActiveNavigation(_lastRouteData!, targetDestination!);
   }
 
   Future<void> autoDrawRouteTo(LatLng destination, BuildContext context) async {
@@ -700,11 +734,16 @@ class MapProvider extends ChangeNotifier {
 
     // 2. Fetch and draw the route silently
     try {
-      // Assuming 'driving' is the default mode
-      final route = await _routingService.getRoute(originLoc, destination, mode: 'driving');
+      final route = await _routingService.getRoute(originLoc, destination, mode: currentNavMode);
 
       if (route != null) {
+        _lastRouteData = route;
+        targetDestination = destination;
         await RouteVisualizer.drawRoute(controller, route.coordinates, _currentTheme);
+
+        // 🧭 State Machine: Route drawn successfully
+        engine.setUIState(MapUIState.routeDrawn);
+
         debugPrint('Auto-Route drawn successfully!');
       }
     } catch (e) {

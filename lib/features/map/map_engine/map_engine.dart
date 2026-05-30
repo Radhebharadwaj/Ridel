@@ -10,8 +10,26 @@ import 'controllers/map_camera_controller.dart';
 import 'controllers/map_layer_controller.dart';
 import 'controllers/map_mode_controller.dart';
 import 'controllers/map_navigation_controller.dart';
+import 'package:ridel/features/map/services/route_engine_service.dart';
+import 'package:ridel/features/map/services/route_visualizer.dart';
 
 enum EngineState { idle, switchingMode, animatingCamera, updatingLayers, error }
+
+/// 🧭 The 4-state UI state machine for the map interaction lifecycle.
+/// Controls what the primary action button (QuickActionButtons) shows.
+enum MapUIState {
+  /// Default exploration — no place or route selected.
+  idle,
+
+  /// A place has been selected (pin dropped) — show "Directions" button.
+  placeSelected,
+
+  /// A route polyline has been drawn on the map — show "Start" button.
+  routeDrawn,
+
+  /// Active turn-by-turn navigation is running — show "Stop" button.
+  navigating,
+}
 
 /// The Core Engine. Converted to a Pure Orchestrator class.
 /// Zero `notifyListeners()` to guarantee 60/120 FPS performance.
@@ -23,12 +41,19 @@ class MapEngine {
   final ValueNotifier<String?> lastError = ValueNotifier(null);
   final ValueNotifier<double> realTimeSpeedKmph = ValueNotifier(0.0);
 
+  /// 🧭 UI State Machine — drives QuickActionButtons morphing.
+  final ValueNotifier<MapUIState> mapUIState = ValueNotifier(MapUIState.idle);
+
   late MapModeController mode;
   MapLayerController? layers;
   MapCameraController? camera;
   final MapNavigationController navigation = MapNavigationController();
 
   GlobalLocationService? locService;
+
+  // ───── Route Engine for Rerouting ─────
+  final RouteEngineService _routeEngine = RouteEngineService();
+  LatLng? _navigationDestination; // The original destination for rerouting
 
   bool isDarkTheme = true;
   bool _isSwitchingMode = false;
@@ -85,6 +110,29 @@ class MapEngine {
     // 🚀 FIX: Passed both mapController and camera to match your init signature
     navigation.init(camera!);
 
+    // 🚀 CRITICAL WIRE: Inject reroute callback → RouteEngineService
+    navigation.onRerouteRequested = (LatLng userPos) async {
+      if (_navigationDestination == null) return null;
+      try {
+        final newRoute = await _routeEngine.getRoute(
+          userPos,
+          _navigationDestination!,
+        );
+        if (newRoute != null && mapController != null) {
+          // Redraw the new route polyline on the map
+          await RouteVisualizer.drawRoute(
+            mapController,
+            newRoute.coordinates,
+            isDarkTheme,
+          );
+        }
+        return newRoute;
+      } catch (e) {
+        debugPrint('⚠️ Reroute failed in MapEngine: $e');
+        return null;
+      }
+    };
+
     try {
       await layers?.initLayerSystem();
 
@@ -117,6 +165,11 @@ class MapEngine {
       // 🚀 FIX: Granular reactive update. Zero main-thread frame drops.
       realTimeSpeedKmph.value = locService!.currentSpeedKmph;
       camera?.processLocationUpdate(newPos);
+
+      // 🚀 CRITICAL WIRE: Feed navigation controller on every GPS tick
+      if (navigation.isNavigating.value) {
+        navigation.processLocationUpdate(newPos);
+      }
     });
   }
 
@@ -153,6 +206,79 @@ class MapEngine {
     await camera!.animateSearchFlight(target);
 
     _setState(EngineState.idle);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🧭 ACTIVE NAVIGATION LIFECYCLE
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Starts step-by-step navigation with a pre-fetched route.
+  /// Call this from MapProvider after the user taps "Start Navigation".
+  ///
+  /// [route] — The RouteResult from RouteEngineService.
+  /// [destination] — The final destination LatLng (needed for rerouting).
+  Future<void> startActiveNavigation(RouteResult route, LatLng destination) async {
+    _navigationDestination = destination;
+
+    // 1. Draw the route polyline on the map
+    if (mapController != null) {
+      await RouteVisualizer.drawRoute(
+        mapController,
+        route.coordinates,
+        isDarkTheme,
+      );
+    }
+
+    // 2. Start the navigation state machine (parses steps, builds boundaries)
+    await navigation.startNavigation(route);
+
+    // 3. Switch camera to driving mode (60° tilt, 17.8 zoom, heading-locked)
+    await camera?.setCameraForMode(CameraMode.driving);
+
+    // 4. Ensure GPS is feeding the navigation loop
+    if (locService != null && !locService!.isLiveTracking) {
+      locService!.startLiveTracking();
+    }
+
+    // 5. Transition UI state machine
+    mapUIState.value = MapUIState.navigating;
+
+    debugPrint('🧭 Active navigation started → ${route.steps.length} steps');
+  }
+
+  /// Stops navigation and cleans up all route visuals.
+  Future<void> stopActiveNavigation() async {
+    navigation.stopNavigation();
+    _navigationDestination = null;
+
+    if (mapController != null) {
+      await RouteVisualizer.clearRoute(mapController);
+    }
+
+    // Transition UI state machine back to idle
+    mapUIState.value = MapUIState.idle;
+
+    await camera?.setCameraForMode(CameraMode.explore);
+    debugPrint('🛑 Active navigation stopped.');
+  }
+
+  /// Sets the UI state machine to a specific state (for external callers).
+  void setUIState(MapUIState state) {
+    if (mapUIState.value != state) {
+      mapUIState.value = state;
+    }
+  }
+
+  /// Resets the full UI state machine to idle and clears route visuals.
+  Future<void> resetUIState() async {
+    if (mapUIState.value == MapUIState.navigating) {
+      await stopActiveNavigation();
+    } else {
+      if (mapController != null) {
+        await RouteVisualizer.clearRoute(mapController);
+      }
+      mapUIState.value = MapUIState.idle;
+    }
   }
 
   void onLocateMeTapped() {
@@ -222,12 +348,14 @@ class MapEngine {
     state.dispose();
     lastError.dispose();
     realTimeSpeedKmph.dispose();
+    mapUIState.dispose();
 
     // 4. Dispose Child Controllers
     camera?.dispose();
     layers?.dispose();
     navigation.dispose();
     mode.dispose();
+    _routeEngine.dispose();
 
     // 5. Dispose Native Map
     mapController?.dispose();

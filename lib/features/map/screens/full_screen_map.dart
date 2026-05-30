@@ -44,6 +44,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   MapLibreMapController? _tempController;
 
   MapThemeType? _currentTheme;
+  bool _userOverrodeMapTheme = false;
 
   final GlobalKey _searchSheetKey = GlobalKey();
 
@@ -88,6 +89,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     // 🚀 CRITICAL FIX: Prevent reload glitch on keyboard open or screen resize
     if (_lastBrightness != currentBrightness || _resolvedStyleJson == null) {
       _lastBrightness = currentBrightness;
+
+      // 🚀 FIX: Auto-sync map theme to system brightness (unless user overrode)
+      if (!_userOverrodeMapTheme) {
+        _currentTheme = currentBrightness == Brightness.dark
+            ? MapThemeType.dark
+            : MapThemeType.light;
+      }
+
       _fetchAndFixOlaStyle(currentBrightness);
     }
   }
@@ -109,6 +118,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           _isLoadingStyle = false;
           _lastBrightness = brightness;
         });
+
+        // 🚀 FIX: Sync MapProvider's route theme so polyline colors match
+        final themeToSet = _currentTheme ??
+            (isDark ? MapThemeType.dark : MapThemeType.light);
+        Provider.of<MapProvider>(context, listen: false).setTheme(themeToSet);
       }
     } catch (e) {
       debugPrint("❌ Error fixing Ola Style: $e");
@@ -134,7 +148,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF05070B),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
           Positioned.fill(
@@ -284,12 +298,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               opacity: 1.0,
                               child: Container(
                                 decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(24),
+                                  borderRadius: BorderRadius.circular(50),
                                   boxShadow: !isDark
                                       ? [
                                           BoxShadow(
                                               color: Colors.black
-                                                  .withValues(alpha: 0.15),
+                                                  .withValues(alpha: 0.08),
                                               blurRadius: 12,
                                               offset: const Offset(0, 4))
                                         ]
@@ -307,22 +321,22 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                         ],
                                 ),
                                 child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(24),
+                                  borderRadius: BorderRadius.circular(50),
                                   child: BackdropFilter(
                                     filter: ImageFilter.blur(
-                                        sigmaX: 25.0, sigmaY: 25.0),
+                                        sigmaX: 20.0, sigmaY: 20.0),
                                     child: Container(
                                       width: 48,
                                       decoration: BoxDecoration(
                                           color: !isDark
-                                              ? Colors.white
+                                              ? Colors.white.withValues(alpha: 0.75)
                                               : const Color(0xFF0B0E17)
                                                   .withValues(alpha: 0.75),
                                           borderRadius:
-                                              BorderRadius.circular(24),
+                                              BorderRadius.circular(50),
                                           border: !isDark
                                               ? Border.all(
-                                                  color: Colors.black.withValues(alpha: 0.04),
+                                                  color: Colors.white.withValues(alpha: 0.9),
                                                   width: 1.0)
                                               : Border.all(
                                                   color: Colors.white
@@ -341,6 +355,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                                       (selectedTheme) {
                                                 setState(() {
                                                   _currentTheme = selectedTheme;
+                                                  _userOverrodeMapTheme = true;
                                                   _fetchAndFixOlaStyle(
                                                       Theme.of(context)
                                                           .brightness);

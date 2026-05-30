@@ -17,6 +17,7 @@ import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/features/map/models/place_model.dart';
 import 'package:ridel/features/map/services/place_api_services.dart';
 import 'package:ridel/core/widgets/ridel_glass.dart';
+import 'package:ridel/features/map/widgets/animated_map_pin.dart';
 
 class CustomMapScreen extends StatefulWidget {
   final bool isDark;
@@ -65,15 +66,24 @@ class _CustomMapScreenState extends State<CustomMapScreen>
   Timer? _interactionDebounceTimer;
   Timer? _zoomScaleDebounceTimer;
 
+  // 🧭 Premium animated destination pin overlay
+  final GlobalKey<AnimatedMapPinState> _pinKey = GlobalKey<AnimatedMapPinState>();
+
   bool _wasInIndia = true;
   bool _hasMapBeenOpened = false;
 
-  MapThemeType _currentTheme = MapThemeType.dark;
+  /// Tracks whether the user has explicitly overridden the map theme
+  /// via the theme selector. If false, _currentTheme follows the system.
+  bool _userOverrodeTheme = false;
+  late MapThemeType _currentTheme;
 
   @override
   void initState() {
     super.initState();
     _hasMapBeenOpened = widget.isMapTabActive;
+
+    // 🚀 FIX: Derive initial map theme from the system brightness
+    _currentTheme = widget.isDark ? MapThemeType.dark : MapThemeType.light;
 
     _engine = MapEngine();
     _engine.state.addListener(() {
@@ -129,6 +139,9 @@ class _CustomMapScreenState extends State<CustomMapScreen>
         _currentMapStyle = styleStr;
         _isFetchingStyle = false;
       });
+
+      // 🚀 FIX: Keep MapProvider's route theme in sync
+      Provider.of<MapProvider>(context, listen: false).setTheme(_currentTheme);
     }
   }
 
@@ -204,6 +217,12 @@ class _CustomMapScreenState extends State<CustomMapScreen>
       if (_engine.mode.is3DMode.value) {
         _engine.layers?.updateBuildingExtrusion(1.0, widget.isDark);
       }
+
+      // 🚀 FIX: Sync map theme with global brightness change —
+      // ONLY if the user hasn't manually overridden via the theme selector.
+      if (!_userOverrodeTheme) {
+        _currentTheme = widget.isDark ? MapThemeType.dark : MapThemeType.light;
+      }
       _updateStyleFuture();
       setState(() {});
     }
@@ -241,6 +260,7 @@ class _CustomMapScreenState extends State<CustomMapScreen>
     _zoomNotifier.value = cam.zoom;
     _tiltNotifier.value = cam.tilt;
     _bearingNotifier.value = cam.bearing;
+    _pinKey.currentState?.syncPosition(); // 🧭 Sync pin overlay on camera pan
     _checkWeatherVisibility(cam.zoom, cam.target);
   }
 
@@ -376,11 +396,13 @@ class _CustomMapScreenState extends State<CustomMapScreen>
               },
               onMapLongClick: (point, latlng) async {
                 AppHaptics.heavyImpact();
-                _engine.layers?.showSearchPin(latlng);
                 _engine.camera?.animateSearchFlight(latlng);
 
                 final provider =
                     Provider.of<MapProvider>(context, listen: false);
+
+                // 🧭 Set destination for the AnimatedMapPin overlay
+                provider.setTargetDestination(latlng);
 
                 await provider.drawDroppedPin(latlng);
 
@@ -433,8 +455,21 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                     .updateMapCenter(
                         _engine.mapController!.cameraPosition!.target,
                         _engine.mapController!.cameraPosition!.zoom);
+                _pinKey.currentState?.syncPosition(); // 🧭 Final accuracy sync on idle
               },
             ),
+
+          // 🧭 PREMIUM ANIMATED DESTINATION PIN OVERLAY
+          Consumer<MapProvider>(
+            builder: (context, provider, _) {
+              return AnimatedMapPin(
+                key: _pinKey,
+                mapController: provider.controller,
+                target: provider.targetDestination,
+                isDark: widget.isDark,
+              );
+            },
+          ),
           if (_isFetchingStyle)
             Positioned.fill(
               child: Container(
@@ -575,21 +610,27 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                                 : GestureDetector(
                                     key: const ValueKey('locate_btn'),
                                     onTap: () => provider.engine.onLocateMeTapped(),
-                                    child: Container(
-                                      width: 56,
-                                      height: 56,
-                                      decoration: BoxDecoration(
-                                        color: isLightMode ? Colors.white : const Color(0xFF1E1E1E),
-                                        shape: BoxShape.circle,
-                                        border: isLightMode ? Border.all(color: Colors.black.withValues(alpha: 0.04)) : null,
-                                        boxShadow: isLightMode 
-                                            ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, 4))]
-                                            : [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))],
-                                      ),
-                                      child: Center(
-                                        child: Icon(
-                                            CupertinoIcons.location_fill,
-                                            color: isLightMode ? Colors.black87 : Colors.white),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(50),
+                                      child: BackdropFilter(
+                                        filter: ui.ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
+                                        child: Container(
+                                          width: 56,
+                                          height: 56,
+                                          decoration: BoxDecoration(
+                                            color: isLightMode ? Colors.white.withValues(alpha: 0.65) : const Color(0xFF1E1E1E),
+                                            shape: BoxShape.circle,
+                                            border: isLightMode ? Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.0) : null,
+                                            boxShadow: isLightMode 
+                                                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(0, 4))]
+                                                : [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))],
+                                          ),
+                                          child: Center(
+                                            child: Icon(
+                                                CupertinoIcons.location_fill,
+                                                color: isLightMode ? Colors.black87 : Colors.white),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -660,7 +701,7 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                                   borderRadius: BorderRadius.circular(
                                       progress > 0.5 ? 24 : 100),
                                   boxShadow: isLightMode
-                                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, 4))]
+                                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(0, 4))]
                                       : [
                                     BoxShadow(
                                         color:
@@ -683,12 +724,12 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                                     child: Container(
                                       decoration: BoxDecoration(
                                         color: isLightMode 
-                                            ? Colors.white 
+                                            ? Colors.white.withValues(alpha: 0.65) 
                                             : const Color(0xFF0B0E17).withValues(alpha: 0.75),
                                         borderRadius: BorderRadius.circular(
                                             progress > 0.5 ? 24 : 100),
                                         border: isLightMode 
-                                            ? Border.all(color: Colors.black.withValues(alpha: 0.04)) 
+                                            ? Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.0) 
                                             : Border.all(
                                             color: Colors.white
                                                 .withValues(alpha: 0.08),
@@ -828,6 +869,7 @@ class _CustomMapScreenState extends State<CustomMapScreen>
         AppHaptics.selectionClick();
         setState(() {
           _currentTheme = type;
+          _userOverrodeTheme = true; // User explicitly chose a map theme
           _updateStyleFuture();
         });
       },
@@ -885,7 +927,11 @@ class _CustomMapScreenState extends State<CustomMapScreen>
         child: Icon(
           icon,
           size: 20,
-          color: isSelected ? const Color(0xFF00E5FF) : Colors.white54,
+          color: isSelected
+              ? const Color(0xFF00E5FF)
+              : (Theme.of(context).brightness == Brightness.light
+                  ? Colors.black54
+                  : Colors.white54),
         ),
       ),
     );

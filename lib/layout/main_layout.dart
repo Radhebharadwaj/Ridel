@@ -89,9 +89,7 @@ class _MainLayoutState extends State<MainLayout> {
 
     const double desktopMargin = 32.0;
 
-    final bgColor = isDesktop
-        ? (isDark ? const Color(0xFF05070B) : const Color(0xFFF5F5F7))
-        : (isDark ? const Color(0xFF0B0E17) : Colors.white);
+
 
     final double statusBarHeight = MediaQuery.of(context).padding.top;
 
@@ -106,7 +104,7 @@ class _MainLayoutState extends State<MainLayout> {
         statusBarBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: bgColor,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         resizeToAvoidBottomInset: false,
         body: Stack(
           children: [

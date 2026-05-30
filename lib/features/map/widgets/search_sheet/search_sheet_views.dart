@@ -181,7 +181,9 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                               child: Text(
                                 'Recent Searches',
                                 style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.9),
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.9)
+                                      : Colors.black87,
                                   fontWeight: FontWeight.w500,
                                   fontSize: 16,
                                 ),
@@ -346,7 +348,9 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                       title: Text(
                         'Transit Quick Actions',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.9)
+                              : Colors.black87,
                           fontWeight: FontWeight.w500,
                           fontSize: 16,
                         ),
@@ -385,7 +389,9 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                   height: 1,
                                   thickness: 0.5,
                                   indent: 52,
-                                  color: Colors.white.withValues(alpha: 0.08),
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.08)
+                                      : Colors.black.withValues(alpha: 0.08),
                                 ),
                                 RidelBounceButton(
                                   onTap: () async {
@@ -411,16 +417,18 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                     title: Text(
                                       'Share My Location',
                                       style: TextStyle(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.9),
+                                        color: isDark
+                                            ? Colors.white.withValues(alpha: 0.9)
+                                            : Colors.black87,
                                         fontSize: 16,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                     trailing: Icon(
                                       Icons.chevron_right_rounded,
-                                      color:
-                                          Colors.white.withValues(alpha: 0.3),
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.3)
+                                          : Colors.black.withValues(alpha: 0.3),
                                     ),
                                   ),
                                 ),
@@ -428,7 +436,9 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                   height: 1,
                                   thickness: 0.5,
                                   indent: 52,
-                                  color: Colors.white.withValues(alpha: 0.08),
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.08)
+                                      : Colors.black.withValues(alpha: 0.08),
                                 ),
                                 buildHiddenExtra(
                                   RidelBounceButton(
@@ -455,16 +465,18 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                       title: Text(
                                         'Mark My Location',
                                         style: TextStyle(
-                                          color: Colors.white
-                                              .withValues(alpha: 0.9),
+                                          color: isDark
+                                              ? Colors.white.withValues(alpha: 0.9)
+                                              : Colors.black87,
                                           fontSize: 16,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                       trailing: Icon(
                                         Icons.chevron_right_rounded,
-                                        color:
-                                            Colors.white.withValues(alpha: 0.3),
+                                        color: isDark
+                                            ? Colors.white.withValues(alpha: 0.3)
+                                            : Colors.black.withValues(alpha: 0.3),
                                       ),
                                     ),
                                   ),
@@ -558,12 +570,25 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
           height: 52,
           shapeType: LiquidShapeType.circle, // Perfect circular shape
           onTap: () async {
-            if (isSelected) return; // Ignore if already selected
             AppHaptics
                 .selectionClick(); // 🚀 FIX: iOS style subtle selection haptic
 
-            // This triggers the fixed method in MapProvider to actually redraw the route
-            await provider.setNavMode(context, mode);
+            final hasRouteDrawn = provider.engine.mapUIState.value == MapUIState.routeDrawn;
+
+            // If a route is already drawn for this exact mode, do nothing
+            if (isSelected && hasRouteDrawn) return;
+
+            if (!isSelected) {
+              // Mode changed → setNavMode handles re-draw internally
+              await provider.setNavMode(context, mode);
+            } else {
+              // Same mode but no route yet (first tap on freshly selected place)
+              // → Force draw the route for the current default mode
+              if (provider.targetDestination != null) {
+                await provider.autoDrawRouteTo(
+                    provider.targetDestination!, context);
+              }
+            }
 
             // 🚀 FIX: Force UI to rebuild to show the new active color state locally
             rebuildState(() {});

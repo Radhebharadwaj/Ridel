@@ -13,6 +13,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:ridel/core/map/map_provider.dart';
+import 'package:ridel/features/map/map_engine/map_engine.dart';
 
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/services/universal_mic_button.dart';
@@ -549,14 +550,21 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           try {
             final mapProvider =
                 Provider.of<MapProvider>(context, listen: false);
+
+            // 🧭 Step 1: Fly camera to the place & drop a pin
             mapProvider.flyToPlace(
                 placeToSubmit.latitude, placeToSubmit.longitude);
+
+            // 🧭 Step 2: Update state machine → placeSelected
+            // This triggers QuickActionButtons to morph to "Directions"
             mapProvider.setDestinationSelected(true);
 
-            final destLatLng =
-                LatLng(placeToSubmit.latitude, placeToSubmit.longitude);
-            await mapProvider.autoDrawRouteTo(destLatLng, context);
-          } catch (_) {}
+            // 🚫 Do NOT auto-draw route here — the user must first pick a
+            // transport mode from the Walk/Bike/Car/Heavy buttons, which
+            // calls setNavMode → autoDrawRouteTo → routeDrawn.
+          } catch (e) {
+            debugPrint('⚠️ _submitSearch map wiring error: $e');
+          }
         }
 
         try {
@@ -773,6 +781,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
         if (mapCtrl != null) {
           await RouteVisualizer.drawRoute(mapCtrl, route.coordinates, provider.currentTheme);
+
+          // 🧭 State Machine: Route drawn → morph QuickActionButtons to "Start"
+          provider.engine.setUIState(MapUIState.routeDrawn);
 
           final double minLat = math.min(originLoc.latitude, destLoc.latitude);
           final double maxLat = math.max(originLoc.latitude, destLoc.latitude);
@@ -1051,8 +1062,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isDesktop = screenSize.width > 600;
 
-    final baseHeaderHeight = _showDirections ? 190.0 : 62.0;
-    final dynamicHeaderHeight = baseHeaderHeight;
+    // Header height is computed inside the builder where progress is available
 
     final minS = _safeMinSize;
     final midS = _safeMidSize;
@@ -1177,13 +1187,15 @@ class _MapSearchSheetState extends State<MapSearchSheet>
             return ValueListenableBuilder<double>(
               valueListenable: _sheetProgress,
               builder: (context, progress, child) {
+                // 🚀 FIX: Lerp header height from 62 (closed) → 76 (open) so closed state matches original
+                final dynamicHeaderHeight = _showDirections ? 190.0 : (lerpDouble(62.0, 76.0, progress) ?? 62.0);
                 const currentSideMargin = 16.0;
                 final currentBottomMargin = 24.0 - (14.0 * progress);
                 const sheetRadius = 50.0;
 
                 final Color sheetBgColor = isDark
                     ? const Color(0xFF0B0E17).withValues(alpha: 0.80)
-                    : const Color(0xFFF2F2F7).withValues(alpha: 0.85);
+                    : Colors.white.withValues(alpha: 0.65);
                 const double blurAmount = 30.0;
 
                 return PointerInterceptor(

@@ -274,6 +274,8 @@ class _RidelAppState extends State<RidelApp> {
           theme: AppTheme.getLightTheme(ThemeService.fontNotifier.value),
           darkTheme: AppTheme.getDarkTheme(ThemeService.fontNotifier.value),
           themeMode: ThemeService.themeNotifier.value,
+          themeAnimationDuration: const Duration(milliseconds: 850),
+          themeAnimationCurve: Curves.easeInOutQuart,
           // 🚀 Yahan se Web Mouse Dragging Fix add hua hai
           scrollBehavior: const MaterialScrollBehavior().copyWith(
             dragDevices: {

@@ -171,7 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
 
     return Scaffold(
-      backgroundColor: isLightMode ? Colors.white : darkBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
