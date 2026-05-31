@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
 import 'package:ridel/core/map/map_style_helper.dart';
@@ -17,8 +18,6 @@ import 'package:ridel/features/map/services/master_search_service.dart';
 import 'package:ridel/features/map/services/place_api_services.dart';
 import 'package:ridel/features/map/services/route_visualizer.dart';
 import 'package:ridel/features/map/services/route_engine_service.dart';
-
-import 'package:flutter/services.dart';
 
 class MapProvider extends ChangeNotifier {
   final MapEngine engine = MapEngine();
@@ -66,6 +65,147 @@ class MapProvider extends ChangeNotifier {
       _destinationCircle = null;
       notifyListeners();
     }
+  }
+
+  // Track route source to remove it later
+  bool _isRouteDrawn = false;
+
+  // State flag for UI
+  bool isRouteCalculated = false;
+
+  Future<void> calculateAndDrawNativeRoute(BuildContext context, String mode) async {
+    debugPrint("🚀 [ROUTE ENGINE] Triggered for mode: $mode");
+    
+    if (targetDestination == null) {
+      debugPrint("❌ [ROUTE ENGINE] Failed: targetDestination is null.");
+      return;
+    }
+
+    // 🚨 CRITICAL FIX: We must use the user's actual live location, NOT the camera position.
+    final locService = Provider.of<GlobalLocationService>(context, listen: false);
+    final currentPos = locService.currentPosition;
+    LatLng? origin = currentPos != null ? LatLng(currentPos.latitude, currentPos.longitude) : null;
+
+    if (origin == null) {
+      // 2. FALLBACK: Fetch fresh GPS location to guarantee Ola API gets an origin!
+      try {
+        final pos = await Geolocator.getCurrentPosition();
+        origin = LatLng(pos.latitude, pos.longitude);
+      } catch (e) {
+        debugPrint("🚨 GPS ERROR: Cannot calculate route without origin. $e");
+        return;
+      }
+    }
+
+    debugPrint("📍 [ROUTE ENGINE] Origin: ${origin.latitude}, ${origin.longitude}");
+    debugPrint("📍 [ROUTE ENGINE] Destination: ${targetDestination!.latitude}, ${targetDestination!.longitude}");
+
+    try {
+      // Fetch route from Ola Maps. 
+      debugPrint("⏳ [ROUTE ENGINE] Waiting for Ola Maps API...");
+      final routeResult = await _routingService.getRoute(origin, targetDestination!, mode: mode);
+      
+      if (routeResult != null && routeResult.coordinates.isNotEmpty) {
+        debugPrint("✅ [ROUTE ENGINE] Ola API Success! Received ${routeResult.coordinates.length} points.");
+        
+        await drawNativeRoute(routeResult.coordinates);
+        debugPrint("✅ [ROUTE ENGINE] Native MapLibre Draw Success!");
+        
+        isRouteCalculated = true;
+        engine.setUIState(MapUIState.routeDrawn);
+        notifyListeners();
+      } else {
+        debugPrint("⚠️ [ROUTE ENGINE] Ola API returned empty coordinates or null.");
+      }
+    } catch (e) {
+      debugPrint("💥 [ROUTE ENGINE] CRASH: $e");
+    }
+  }
+
+  Future<void> drawNativeRoute(List<LatLng> routePoints) async {
+    if (controller == null || routePoints.isEmpty) return;
+
+    // 1. Clear previous route if it exists
+    await clearNativeRoute();
+
+    // 2. Convert LatLng list to GeoJSON LineString coordinates (Note: GeoJSON uses [longitude, latitude])
+    final coordinates = routePoints.map((p) => [p.longitude, p.latitude]).toList();
+
+    final geoJson = {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {},
+          "geometry": {
+            "type": "LineString",
+            "coordinates": coordinates
+          }
+        }
+      ]
+    };
+
+    try {
+      // 3. Add GeoJSON Source
+      await controller!.addGeoJsonSource('route-source', geoJson);
+
+      // 4. Add Native Premium Line Layer
+      await controller!.addLineLayer(
+        'route-source', // source id
+        'route-layer',  // layer id
+        const LineLayerProperties(
+          lineColor: '#0A84FF', // Premium Apple Maps Blue
+          lineWidth: 5.5,
+          lineCap: 'round',
+          lineJoin: 'round',
+        ),
+      );
+      
+      _isRouteDrawn = true;
+      
+      // 5. Adjust Camera to fit the whole route
+      await controller!.animateCamera(
+        CameraUpdate.newLatLngBounds(
+          _calculateBounds(routePoints),
+          bottom: 300, // Padding for your bottom sheets
+          left: 50,
+          right: 50,
+          top: 100,
+        ),
+        duration: const Duration(milliseconds: 800),
+      );
+      
+      notifyListeners();
+    } catch (e) {
+      debugPrint("🗺️ ROUTE DRAW ERROR: $e");
+    }
+  }
+
+  Future<void> clearNativeRoute() async {
+    if (controller != null && _isRouteDrawn) {
+      try {
+        await controller!.removeLayer('route-layer');
+        await controller!.removeSource('route-source');
+        _isRouteDrawn = false;
+        isRouteCalculated = false;
+        notifyListeners();
+      } catch (e) {
+        debugPrint("🗺️ ROUTE CLEAR ERROR: $e");
+      }
+    }
+  }
+
+  // Helper to calculate camera bounds
+  LatLngBounds _calculateBounds(List<LatLng> points) {
+    double minLat = points.first.latitude, maxLat = points.first.latitude;
+    double minLng = points.first.longitude, maxLng = points.first.longitude;
+    for (var p in points) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    return LatLngBounds(southwest: LatLng(minLat, minLng), northeast: LatLng(maxLat, maxLng));
   }
 
   DateTime? _lastSearchTime;

@@ -120,8 +120,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         });
 
         // 🚀 FIX: Sync MapProvider's route theme so polyline colors match
-        final themeToSet = _currentTheme ??
-            (isDark ? MapThemeType.dark : MapThemeType.light);
+        final themeToSet =
+            _currentTheme ?? (isDark ? MapThemeType.dark : MapThemeType.light);
         Provider.of<MapProvider>(context, listen: false).setTheme(themeToSet);
       }
     } catch (e) {
@@ -258,22 +258,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
               },
               child:
                   Consumer<MapProvider>(builder: (context, mapProvider, child) {
-                final cameraState =
-                    mapProvider.engine.camera?.state ?? MapCameraState.free;
-                IconData locateIcon;
-                Color locateColor;
-
-                if (cameraState == MapCameraState.free) {
-                  locateIcon = Icons.near_me_outlined;
-                  locateColor = isDark ? Colors.white70 : Colors.black87;
-                } else if (cameraState == MapCameraState.follow) {
-                  locateIcon = Icons.near_me;
-                  locateColor = const Color(0xFF00E5FF);
-                } else {
-                  locateIcon = Icons.explore;
-                  locateColor = const Color(0xFF00E5FF);
-                }
-
                 return _buildPointerSafeWrapper(
                   child: Listener(
                     behavior: HitTestBehavior.opaque,
@@ -329,14 +313,16 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                       width: 48,
                                       decoration: BoxDecoration(
                                           color: !isDark
-                                              ? Colors.white.withValues(alpha: 0.75)
+                                              ? Colors.white
+                                                  .withValues(alpha: 0.75)
                                               : const Color(0xFF0B0E17)
                                                   .withValues(alpha: 0.75),
                                           borderRadius:
                                               BorderRadius.circular(50),
                                           border: !isDark
                                               ? Border.all(
-                                                  color: Colors.white.withValues(alpha: 0.9),
+                                                  color: Colors.white
+                                                      .withValues(alpha: 0.9),
                                                   width: 1.0)
                                               : Border.all(
                                                   color: Colors.white
@@ -350,7 +336,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                             onTap: () {
                                               AppHaptics.heavyImpact();
                                               MapThemeSelector.show(context,
-                                                  currentTheme: _currentTheme ?? (isDark ? MapThemeType.dark : MapThemeType.light),
+                                                  currentTheme: _currentTheme ??
+                                                      (isDark
+                                                          ? MapThemeType.dark
+                                                          : MapThemeType.light),
                                                   onThemeSelected:
                                                       (selectedTheme) {
                                                 setState(() {
@@ -384,74 +373,50 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                           GestureDetector(
                                             behavior: HitTestBehavior.opaque,
                                             onTap: () async {
-                                              AppHaptics.heavyImpact();
-                                              try {
-                                                bool serviceEnabled =
-                                                    await Geolocator
-                                                        .isLocationServiceEnabled();
-                                                if (!serviceEnabled) {
-                                                  if (context.mounted) {
-                                                    ToastService.showError(
-                                                        context,
-                                                        "Please enable Location Services.");
-                                                  }
-                                                  return;
-                                                }
+                                              AppHaptics.selectionClick();
 
-                                                LocationPermission permission =
-                                                    await Geolocator
-                                                        .checkPermission();
-                                                if (permission ==
-                                                    LocationPermission.denied) {
-                                                  permission = await Geolocator
-                                                      .requestPermission();
-                                                  if (permission ==
-                                                      LocationPermission
-                                                          .denied) {
-                                                    if (context.mounted) {
-                                                      ToastService.showError(
-                                                          context,
-                                                          "Location permission denied.");
-                                                    }
-                                                    return;
-                                                  }
-                                                }
-
-                                                if (permission ==
-                                                    LocationPermission
-                                                        .deniedForever) {
-                                                  if (context.mounted) {
-                                                    ToastService.showError(
-                                                        context,
-                                                        "Location permissions are permanently denied. Please enable in App Settings.");
-                                                  }
-                                                  return;
-                                                }
-
-                                                if (context.mounted) {
-                                                  await Provider.of<
-                                                              GlobalLocationService>(
-                                                          context,
-                                                          listen: false)
-                                                      .forceRefreshLocation();
-                                                  mapProvider.engine
-                                                      .onLocateMeTapped();
-                                                }
-                                              } catch (e) {
-                                                if (context.mounted) {
-                                                  ToastService.showError(
-                                                      context,
-                                                      "Failed to get location.");
-                                                }
+                                              if (mapProvider
+                                                  .isRouteCalculated) {
+                                                // STATE 3: START NAVIGATION
+                                                debugPrint(
+                                                    "🚀 Start Navigation Tapped!");
+                                                // TODO: Implement Turn-by-Turn
+                                              } else if (mapProvider
+                                                      .targetDestination !=
+                                                  null) {
+                                                // STATE 2: GET DIRECTIONS
+                                                debugPrint(
+                                                    "🛣️ Fetching Route...");
+                                                await mapProvider
+                                                    .calculateAndDrawNativeRoute(
+                                                        context, 'driving');
+                                              } else {
+                                                // STATE 1: LOCATE ME (Default)
+                                                debugPrint(
+                                                    "📍 Locate Me Tapped!");
+                                                await _handleLocateMeTapped(
+                                                    mapProvider);
                                               }
                                             },
                                             child: SizedBox(
                                               height: 52,
                                               width: 48,
                                               child: Center(
-                                                  child: Icon(locateIcon,
-                                                      color: locateColor,
-                                                      size: 22)),
+                                                child: AnimatedSwitcher(
+                                                  duration: const Duration(
+                                                      milliseconds: 300),
+                                                  transitionBuilder:
+                                                      (Widget child,
+                                                          Animation<double>
+                                                              animation) {
+                                                    return ScaleTransition(
+                                                        scale: animation,
+                                                        child: child);
+                                                  },
+                                                  child: _buildDynamicIcon(
+                                                      context, mapProvider),
+                                                ),
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -504,7 +469,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                         borderRadius: BorderRadius.circular(24),
                                         border: !isDark
                                             ? Border.all(
-                                                color: Colors.black.withValues(alpha: 0.04),
+                                                color: Colors.black
+                                                    .withValues(alpha: 0.04),
                                                 width: 1.0)
                                             : Border.all(
                                                 color: Colors.white
@@ -579,6 +545,98 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         ],
       ),
     );
+  }
+
+  Future<void> _handleLocateMeTapped(MapProvider mapProvider) async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          ToastService.showError(context, "Please enable Location Services.");
+        }
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ToastService.showError(context, "Location permission denied.");
+          }
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ToastService.showError(
+            context,
+            "Location permissions are permanently denied. Please enable in App Settings.",
+          );
+        }
+        return;
+      }
+
+      if (mounted) {
+        await Provider.of<GlobalLocationService>(context, listen: false)
+            .forceRefreshLocation();
+        mapProvider.engine.onLocateMeTapped();
+      }
+    } catch (e) {
+      if (mounted) {
+        ToastService.showError(context, "Failed to get location.");
+      }
+    }
+  }
+
+  Widget _buildDynamicIcon(BuildContext context, MapProvider provider) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color iconColor = isDark ? Colors.white70 : Colors.black87;
+    const double defaultSize = 20.0;
+
+    if (provider.isRouteCalculated) {
+      // STATE 3: START (Keep this slightly prominent but not glowing)
+      return Icon(
+        Icons.navigation_rounded, // Upward arrow
+        key: const ValueKey('icon_start'),
+        color: const Color(0xFF0A84FF)
+            .withValues(alpha: 0.9), // Apple Blue but slightly soft
+        size: defaultSize,
+      );
+    } else if (provider.targetDestination != null) {
+      // STATE 2: DIRECTIONS (Faded and elegant)
+      return Icon(
+        Icons.directions_rounded,
+        key: const ValueKey('icon_directions'),
+        color: iconColor,
+        size: defaultSize,
+      );
+    } else {
+      // STATE 1: LOCATE ME (Faded and elegant)
+      final cameraState = provider.engine.camera?.state ?? MapCameraState.free;
+
+      IconData locateIcon;
+      Color locateColor;
+
+      if (cameraState == MapCameraState.free) {
+        locateIcon = Icons.my_location_rounded;
+        locateColor = iconColor;
+      } else if (cameraState == MapCameraState.follow) {
+        locateIcon = Icons.my_location_rounded;
+        locateColor = const Color(0xFF0A84FF).withValues(alpha: 0.9);
+      } else {
+        locateIcon = Icons.explore;
+        locateColor = const Color(0xFF0A84FF).withValues(alpha: 0.9);
+      }
+
+      return Icon(
+        locateIcon,
+        key: ValueKey('icon_locate_${cameraState.name}'),
+        color: locateColor,
+        size: defaultSize,
+      );
+    }
   }
 }
 

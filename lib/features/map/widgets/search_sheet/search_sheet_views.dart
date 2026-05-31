@@ -352,7 +352,6 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                         // 4. Fly Camera
                                         if (lat != 0.0 && lng != 0.0) {
                                           safeProvider.setTargetDestination(LatLng(lat, lng));
-                                          safeProvider.addNativeDestinationPin(LatLng(lat, lng));
                                           rebuildState(() => _selectedPlace = place);
                                           if (_sheetController.isAttached) {
                                             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -364,6 +363,10 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                                 );
                                               }
                                             });
+                                          }
+                                          // Drop the native Red Circle at the selected place coordinates
+                                          if (lat != 0.0 && lng != 0.0) {
+                                            safeProvider.addNativeDestinationPin(LatLng(lat, lng));
                                           }
                                           await safeProvider.flyToPlace(lat, lng);
                                         } else {
@@ -682,19 +685,74 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     return Padding(
       key: const ValueKey('transport_modes_row'),
       padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildCircularModeButton(context, provider,
-              Icons.directions_walk_rounded, 'Walk', 'walking', isDark),
-          _buildCircularModeButton(context, provider, Icons.two_wheeler_rounded,
-              'Bike', 'twowheeler', isDark),
-          _buildCircularModeButton(context, provider,
-              CupertinoIcons.car_detailed, 'Car', 'driving', isDark),
-          _buildCircularModeButton(context, provider,
-              Icons.local_shipping_rounded, 'Heavy', 'heavy', isDark),
-        ],
-      ),
+      child: provider.isRouteCalculated
+          ? SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0A84FF), // Premium Blue
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () {
+                  // TODO: Phase 3 - Start Turn-by-Turn Navigation
+                  debugPrint("Start Navigation Tapped!");
+                },
+                child: const Text("Start",
+                    style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold)),
+              ),
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildCircularModeButton(context, provider,
+                    Icons.directions_walk_rounded, 'Walk', 'walking', isDark),
+                _buildCircularModeButton(context, provider, Icons.two_wheeler_rounded,
+                    'Bike', 'twowheeler', isDark),
+                
+                // Wired Car Button
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    RidelLiquidButton(
+                      width: 52,
+                      height: 52,
+                      shapeType: LiquidShapeType.circle,
+                      onTap: () async {
+                        AppHaptics.selectionClick();
+                        provider.currentNavMode = 'driving';
+                        await provider.calculateAndDrawNativeRoute(context, 'driving');
+                        rebuildState(() {});
+                      },
+                      child: Center(
+                        child: Icon(
+                          CupertinoIcons.car_detailed,
+                          size: 24,
+                          color: provider.currentNavMode == 'driving' ? Colors.blueAccent : (isDark ? Colors.white54 : Colors.black54),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Car',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: provider.currentNavMode == 'driving' ? FontWeight.w600 : FontWeight.w500,
+                        color: provider.currentNavMode == 'driving' ? Colors.blueAccent : (isDark ? Colors.white54 : Colors.black54),
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+
+                _buildCircularModeButton(context, provider,
+                    Icons.local_shipping_rounded, 'Heavy', 'heavy', isDark),
+              ],
+            ),
     );
   }
 
@@ -951,6 +1009,10 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                             duration: const Duration(milliseconds: 300),
                             curve: Curves.easeOutCubic,
                           );
+                        }
+                        // Drop the native Red Circle at the selected place coordinates
+                        if (lat != 0.0 && lng != 0.0) {
+                          safeProvider.addNativeDestinationPin(LatLng(lat, lng));
                         }
                         await safeProvider.flyToPlace(lat, lng);
                       } else {

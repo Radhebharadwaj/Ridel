@@ -115,8 +115,10 @@ class RouteEngineService {
 
   Future<RouteResult?> _fetchWithRetry(
       LatLng origin, LatLng destination, String mode, String cacheKey) async {
-    final Uri url = Uri.parse(
-        '$_baseUrl?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=$mode&steps=true&overview=full&api_key=$_apiKey');
+    final String olaApiUrl =
+        '$_baseUrl?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=$mode&steps=true&overview=full&api_key=$_apiKey';
+
+    final Uri url = Uri.parse(olaApiUrl);
 
     int attempts = 0;
     while (attempts < 2) {
@@ -359,4 +361,35 @@ class RouteEngineService {
         (dx * (lineStart[0] - pt[0]) - dy * (lineStart[1] - pt[1])).abs();
     return numerator / math.sqrt(dx * dx + dy * dy);
   }
+}
+
+// Helper function to decode standard polyline strings
+List<LatLng> decodePolyline(String encoded) {
+  List<LatLng> points = [];
+  int index = 0, len = encoded.length;
+  int lat = 0, lng = 0;
+
+  while (index < len) {
+    int b, shift = 0, result = 0;
+    do {
+      b = encoded.codeUnitAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+    lat += dlat;
+
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.codeUnitAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+    lng += dlng;
+
+    points.add(LatLng(lat / 1E5, lng / 1E5));
+  }
+  return points;
 }
