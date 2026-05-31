@@ -79,8 +79,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     final isSelected = _selectedPlace != null;
 
     final showTransportModes = isSelected;
-    final showQuickActions = !isSelected && !isFocused && isEmpty;
-    final showRecentSearches = !isSelected && isFocused && isEmpty && _recentSearches.isNotEmpty;
+    final showQuickActions = !isSelected && (!isFocused && !provider.isEditingHistory) && isEmpty;
+    final showRecentSearches = !isSelected && (isFocused || provider.isEditingHistory) && isEmpty;
 
     final isExpanded = progress > (_safeMinSize + 0.05);
     final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
@@ -185,31 +185,97 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            RidelBounceButton(
-                              onTap: _showClearAllWarning,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.redAccent.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(100),
-                                ),
-                                child: const Text('Delete All', style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w700)),
-                              ),
-                            ),
+                            if (provider.recentSearches.isNotEmpty)
+                              provider.isEditingHistory
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // 1. DELETE ALL BUTTON
+                                        GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: () {
+                                            FocusScope.of(context).requestFocus(_searchFocus); // PREVENT SHEET COLLAPSE
+                                            provider.deleteAllHistory(); 
+                                          },
+                                          child: const Padding(
+                                            padding: EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                                            child: Text("Delete All", style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.w500)),
+                                          ),
+                                        ),
+                                        // 2. DONE BUTTON
+                                        GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: () {
+                                            FocusScope.of(context).requestFocus(_searchFocus); // PREVENT SHEET COLLAPSE
+                                            provider.deleteSelectedHistory(); 
+                                          },
+                                          child: const Padding(
+                                            padding: EdgeInsets.only(left: 8.0, top: 8.0, bottom: 8.0),
+                                            child: Text("Done", style: TextStyle(color: Colors.blueAccent, fontSize: 16, fontWeight: FontWeight.bold)),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : ExcludeFocus( // 🛡️ PREVENTS BUTTON FROM STEALING FOCUS
+                                      child: Listener(
+                                        behavior: HitTestBehavior.opaque,
+                                        onPointerDown: (_) {
+                                          AppHaptics.selectionClick();
+                                          
+                                          // 1. Capture current focus (the search bar)
+                                          FocusNode? currentFocus = FocusManager.instance.primaryFocus;
+                                          
+                                          // 2. Change state to Edit Mode
+                                          provider.setIsEditingHistory(true);
+                                          
+                                          // 3. Forcefully keep the focus alive so the sheet DOES NOT collapse!
+                                          currentFocus?.requestFocus();
+                                        },
+                                        child: const Padding(
+                                          padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                                          child: Text(
+                                            "Delete",
+                                            style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600, fontSize: 16),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                           ],
                         ),
                       ),
                       Divider(height: 1, color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black12),
-                      ConstrainedBox(
+                      provider.recentSearches.isEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 32.0),
+                              child: Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.travel_explore, color: isDark ? Colors.white24 : Colors.black26, size: 48),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      "No recent searches",
+                                      style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 15, fontWeight: FontWeight.w500),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      "Your search history will appear here.",
+                                      style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : ConstrainedBox(
                         constraints: const BoxConstraints(maxHeight: 320), // Height for approx 5 items
                         child: ListView.builder(
                           padding: EdgeInsets.zero,
                           shrinkWrap: true,
                           physics: const ClampingScrollPhysics(),
-                          itemCount: _recentSearches.length,
+                          itemCount: provider.recentSearches.length,
                           itemBuilder: (context, index) {
-                            final place = _recentSearches[index];
-                            final isLast = index == _recentSearches.length - 1;
+                            final place = provider.recentSearches[index];
+                            final isLast = index == provider.recentSearches.length - 1;
                             
                             // Fetch provider safely BEFORE the gesture callback using the stable build context
                             final safeProvider = Provider.of<MapProvider>(context, listen: false);
@@ -228,7 +294,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                               ),
                               onDismissed: (_) {
                                 AppHaptics.mediumImpact();
-                                _deleteRecentSearch(place);
+                                safeProvider.deleteSingleHistory(place);
                               },
                               child: Column(
                                 children: [
@@ -236,6 +302,13 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                     behavior: HitTestBehavior.opaque,
                                     // Trigger INSTANTLY on touch, before any keyboard unfocus events can destroy the widget
                                     onPointerDown: (event) async {
+                                      // --- NEW INTERCEPTOR FOR EDIT MODE ---
+                                      if (safeProvider.isEditingHistory) {
+                                        safeProvider.toggleDeletionSelection(place.placeId);
+                                        return; // STOP execution here, do not fly camera!
+                                      }
+                                      // --- END INTERCEPTOR ---
+                                      
                                       debugPrint("💥 RAW POINTER DOWN REGISTERED ON: ${place.name}");
                                       AppHaptics.selectionClick();
                                       
@@ -246,11 +319,15 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                         
                                         // Safely animate sheet to Pill View size
                                         if (_sheetController.isAttached) {
-                                          _sheetController.animateTo(
-                                            _safeMinSize,
-                                            duration: const Duration(milliseconds: 300),
-                                            curve: Curves.easeOutCubic,
-                                          );
+                                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                                            if (_sheetController.isAttached) {
+                                              _sheetController.animateTo(
+                                                _safeMinSize,
+                                                duration: const Duration(milliseconds: 300),
+                                                curve: Curves.easeOutCubic,
+                                              );
+                                            }
+                                          });
                                         }
                                         
                                         // 2. NOW unfocus the keyboard
@@ -275,13 +352,18 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                         // 4. Fly Camera
                                         if (lat != 0.0 && lng != 0.0) {
                                           safeProvider.setTargetDestination(LatLng(lat, lng));
+                                          safeProvider.addNativeDestinationPin(LatLng(lat, lng));
                                           rebuildState(() => _selectedPlace = place);
                                           if (_sheetController.isAttached) {
-                                            _sheetController.animateTo(
-                                              _safeMinSize,
-                                              duration: const Duration(milliseconds: 300),
-                                              curve: Curves.easeOutCubic,
-                                            );
+                                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                                              if (_sheetController.isAttached) {
+                                                _sheetController.animateTo(
+                                                  _safeMinSize,
+                                                  duration: const Duration(milliseconds: 300),
+                                                  curve: Curves.easeOutCubic,
+                                                );
+                                              }
+                                            });
                                           }
                                           await safeProvider.flyToPlace(lat, lng);
                                         } else {
@@ -328,6 +410,16 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                             fontSize: 13,
                                           ),
                                         ),
+                                        trailing: safeProvider.isEditingHistory
+                                            ? IgnorePointer(
+                                                child: Checkbox(
+                                                  shape: const CircleBorder(), // 🔴 THIS MAKES IT CIRCULAR
+                                                  value: provider.selectedForDeletion.contains(place.placeId),
+                                                  activeColor: Colors.redAccent,
+                                                  onChanged: (bool? selected) {},
+                                                ),
+                                              )
+                                            : null,
                                       ),
                                     ),
                                   if (!isLast)
@@ -692,7 +784,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
 
   Widget _buildSearchResultsView(bool isDark) {
     final query = _searchCtrl.text.trim().toLowerCase();
-    final localMatches = _recentSearches.where((place) => place.name.toLowerCase().contains(query)).toList();
+    final provider = Provider.of<MapProvider>(context, listen: false);
+    final localMatches = provider.recentSearches.where((place) => place.name.toLowerCase().contains(query)).toList();
 
     // Combine local matches with API results, avoiding duplicates by name
     final combinedResults = [
@@ -809,17 +902,24 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                     AppHaptics.selectionClick();
                     
                     try {
-                      // 1. Lock State FIRST using the pre-fetched safe provider
+                      // 1. SAVE THE SEARCH TO HISTORY
+                      safeProvider.saveNewSearch(place);
+
+                      // 2. Lock State FIRST using the pre-fetched safe provider
                       safeProvider.setDestinationSelected(true);
                       safeProvider.engine.setUIState(MapUIState.placeSelected);
                       
                       // Safely animate sheet to Pill View size
                       if (_sheetController.isAttached) {
-                        _sheetController.animateTo(
-                          _safeMinSize,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOutCubic,
-                        );
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (_sheetController.isAttached) {
+                            _sheetController.animateTo(
+                              _safeMinSize,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeOutCubic,
+                            );
+                          }
+                        });
                       }
                       
                       // 2. NOW unfocus the keyboard

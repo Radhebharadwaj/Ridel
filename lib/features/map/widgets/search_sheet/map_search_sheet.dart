@@ -82,7 +82,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   final MasterSearchService _searchService = MasterSearchService();
   final RouteEngineService _routeEngineService = RouteEngineService();
   List<PlaceModel> _searchResults = [];
-  List<PlaceModel> _recentSearches = [];
+
   bool _isSearching = false;
   bool _isSearchMode = false;
 
@@ -108,6 +108,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   final ValueNotifier<double> _sheetProgress = ValueNotifier(0);
   Timer? _debounce;
+  
 
 
   bool _showDragHandle = true;
@@ -186,9 +187,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         _searchFocus.unfocus();
         if (_sheetController.isAttached) {
           // 🍏 APPLE CURVE (easeOutCubic for natural snap)
-          _sheetController.animateTo(_safeMinSize,
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeOutCubic);
+          _safeAnimateSheet(_safeMinSize);
         }
 
         final lat = (savedPlace['latitude'] as num).toDouble();
@@ -208,9 +207,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
         // Collapse sheet to show the full map
         if (_sheetController.isAttached) {
-          _sheetController.animateTo(_safeMinSize,
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeOutCubic);
+          _safeAnimateSheet(_safeMinSize);
         }
 
         _showPremiumNotification(
@@ -275,7 +272,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
     _searchCtrl.addListener(_onSearchChanged);
     unawaited(_handleGuestSessionHistory());
-    unawaited(_loadRecents());
   }
 
   void _wakeUpDragHandle() {
@@ -380,88 +376,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     }
   }
 
-  Future<void> _loadRecents() async {
-    try {
-      final supabase = Supabase.instance.client;
-      final user = supabase.auth.currentUser;
 
-      if (user != null) {
-        final response = await supabase
-            .from('search_history')
-            .select()
-            .eq('user_id', user.id)
-            .order('created_at', ascending: false)
-            .limit(10);
-
-        if (!mounted) return;
-        final validRecents = (response as List<dynamic>)
-            .map<PlaceModel>(
-              (e) => PlaceModel(
-                placeId: e['place_id']?.toString() ??
-                    'recent_${e['latitude']}_${e['longitude']}',
-                name: e['name']?.toString() ?? '',
-                address: e['address']?.toString() ?? '',
-                latitude: (e['latitude'] as num?)?.toDouble() ?? 0.0,
-                longitude: (e['longitude'] as num?)?.toDouble() ?? 0.0,
-                categories: [e['category']?.toString() ?? 'Recent'],
-              ),
-            )
-            .where((p) => p.name.trim().isNotEmpty)
-            .toList();
-        setState(() => _recentSearches = validRecents);
-      } else {
-        final recents = await _searchService.getLocalHistory();
-        if (!mounted) return;
-        final validRecents =
-            recents.where((p) => p.name.trim().isNotEmpty).toList();
-        setState(() => _recentSearches = validRecents);
-      }
-    } catch (e) {
-      final recents = await _searchService.getLocalHistory();
-      if (mounted) {
-        setState(() => _recentSearches =
-            recents.where((p) => p.name.trim().isNotEmpty).toList());
-      }
-    }
-  }
-
-  Future<void> _deleteRecentSearch(PlaceModel place) async {
-    AppHaptics.lightImpact();
-    try {
-      final supabase = Supabase.instance.client;
-      final user = supabase.auth.currentUser;
-      if (user != null) {
-        await supabase
-            .from('search_history')
-            .delete()
-            .match({'user_id': user.id, 'name': place.name});
-      } else {
-        final prefs = await SharedPreferences.getInstance();
-        final history = prefs.getStringList('recent_searches') ?? [];
-        history.removeWhere((item) => item.contains(place.name));
-        await prefs.setStringList('recent_searches', history);
-      }
-    } catch (e) {
-      debugPrint('Error caught: $e');
-    }
-    if (mounted) _loadRecents();
-  }
-
-  Future<void> _clearAllRecents() async {
-    try {
-      final supabase = Supabase.instance.client;
-      final user = supabase.auth.currentUser;
-      if (user != null) {
-        await supabase.from('search_history').delete().eq('user_id', user.id);
-      } else {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.remove('recent_searches');
-      }
-    } catch (e) {
-      debugPrint('Error caught: $e');
-    }
-    if (mounted) _loadRecents();
-  }
 
   Future<void> _handleSearchExecution(String query, [PlaceModel? savedPlace]) async {
     _searchFocus.unfocus();
@@ -554,8 +469,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
             });
           }
         } catch (_) {}
-
-        await _loadRecents();
         if (!mounted) return;
 
         if (_selectedActionType == 'HOME' || _selectedActionType == 'WORK') {
@@ -592,6 +505,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
               // Update provider with valid data
               final provider = Provider.of<MapProvider>(context, listen: false);
               provider.setTargetDestination(validLatLng);
+              provider.addNativeDestinationPin(validLatLng);
               
               // Safely fly camera
               await provider.flyToPlace(validLatLng.latitude, validLatLng.longitude);
@@ -632,11 +546,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     }
 
     if (_sheetController.isAttached) {
-      _sheetController.animateTo(
-        _safeMinSize,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic, // Apple snap
-      );
+      _safeAnimateSheet(_safeMinSize);
     }
     
     _searchFocus.unfocus();
@@ -645,7 +555,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     Future.delayed(const Duration(milliseconds: 200), () {
       if (mounted) {
         _searchCtrl.clear();
-        unawaited(_loadRecents());
       }
     });
   }
@@ -663,13 +572,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       _activeRoutingField = null;
     });
     if (_sheetController.isAttached) {
-      unawaited(
-        _sheetController.animateTo(
-          _safeMidSize,
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOutCubic,
-        ),
-      );
+      _safeAnimateSheet(_safeMidSize);
     }
     unawaited(_checkAndFetchRoute());
   }
@@ -732,13 +635,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           _isLoadingDetails = true;
         });
         if (_sheetController.isAttached) {
-          unawaited(
-            _sheetController.animateTo(
-              _safeMidSize,
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeOutCubic,
-            ),
-          );
+          _safeAnimateSheet(_safeMidSize);
         }
         unawaited(_fetchExtraDetailsForPlace(tappedPlace));
 
@@ -894,34 +791,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     }
   }
 
-  void _showClearAllWarning() {
-    AppHaptics.heavyImpact();
-    unawaited(
-      showDialog(
-        context: context,
-        builder: (context) => CupertinoAlertDialog(
-          title: const Text('Clear Recent Searches?'),
-          content: const Text(
-            'This will permanently delete all your recent search history. Are you sure?',
-          ),
-          actions: [
-            CupertinoDialogAction(
-              child: const Text('Cancel'),
-              onPressed: () => Navigator.pop(context),
-            ),
-            CupertinoDialogAction(
-              isDestructiveAction: true,
-              child: const Text('Clear All'),
-              onPressed: () {
-                Navigator.pop(context);
-                unawaited(_clearAllRecents());
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 
   // ignore: unused_element
   Future<void> _initiatePhoneCall() async {
@@ -943,21 +813,17 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     _wakeUpDragHandle();
     if (!_sheetController.isAttached) return;
     if (_sheetController.size < (_safeMaxSize - 0.02)) {
-      unawaited(
-        _sheetController.animateTo(
-          _safeMaxSize,
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOutCubic,
-        ),
-      );
+      _safeAnimateSheet(_safeMaxSize);
     }
   }
 
   void _handleCancelTap() {
     AppHaptics.lightImpact();
 
-    // 🚀 NEW: Clear map selection mode on cancel
+    // 🚀 NEW: Clear map selection mode and native pin on cancel
     final mapProvider = Provider.of<MapProvider>(context, listen: false);
+    mapProvider.clearNativeDestinationPin();
+
     if (mapProvider.mapSelectionPlaceType != null) {
       mapProvider.setMapSelectionMode(null);
       setState(() => _selectedActionType = null);
@@ -975,11 +841,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       _searchCtrl.clear();
 
       if (_sheetController.isAttached) {
-        _sheetController.animateTo(
-          _safeMinSize, // EXACTLY matches minChildSize
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-        );
+        _safeAnimateSheet(_safeMinSize);
       }
 
       if (mapProvider.engine.mapUIState.value != MapUIState.idle) {
@@ -1015,43 +877,38 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     if (!_sheetController.isAttached) return;
     final velocity = details.primaryVelocity ?? 0;
     final size = _sheetController.size;
-    const duration = Duration(milliseconds: 350);
     final snaps = <double>[_safeMinSize, _safeMidSize, _safeMaxSize];
 
     // 🚀 FIX: iOS-style snappy velocity release using easeOutCubic
     if (velocity < -300) {
       final next =
           snaps.firstWhere((s) => s > size + 0.02, orElse: () => _safeMaxSize);
-      unawaited(
-        _sheetController.animateTo(
-          next,
-          duration: duration,
-          curve: Curves.easeOutCubic,
-        ),
-      );
+      _safeAnimateSheet(next);
     } else if (velocity > 300) {
       final next =
           snaps.lastWhere((s) => s < size - 0.02, orElse: () => _safeMinSize);
-      unawaited(
-        _sheetController.animateTo(
-          next,
-          duration: duration,
-          curve: Curves.easeOutCubic,
-        ),
-      );
+      _safeAnimateSheet(next);
     } else {
       final closest =
           snaps.reduce((a, b) => (a - size).abs() < (b - size).abs() ? a : b);
-      unawaited(
-        _sheetController.animateTo(
-          closest,
-          duration: duration,
-          curve: Curves.easeOutCubic,
-        ),
-      );
+      _safeAnimateSheet(closest);
     }
   }
 
+  void _safeAnimateSheet(double targetSize) {
+    // 1. Defers execution until the current layout frame is completely finished
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_sheetController.isAttached) {
+        // 2. Strict bounds check to prevent Flutter Engine crashes
+        double safeSize = targetSize.clamp(_safeMinSize, 1.0);
+        _sheetController.animateTo(
+          safeSize,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
+  }
   @override
   void dispose() {
     _dragHandleTimer?.cancel();
@@ -1142,21 +999,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
               notification.dragDetails != null) {
             final velocity = notification.dragDetails!.primaryVelocity ?? 0;
             if (velocity < -300 && _sheetController.isAttached) {
-              unawaited(
-                _sheetController.animateTo(
-                  _safeMaxSize,
-                  duration: const Duration(milliseconds: 350),
-                  curve: Curves.easeOutCubic,
-                ),
-              );
+              _safeAnimateSheet(_safeMaxSize);
             } else if (velocity > 300 && _sheetController.isAttached) {
-              unawaited(
-                _sheetController.animateTo(
-                  _safeMinSize,
-                  duration: const Duration(milliseconds: 350),
-                  curve: Curves.easeOutCubic,
-                ),
-              );
+              _safeAnimateSheet(_safeMinSize);
             }
           }
 

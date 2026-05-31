@@ -206,26 +206,7 @@ class MapSearchSheetContent extends StatelessWidget {
   final VoidCallback onToggleOpen;
 
   // OPTIMIZATION: Moved static list here to avoid memory reallocation on every build.
-  static const List<Map<String, dynamic>> _itinerarySteps = [
-    {
-      'type': 'start',
-      'station': 'Jama Masjid',
-      'details': 'Platform No. 2',
-      'stops': '1 Stops'
-    },
-    {'type': 'station', 'station': 'Lal Quila'},
-    {
-      'type': 'interchange',
-      'station': 'Kashmere Gate',
-      'details': 'Platform No. 1',
-      'stops': '1 Stops'
-    },
-    {
-      'type': 'destination',
-      'station': 'Chandni Chowk',
-      'details': 'Destination'
-    },
-  ];
+  static const List<Map<String, dynamic>> _itinerarySteps = [];
 
   const MapSearchSheetContent(
       {super.key,

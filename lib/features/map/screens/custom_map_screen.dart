@@ -18,7 +18,7 @@ import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/features/map/models/place_model.dart';
 import 'package:ridel/features/map/services/place_api_services.dart';
 import 'package:ridel/core/widgets/ridel_glass.dart';
-import 'package:ridel/features/map/widgets/animated_map_pin.dart';
+
 
 class CustomMapScreen extends StatefulWidget {
   final bool isDark;
@@ -67,8 +67,7 @@ class _CustomMapScreenState extends State<CustomMapScreen>
   Timer? _interactionDebounceTimer;
   Timer? _zoomScaleDebounceTimer;
 
-  // 🧭 Premium animated destination pin overlay
-  final GlobalKey<AnimatedMapPinState> _pinKey = GlobalKey<AnimatedMapPinState>();
+
 
   bool _wasInIndia = true;
   bool _hasMapBeenOpened = false;
@@ -267,7 +266,6 @@ class _CustomMapScreenState extends State<CustomMapScreen>
     _zoomNotifier.value = cam.zoom;
     _tiltNotifier.value = cam.tilt;
     _bearingNotifier.value = cam.bearing;
-    _pinKey.currentState?.syncPosition(); // 🧭 Sync pin overlay on camera pan
     _checkWeatherVisibility(cam.zoom, cam.target);
   }
 
@@ -468,6 +466,7 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                 FocusScope.of(context).unfocus();
 
                 await mapProvider.handleMapTap(point, latlng);
+                mapProvider.addNativeDestinationPin(latlng);
 
                 if (!mounted) return; // 🚀 CRITICAL SAFEGUARD ADDED
                 mapProvider.targetDestination = latlng;
@@ -482,6 +481,7 @@ class _CustomMapScreenState extends State<CustomMapScreen>
 
                 final provider =
                     Provider.of<MapProvider>(context, listen: false);
+                provider.addNativeDestinationPin(latlng);
 
                 // 🧭 Set destination for the AnimatedMapPin overlay
                 provider.setTargetDestination(latlng);
@@ -544,21 +544,10 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                     .updateMapCenter(
                         _engine.mapController!.cameraPosition!.target,
                         _engine.mapController!.cameraPosition!.zoom);
-                _pinKey.currentState?.syncPosition(); // 🧭 Final accuracy sync on idle
               },
             ),
 
-          // 🧭 PREMIUM ANIMATED DESTINATION PIN OVERLAY
-          Consumer<MapProvider>(
-            builder: (context, provider, _) {
-              return AnimatedMapPin(
-                key: _pinKey,
-                mapController: provider.controller,
-                target: provider.targetDestination,
-                isDark: widget.isDark,
-              );
-            },
-          ),
+
           if (_isFetchingStyle)
             Positioned.fill(
               child: Container(
