@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:ridel/features/map/models/place_model.dart';
 
 class SavedPlace {
   final String type;
@@ -151,6 +152,66 @@ class SavedPlacesService extends ChangeNotifier {
 
     for (var place in _places) {
       await _uploadPlace(place, user.id);
+    }
+  }
+
+  // ----------------------------------------------------------------------
+  // Static Helpers for quick_action_buttons.dart
+  // ----------------------------------------------------------------------
+
+  static Future<PlaceModel?> getHome() async {
+    return _getPlaceModelByType('home');
+  }
+
+  static Future<PlaceModel?> getWork() async {
+    return _getPlaceModelByType('work');
+  }
+
+  static Future<void> deleteHome() async {
+    await _deletePlaceByType('home');
+  }
+
+  static Future<void> deleteWork() async {
+    await _deletePlaceByType('work');
+  }
+
+  static Future<PlaceModel?> _getPlaceModelByType(String type) async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? placesJson = prefs.getString(_placesKey);
+    if (placesJson != null) {
+      try {
+        final List<dynamic> decodedList = json.decode(placesJson);
+        final places = decodedList.map((item) => SavedPlace.fromJson(item)).toList();
+        final place = places.where((p) => p.type.toLowerCase() == type.toLowerCase()).firstOrNull;
+        if (place != null) {
+          return PlaceModel(
+            placeId: '${type}_local',
+            name: type == 'home' ? 'Home' : 'Work',
+            address: 'Saved Location',
+            latitude: place.latitude,
+            longitude: place.longitude,
+            categories: [type == 'home' ? 'Home' : 'Work'],
+          );
+        }
+      } catch (e) {
+        debugPrint('Error loading $type from prefs: $e');
+      }
+    }
+    return null;
+  }
+
+  static Future<void> _deletePlaceByType(String type) async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? placesJson = prefs.getString(_placesKey);
+    if (placesJson != null) {
+      try {
+        final List<dynamic> decodedList = json.decode(placesJson);
+        final places = decodedList.map((item) => SavedPlace.fromJson(item)).toList();
+        places.removeWhere((p) => p.type.toLowerCase() == type.toLowerCase());
+        await prefs.setString(_placesKey, json.encode(places.map((p) => p.toJson()).toList()));
+      } catch (e) {
+        debugPrint('Error deleting $type from prefs: $e');
+      }
     }
   }
 }

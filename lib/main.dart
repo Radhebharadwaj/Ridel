@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 
 // Firebase & Notifications
 import 'package:firebase_core/firebase_core.dart';
@@ -98,6 +100,17 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 // ----------------------------------------------------------------------
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint('⚠️ FLUTTER UI ERROR: ${details.exception}');
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('🔥 PLATFORM ERROR: $error');
+    return true; 
+  };
+
   ThemeService.init();
   await AppHaptics.init();
 
@@ -167,20 +180,24 @@ void main() async {
   );
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => MapProvider()),
-        ChangeNotifierProvider(create: (_) => MetroDataProvider()),
-        ChangeNotifierProvider(
-            create: (_) => GlobalLocationService()..initializeEcoLocation()),
-        ChangeNotifierProvider(create: (_) => AppNavigationProvider()),
-        ChangeNotifierProvider(
-            create: (_) => NotificationProvider(), lazy: false),
-      ],
-      child: const RidelApp(),
-    ),
-  );
+  runZonedGuarded(() {
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => MapProvider()),
+          ChangeNotifierProvider(create: (_) => MetroDataProvider()),
+          ChangeNotifierProvider(
+              create: (_) => GlobalLocationService()..initializeEcoLocation()),
+          ChangeNotifierProvider(create: (_) => AppNavigationProvider()),
+          ChangeNotifierProvider(
+              create: (_) => NotificationProvider(), lazy: false),
+        ],
+        child: const RidelApp(),
+      ),
+    );
+  }, (error, stack) {
+    debugPrint('⚡ ASYNC ZONE ERROR: $error');
+  });
 }
 
 // ----------------------------------------------------------------------

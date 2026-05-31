@@ -8,7 +8,7 @@ import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/widgets/ridel_glass.dart';
 import 'package:ridel/features/map/map_engine/map_engine.dart';
 import 'package:ridel/features/map/models/place_model.dart';
-import 'package:ridel/features/map/services/place_service.dart';
+import 'package:ridel/core/services/saved_places_service.dart';
 
 class QuickActionButtons extends StatefulWidget {
   final bool isDark;
