@@ -961,6 +961,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.sizeOf(context);
     final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final bool isKeyboardOpen = keyboardHeight > 0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isDesktop = screenSize.width > 600;
 
@@ -991,14 +992,32 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     var snaps = <double>[minS, midS, maxS];
     snaps.sort();
     snaps = snaps.toSet().toList();
+    
+    final double expandedHeight = screenSize.height - keyboardHeight - MediaQuery.paddingOf(context).top - 20;
+    final double defaultIdleHeight = screenSize.height;
 
-    return AnimatedPadding(
-      padding: EdgeInsets.only(bottom: keyboardHeight),
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-      child: SlideTransition(
-        position: _slideAnimation,
-        child: NotificationListener<Notification>(
+    return Stack(
+      children: [
+        AnimatedOpacity(
+          opacity: isKeyboardOpen ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 300),
+          child: isKeyboardOpen 
+            ? BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                child: Container(color: Colors.black.withValues(alpha: 0.3)),
+              )
+            : const SizedBox.shrink(),
+        ),
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            height: isKeyboardOpen ? expandedHeight : defaultIdleHeight,
+            margin: EdgeInsets.only(bottom: keyboardHeight),
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: NotificationListener<Notification>(
         onNotification: (notification) {
           if (notification is ScrollEndNotification &&
               notification.dragDetails != null) {
@@ -1254,6 +1273,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           },
         ),
       ),
-    ));
+    ))),
+      ],
+    );
   }
 }
