@@ -682,64 +682,138 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
 
   Widget _buildTransportModesRow(
       BuildContext context, MapProvider provider, bool isDark) {
+    final placeTitle = _selectedPlace?.name ?? 'Destination';
+    final placeSubtitle = _selectedPlace?.address ?? '';
+
     return Padding(
       key: const ValueKey('transport_modes_row'),
       padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // WALK
-          _buildGlassyTransportMode(
-            context,
-            icon: Icons.directions_walk_rounded,
-            label: 'Walk',
-            isActive: provider.currentNavMode == 'walking',
-            onTap: () async {
-              AppHaptics.selectionClick();
-              provider.currentNavMode = 'walking';
-              await provider.calculateAndDrawNativeRoute(context, 'walking');
-              rebuildState(() {});
-            },
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              // WALK
+              _buildGlassyTransportMode(
+                context,
+                icon: Icons.directions_walk_rounded,
+                label: 'Walk',
+                isActive: provider.currentNavMode == 'walking',
+                onTap: () async {
+                  AppHaptics.selectionClick();
+                  provider.currentNavMode = 'walking';
+                  await provider.calculateAndDrawNativeRoute(context, 'walking');
+                  rebuildState(() {});
+                },
+              ),
+              // BIKE
+              _buildGlassyTransportMode(
+                context,
+                icon: Icons.two_wheeler_rounded,
+                label: 'Bike',
+                isActive: provider.currentNavMode == 'twowheeler',
+                onTap: () async {
+                  AppHaptics.selectionClick();
+                  provider.currentNavMode = 'twowheeler';
+                  await provider.calculateAndDrawNativeRoute(context, 'twowheeler');
+                  rebuildState(() {});
+                },
+              ),
+              // CAR
+              _buildGlassyTransportMode(
+                context,
+                icon: CupertinoIcons.car_detailed,
+                label: 'Car',
+                isActive: provider.currentNavMode == 'driving',
+                onTap: () async {
+                  AppHaptics.selectionClick();
+                  provider.currentNavMode = 'driving';
+                  await provider.calculateAndDrawNativeRoute(context, 'driving');
+                  rebuildState(() {});
+                },
+              ),
+              // HEAVY
+              _buildGlassyTransportMode(
+                context,
+                icon: Icons.local_shipping_rounded,
+                label: 'Heavy',
+                isActive: provider.currentNavMode == 'heavy',
+                onTap: () async {
+                  AppHaptics.selectionClick();
+                  provider.currentNavMode = 'heavy';
+                  await provider.calculateAndDrawNativeRoute(context, 'heavy');
+                  rebuildState(() {});
+                },
+              ),
+            ],
           ),
-          // BIKE
-          _buildGlassyTransportMode(
-            context,
-            icon: Icons.two_wheeler_rounded,
-            label: 'Bike',
-            isActive: provider.currentNavMode == 'twowheeler',
-            onTap: () async {
-              AppHaptics.selectionClick();
-              provider.currentNavMode = 'twowheeler';
-              await provider.calculateAndDrawNativeRoute(context, 'twowheeler');
-              rebuildState(() {});
-            },
+          
+          const SizedBox(height: 24), 
+
+          // 🚨 INJECTED DETAILS CARD (Bulletproof Version)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2C2C2E), // Solid dark grey to GUARANTEE visibility (no transparency bugs)
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white24, width: 1),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 1. Address & Copy Button Row
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.location_on_rounded, color: Colors.white54, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        placeSubtitle, // AGENT: Ensure this variable is defined and passed correctly!
+                        style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    GestureDetector(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: "$placeTitle, $placeSubtitle"));
+                        AppHaptics.selectionClick();
+                        // AGENT: Use the exact valid Toast method for this project
+                        ToastService.showSuccess(context, "Address Copied!"); 
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(8)),
+                        child: const Icon(Icons.copy_rounded, color: Colors.white, size: 18),
+                      ),
+                    ),
+                  ],
+                ),
+                
+                // 2. Distance Badge (If available)
+                if (provider.currentRouteDistance != null && provider.currentRouteDistance!.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12), 
+                    child: Divider(color: Colors.white24, height: 1)
+                  ),
+                  Row(
+                    children: [
+                      const Icon(Icons.route_rounded, color: Colors.blueAccent, size: 18),
+                      const SizedBox(width: 10),
+                      Text(
+                        "Distance: ${provider.currentRouteDistance}", 
+                        style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 14)
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
           ),
-          // CAR
-          _buildGlassyTransportMode(
-            context,
-            icon: CupertinoIcons.car_detailed,
-            label: 'Car',
-            isActive: provider.currentNavMode == 'driving',
-            onTap: () async {
-              AppHaptics.selectionClick();
-              provider.currentNavMode = 'driving';
-              await provider.calculateAndDrawNativeRoute(context, 'driving');
-              rebuildState(() {});
-            },
-          ),
-          // HEAVY
-          _buildGlassyTransportMode(
-            context,
-            icon: Icons.local_shipping_rounded,
-            label: 'Heavy',
-            isActive: provider.currentNavMode == 'heavy',
-            onTap: () async {
-              AppHaptics.selectionClick();
-              provider.currentNavMode = 'heavy';
-              await provider.calculateAndDrawNativeRoute(context, 'heavy');
-              rebuildState(() {});
-            },
-          ),
+          const SizedBox(height: 12), // Safe space for the bottom of the sheet
         ],
       ),
     );

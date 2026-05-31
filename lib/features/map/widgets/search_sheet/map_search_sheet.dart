@@ -37,6 +37,7 @@ import 'package:ridel/core/utils/toast_service.dart';
 // YE DONO FILES ISI KA HISSA HAIN (Do not change structure)
 part 'search_sheet_headers.dart';
 part 'search_sheet_views.dart';
+part 'search_sheet_premium.dart';
 
 bool _guestHistoryCleared = false;
 
@@ -820,39 +821,94 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   void _handleCancelTap() {
     AppHaptics.lightImpact();
 
-    // 🚀 NEW: Clear map selection mode and native pin on cancel
-    final mapProvider = Provider.of<MapProvider>(context, listen: false);
-    mapProvider.clearNativeDestinationPin();
+    final provider = Provider.of<MapProvider>(context, listen: false);
 
-    if (mapProvider.mapSelectionPlaceType != null) {
-      mapProvider.setMapSelectionMode(null);
-      setState(() => _selectedActionType = null);
+    // 1. Check if there's actually a pin/route to cancel
+    if (provider.targetDestination == null) {
+      // If it's just the search bar open without a pin, just close the keyboard/sheet normally.
+      FocusScope.of(context).unfocus();
+
+      bool hasText = _searchCtrl.text.isNotEmpty;
+      bool isExpanded = _sheetController.isAttached && _sheetController.size > (_safeMinSize + 0.05);
+      bool isActivelySearching = hasText || provider.engine.mapUIState.value != MapUIState.idle || isExpanded;
+
+      if (isActivelySearching) {
+        // CONDITION 1: User is searching -> Reset to Idle State
+        _searchCtrl.clear();
+        if (_sheetController.isAttached) {
+          _safeAnimateSheet(_safeMinSize);
+        }
+        if (provider.engine.mapUIState.value != MapUIState.idle) {
+          provider.engine.setUIState(MapUIState.idle);
+        }
+      } else {
+        // CONDITION 2: User is already in Idle state -> Go Back to Dashboard!
+        setState(() => _isSearchMode = false);
+        WidgetsBinding.instance.addPostFrameCallback((_) => widget.onSearchModeChanged(false));
+        widget.onBackToPreviousTab(); // Ridel's specific routing method
+      }
+      return;
     }
 
-    // Safely unfocus keyboard no matter what
-    FocusManager.instance.primaryFocus?.unfocus();
+    // 2. Backup the current state in case the user wants to UNDO
+    final backupCoords = provider.targetDestination!;
+    final bool wasRouteDrawn = provider.isRouteCalculated;
+    final bool wasNavigating = provider.isNavigating;
+    
+    // BACKUP UI STATE
+    final backupPlace = _selectedPlace;
+    final backupDestPlace = _destPlace;
+    final backupOriginPlace = _originPlace;
+    final backupSearchText = _searchCtrl.text;
+    final backupActiveField = _activeRoutingField;
+    final backupRoute = _currentRoute;
+    final backupShowSearchList = _showSearchList;
+    final backupShowDirections = _showDirections;
+    final double backupSheetSize = _sheetController.isAttached ? _sheetController.size : _safeMinSize;
 
-    bool hasText = _searchCtrl.text.isNotEmpty;
-    bool isExpanded = _sheetController.isAttached && _sheetController.size > (_safeMinSize + 0.05);
-    bool isActivelySearching = hasText || mapProvider.engine.mapUIState.value != MapUIState.idle || isExpanded;
+    // 3. Clear the Map and internal state
+    provider.clearNativeRoute();
+    provider.clearNativeDestinationPin();
+    provider.setTargetDestination(null);
+    provider.setDestinationSelected(false);
+    FocusScope.of(context).unfocus();
 
-    if (isActivelySearching) {
-      // CONDITION 1: User is searching -> Reset to Idle State
-      _searchCtrl.clear();
+    // 4. Show Premium Custom Toast with Undo Action
+    ToastService.showActionToast(
+      context,
+      message: 'Route cancelled',
+      actionLabel: 'UNDO',
+      onActionTap: () async {
+        // 5. RESTORE LOGIC
+        provider.setTargetDestination(backupCoords);
+        provider.setDestinationSelected(true);
+        
+        setState(() {
+          _selectedPlace = backupPlace;
+          _destPlace = backupDestPlace;
+          _originPlace = backupOriginPlace;
+          _searchCtrl.text = backupSearchText;
+          _activeRoutingField = backupActiveField;
+          _currentRoute = backupRoute;
+          _showSearchList = backupShowSearchList;
+          _showDirections = backupShowDirections;
+        });
 
-      if (_sheetController.isAttached) {
-        _safeAnimateSheet(_safeMinSize);
-      }
-
-      if (mapProvider.engine.mapUIState.value != MapUIState.idle) {
-        mapProvider.engine.setUIState(MapUIState.idle);
-      }
-    } else {
-      // CONDITION 2: User is already in Idle state -> Go Back to Dashboard!
-      setState(() => _isSearchMode = false);
-      WidgetsBinding.instance.addPostFrameCallback((_) => widget.onSearchModeChanged(false));
-      widget.onBackToPreviousTab(); // Ridel's specific routing method
-    }
+        await provider.addNativeDestinationPin(backupCoords);
+        if (wasRouteDrawn || wasNavigating) {
+          if (mounted) {
+            await provider.calculateAndDrawRoute(context);
+            if (wasNavigating) {
+              await provider.start3DNavigation();
+            }
+          }
+        }
+        
+        if (mounted && _sheetController.isAttached) {
+          _safeAnimateSheet(backupSheetSize);
+        }
+      },
+    );
   }
 
   // ignore: unused_element

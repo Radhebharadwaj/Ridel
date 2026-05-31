@@ -160,21 +160,39 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
-  // Helper to toggle custom transit layers during routing
-  Future<void> _toggleTransitLayers(bool show) async {
+  List<String> activeMetroLayerIds = [];
+
+  Future<void> _setTransitLayersOpacity(double opacity) async {
     if (controller == null) return;
+    
+    // Dynamically track exact layer IDs if empty
+    if (activeMetroLayerIds.isEmpty) {
+      final allLayers = await controller!.getLayerIds();
+      activeMetroLayerIds = allLayers.map((e) => e.toString()).where((id) => 
+        id.toLowerCase().contains('transit') || 
+        id.toLowerCase().contains('railway') || 
+        id.toLowerCase().contains('metro')
+      ).toList();
+      debugPrint("🚇 Tracked Exact Metro/Transit Layer IDs: $activeMetroLayerIds");
+    }
 
-    // Use the actual logic from MapLayerController to find transit layers
-    final transitLayers = engine.layers?.availableLayers
-        .where((l) => l.contains('transit') || l.contains('railway')) ?? [];
-
-    for (String layerId in transitLayers) {
+    if (activeMetroLayerIds.isEmpty) {
+      debugPrint("⚠️ Cannot fade metro: Layer IDs list is still empty!");
+      return;
+    }
+    
+    for (String layerId in activeMetroLayerIds) {
       try {
-        await engine.layers?.setLayerVisibleSafe(layerId, show);
+        // Use setLayerProperties for guaranteed results natively
+        await controller!.setLayerProperties(
+          layerId,
+          LineLayerProperties(lineOpacity: opacity),
+        );
       } catch (e) {
-        debugPrint("⚠️ Could not toggle layer $layerId: $e");
+        debugPrint("⚠️ Failed to fade metro layer $layerId: $e");
       }
     }
+    debugPrint("🚇 Metro layers opacity set to $opacity");
   }
 
   Future<bool> handleRouteClick(Point<double> point, LatLng coordinates) async {
@@ -229,7 +247,8 @@ class MapProvider extends ChangeNotifier {
     // 1. Clear previous route if it exists
     await clearNativeRoute(preserveState: true);
     
-    await _toggleTransitLayers(false); // 🚨 Hide metro lines when route is drawn
+    // 🚨 Activate Focus Mode (Dim transit lines to 15% opacity)
+    await _setTransitLayersOpacity(0.15);
     
     _drawnRoutesCount = allRoutes.length;
 
@@ -299,13 +318,14 @@ class MapProvider extends ChangeNotifier {
       }
       
       _drawnRoutesCount = 0;
-      
-      if (!preserveState) {
-        isRouteCalculated = false;
-        _currentRouteResult = null;
-        
-        await _toggleTransitLayers(true); // 🚨 Restore metro lines when route is cancelled
-        isNavigating = false; // Reset navigation state
+            if (!preserveState) {
+          isRouteCalculated = false;
+          _currentRouteResult = null;
+          
+          // 🚨 Deactivate Focus Mode (Restore transit lines to 100% opacity)
+          await _setTransitLayersOpacity(1.0);
+          
+          isNavigating = false; // Reset navigation state
         
         // 🚨 Revert the camera tracking and puck to normal
         try {

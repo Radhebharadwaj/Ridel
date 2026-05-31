@@ -41,12 +41,31 @@ class ToastService {
         onTap: onTap);
   }
 
+  static void showActionToast(
+    BuildContext context, {
+    required String message,
+    required String actionLabel,
+    required VoidCallback onActionTap,
+    String? title,
+  }) {
+    _showApplePill(
+      context,
+      type: ToastType.info, // You can make a new type or use info
+      title: title ?? "Alert",
+      message: message,
+      actionLabel: actionLabel,
+      onActionTap: onActionTap,
+    );
+  }
+
   static void _showApplePill(
     BuildContext context, {
     required ToastType type,
     required String title,
     required String message,
     VoidCallback? onTap,
+    String? actionLabel,
+    VoidCallback? onActionTap,
   }) {
     switch (type) {
       case ToastType.error:
@@ -71,6 +90,8 @@ class ToastService {
         title: title,
         message: message,
         onTap: onTap,
+        actionLabel: actionLabel,
+        onActionTap: onActionTap,
         onDismiss: () {
           _overlayEntry?.remove();
           _overlayEntry = null;
@@ -86,14 +107,17 @@ class _ApplePillWidget extends StatefulWidget {
   final String title;
   final String message;
   final VoidCallback? onTap;
+  final String? actionLabel;
+  final VoidCallback? onActionTap;
   final VoidCallback onDismiss;
 
   const _ApplePillWidget({
-    // super.key, <-- Is line ko delete kar de
     required this.type,
     required this.title,
     required this.message,
     this.onTap,
+    this.actionLabel,
+    this.onActionTap,
     required this.onDismiss,
   });
 
@@ -296,6 +320,30 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
                               ],
                             ),
                           ),
+                          if (widget.actionLabel != null && widget.onActionTap != null) ...[
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () {
+                                widget.onActionTap!();
+                                _dismiss();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0A84FF).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  widget.actionLabel!,
+                                  style: GoogleFonts.inter(
+                                    color: const Color(0xFF0A84FF),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                           const SizedBox(width: 4),
                         ],
                       ),

@@ -431,44 +431,49 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
               const SizedBox(width: 12),
               Expanded(
                 child: ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [
-                      Colors.transparent,
-                      Colors.black,
-                      Colors.black,
-                      Colors.transparent
-                    ],
-                    stops: [0.0, 0.02, 0.98, 1.0],
-                  ).createShader(bounds),
+                  shaderCallback: (Rect bounds) {
+                    return const LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
+                      stops: [0.0, 0.08, 0.92, 1.0],
+                    ).createShader(bounds);
+                  },
                   blendMode: BlendMode.dstIn,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _selectedPlace!.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.visible,
-                        style: TextStyle(
-                          color: textColor,
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                          height: 1.2,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          _selectedPlace!.name,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.clip,
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                            height: 1.2,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitleText,
-                        maxLines: 1,
-                        overflow: TextOverflow.visible,
-                        style: TextStyle(
-                          color: subTextColor,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          height: 1.2,
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitleText,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.clip,
+                          style: TextStyle(
+                            color: subTextColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            height: 1.2,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -476,13 +481,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
               RidelBounceButton(
                 onTap: () async {
                   AppHaptics.lightImpact();
-                  // 🚀 FIX: Execute deep clean AND sync local state to properly hide place info
-                  await Provider.of<MapProvider>(context, listen: false)
-                      .clearSearchSession(context);
-                  rebuildState(() {
-                    _selectedPlace = null;
-                    _searchCtrl.clear();
-                  });
+                  _handleCancelTap();
                 },
                 child: Container(
                   width: 44,
