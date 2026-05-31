@@ -303,7 +303,7 @@ class RouteEngineService {
         } else if (speed == 2 || speed == 'sluggish') {
           color = '#FFD600';
         } else if (speed == 3 || speed == 'free') {
-          color = '#00C853';
+          color = '#0A84FF';
         }
       }
       

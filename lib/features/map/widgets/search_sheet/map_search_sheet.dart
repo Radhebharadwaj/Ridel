@@ -960,6 +960,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.sizeOf(context);
+    final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isDesktop = screenSize.width > 600;
 
@@ -991,9 +992,13 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     snaps.sort();
     snaps = snaps.toSet().toList();
 
-    return SlideTransition(
-      position: _slideAnimation,
-      child: NotificationListener<Notification>(
+    return AnimatedPadding(
+      padding: EdgeInsets.only(bottom: keyboardHeight),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: NotificationListener<Notification>(
         onNotification: (notification) {
           if (notification is ScrollEndNotification &&
               notification.dragDetails != null) {
@@ -1249,6 +1254,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           },
         ),
       ),
-    );
+    ));
   }
 }

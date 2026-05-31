@@ -36,10 +36,14 @@ class MapProvider extends ChangeNotifier {
   Future<void> addNativeDestinationPin(LatLng location) async {
     if (controller == null) return;
 
-    // Clear existing pin
+    // 🚨 1. STRICT CLEANUP: Wipe out the old route and reset UI state immediately
+    await clearNativeRoute(); 
+    isRouteCalculated = false; // Ensure the Start button reverts to Directions
+
+    // 🚨 2. STRICT CLEANUP: Remove the old pin
     await clearNativeDestinationPin();
 
-    // Draw a premium Apple-Maps-style native vector dot
+    // 3. Drop the new premium native pin
     try {
       _destinationCircle = await controller!.addCircle(
         CircleOptions(
@@ -51,6 +55,7 @@ class MapProvider extends ChangeNotifier {
           circleOpacity: 1.0,
         ),
       );
+      targetDestination = location; // Update the internal coordinate tracker
       debugPrint("🗺️ NATIVE VECTOR PIN DROPPED at $location");
       notifyListeners();
     } catch (e) {
@@ -268,10 +273,11 @@ class MapProvider extends ChangeNotifier {
           'alt-route-source-$i',
           'alt-route-layer-$i',
           const LineLayerProperties(
-            lineColor: '#A0A0A0', // Ghost grey
+            lineColor: '#8E8E93', // 🚨 FADED GREY FOR ALTERNATIVES
             lineWidth: 4.0,
             lineCap: 'round',
             lineJoin: 'round',
+            lineOpacity: 0.7, // Slightly transparent
           ),
         );
       }
@@ -284,10 +290,11 @@ class MapProvider extends ChangeNotifier {
         'route-source', // source id
         'route-layer',  // layer id
         LineLayerProperties(
-          lineGradient: routeResult.trafficGradientStops, // Data-driven traffic speed segments
-          lineWidth: 6.0,
+          lineWidth: 6.5, // Thick and prominent
           lineCap: 'round',
           lineJoin: 'round',
+          lineColor: '#0A84FF', // 🚨 PREMIUM APPLE BLUE
+          lineGradient: routeResult.trafficGradientStops, // Data-driven traffic speed segments
         ),
       );
       
