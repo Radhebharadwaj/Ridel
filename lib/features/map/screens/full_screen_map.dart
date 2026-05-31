@@ -169,9 +169,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           this);
                     }
                   },
-                  onMapClick: (point, latLng) {
+                  onMapClick: (point, latLng) async {
                     FocusScope.of(context).unfocus();
-                    mapProvider.clearTargetLocation();
+                    bool handled = await mapProvider.handleRouteClick(point, latLng);
+                    if (!handled) {
+                      mapProvider.clearTargetLocation();
+                    }
                   },
                   onMapLongClick: (point, latLng) {
                     mapProvider.handleMapTap(point, latLng);
@@ -379,8 +382,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                                   .isRouteCalculated) {
                                                 // STATE 3: START NAVIGATION
                                                 debugPrint(
-                                                    "🚀 Start Navigation Tapped!");
-                                                // TODO: Implement Turn-by-Turn
+                                                    "🚀 Start Navigation Tapped! Entering 3D Mode...");
+                                                await mapProvider.start3DNavigation();
                                               } else if (mapProvider
                                                       .targetDestination !=
                                                   null) {

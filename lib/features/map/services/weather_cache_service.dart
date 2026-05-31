@@ -57,10 +57,10 @@ class WeatherCacheService {
     if (_ramCache.containsKey(gridId)) {
       final entry = _ramCache[gridId]!;
 
-      if (entry.isFresh) {
+      if (entry.isFresh && entry.weather.daily.isNotEmpty) {
         debugPrint("⚡ WEATHER RAM CACHE HIT (Fresh) for $gridId");
         return entry.weather;
-      } else if (!entry.isCompletelyExpired) {
+      } else if (!entry.isCompletelyExpired && entry.weather.daily.isNotEmpty) {
         // 🚀 STALE-WHILE-REVALIDATE: Return old data instantly, fetch new in background
         debugPrint(
             "🔄 WEATHER SWR: Returning stale data, updating in background...");
@@ -77,7 +77,7 @@ class WeatherCacheService {
 
     // 3. DISK CACHE CHECK (Offline Fallback)
     final diskWeather = await _loadFromDisk(gridId);
-    if (diskWeather != null) {
+    if (diskWeather != null && diskWeather.daily.isNotEmpty) {
       // Load disk data into RAM
       _ramCache[gridId] = _WeatherCacheEntry(
           weather: diskWeather,
@@ -136,9 +136,10 @@ class WeatherCacheService {
             final hourlyJsonString =
                 dbData['hourly_forecast']?.toString() ?? '';
             final highLowString = dbData['high_low']?.toString() ?? '';
+            final dailyJsonString = dbData['daily_forecast']?.toString() ?? '';
 
             final parsedData = await Isolate.run(() =>
-                _parseHourlyAndHighLowSync(hourlyJsonString, highLowString));
+                _parseHourlyAndHighLowSync(hourlyJsonString, highLowString, dailyJsonString));
 
             final weather = WeatherModel(
               temp: (dbData['current_temp'] as num?)?.toDouble() ?? 0.0,
@@ -148,13 +149,18 @@ class WeatherCacheService {
               tempMax: parsedData.tMax,
               tempMin: parsedData.tMin,
               hourly: parsedData.hourly,
+              daily: parsedData.daily,
               humidity: 0,
               windSpeed: 0.0,
               feelsLike: 0.0,
             );
 
-            _saveToRAMAndDisk(gridId, weather);
-            return weather;
+            if (parsedData.daily.isNotEmpty) {
+              _saveToRAMAndDisk(gridId, weather);
+              return weather;
+            } else {
+              debugPrint("❌ CLOUDFLARE HAS NO DAILY DATA. Forcing Live API...");
+            }
           }
         }
       }
@@ -182,7 +188,7 @@ class WeatherCacheService {
 
   // ── Isolate helper ──
   static _ParsedWeather _parseHourlyAndHighLowSync(
-      String hourlyJson, String highLowStr) {
+      String hourlyJson, String highLowStr, String dailyJson) {
     List<HourlyWeather> hourlyList = [];
     if (hourlyJson.isNotEmpty) {
       try {
@@ -196,6 +202,29 @@ class WeatherCacheService {
             .toList();
       } catch (_) {}
     }
+
+    List<DailyWeather> dailyList = [];
+    if (dailyJson.isNotEmpty) {
+      try {
+        final List<dynamic> rawDaily = json.decode(dailyJson);
+        dailyList = rawDaily.map((item) {
+          try {
+            return DailyWeather(
+              item['time']?.toString() ?? '',
+              (item['maxTemp'] as num?)?.toDouble() ?? 0.0,
+              (item['minTemp'] as num?)?.toDouble() ?? 0.0,
+              (item['code'] as num?)?.toInt() ?? 0,
+            );
+          } catch (err) {
+            debugPrint("Error parsing individual forecast day: $err");
+            return null;
+          }
+        }).whereType<DailyWeather>().toList();
+      } catch (e) {
+        debugPrint("Error parsing daily JSON: $e");
+      }
+    }
+
     double tMax = 0.0, tMin = 0.0;
     if (highLowStr.isNotEmpty) {
       final parts = highLowStr.split(',');
@@ -204,7 +233,7 @@ class WeatherCacheService {
         tMin = double.tryParse(parts[1]) ?? 0.0;
       }
     }
-    return _ParsedWeather(hourly: hourlyList, tMax: tMax, tMin: tMin);
+    return _ParsedWeather(hourly: hourlyList, daily: dailyList, tMax: tMax, tMin: tMin);
   }
 
   // ── Unified Storage Logic ──
@@ -228,6 +257,9 @@ class WeatherCacheService {
         'hourly': weather.hourly
             .map((h) => {'time': h.time, 'temp': h.temp, 'code': h.code})
             .toList(),
+        'daily': weather.daily
+            .map((d) => {'time': d.time, 'maxTemp': d.maxTemp, 'minTemp': d.minTemp, 'code': d.code})
+            .toList(),
       });
       await prefs.setString('weather_cache_$gridId', dataStr);
     } catch (e) {
@@ -242,6 +274,7 @@ class WeatherCacheService {
       if (dataStr != null) {
         final data = json.decode(dataStr);
         final hourlyRaw = data['hourly'] as List<dynamic>? ?? [];
+        final dailyRaw = data['daily'] as List<dynamic>? ?? [];
         return WeatherModel(
           temp: data['temp'] ?? 0.0,
           weatherCode: data['weatherCode'] ?? 0,
@@ -250,6 +283,9 @@ class WeatherCacheService {
           tempMin: data['tempMin'] ?? 0.0,
           hourly: hourlyRaw
               .map((h) => HourlyWeather(h['time'], h['temp'], h['code']))
+              .toList(),
+          daily: dailyRaw
+              .map((d) => DailyWeather(d['time'], d['maxTemp'], d['minTemp'], d['code']))
               .toList(),
           humidity: 0,
           windSpeed: 0.0,
@@ -283,6 +319,9 @@ class WeatherCacheService {
       final hourlyJson = json.encode(weather.hourly
           .map((h) => {'time': h.time, 'temp': h.temp, 'code': h.code})
           .toList());
+      final dailyJson = json.encode(weather.daily
+          .map((d) => {'time': d.time, 'maxTemp': d.maxTemp, 'minTemp': d.minTemp, 'code': d.code})
+          .toList());
       final body = {
         'grid_id': gridId,
         'city_name': cityName,
@@ -291,7 +330,7 @@ class WeatherCacheService {
         'aqi': weather.aqi.toString(),
         'high_low': '${weather.tempMax},${weather.tempMin}',
         'hourly_forecast': hourlyJson,
-        'daily_forecast': json.encode([]),
+        'daily_forecast': dailyJson,
       };
 
       await _apiClient
@@ -315,8 +354,9 @@ class WeatherCacheService {
 
 class _ParsedWeather {
   final List<HourlyWeather> hourly;
+  final List<DailyWeather> daily;
   final double tMax;
   final double tMin;
   _ParsedWeather(
-      {required this.hourly, required this.tMax, required this.tMin});
+      {required this.hourly, required this.daily, required this.tMax, required this.tMin});
 }

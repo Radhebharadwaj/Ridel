@@ -685,117 +685,87 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     return Padding(
       key: const ValueKey('transport_modes_row'),
       padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: provider.isRouteCalculated
-          ? SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0A84FF), // Premium Blue
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () {
-                  // TODO: Phase 3 - Start Turn-by-Turn Navigation
-                  debugPrint("Start Navigation Tapped!");
-                },
-                child: const Text("Start",
-                    style: TextStyle(
-                        fontSize: 18,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold)),
-              ),
-            )
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildCircularModeButton(context, provider,
-                    Icons.directions_walk_rounded, 'Walk', 'walking', isDark),
-                _buildCircularModeButton(context, provider, Icons.two_wheeler_rounded,
-                    'Bike', 'twowheeler', isDark),
-                
-                // Wired Car Button
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    RidelLiquidButton(
-                      width: 52,
-                      height: 52,
-                      shapeType: LiquidShapeType.circle,
-                      onTap: () async {
-                        AppHaptics.selectionClick();
-                        provider.currentNavMode = 'driving';
-                        await provider.calculateAndDrawNativeRoute(context, 'driving');
-                        rebuildState(() {});
-                      },
-                      child: Center(
-                        child: Icon(
-                          CupertinoIcons.car_detailed,
-                          size: 24,
-                          color: provider.currentNavMode == 'driving' ? Colors.blueAccent : (isDark ? Colors.white54 : Colors.black54),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Car',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: provider.currentNavMode == 'driving' ? FontWeight.w600 : FontWeight.w500,
-                        color: provider.currentNavMode == 'driving' ? Colors.blueAccent : (isDark ? Colors.white54 : Colors.black54),
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ],
-                ),
-
-                _buildCircularModeButton(context, provider,
-                    Icons.local_shipping_rounded, 'Heavy', 'heavy', isDark),
-              ],
-            ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          // WALK
+          _buildGlassyTransportMode(
+            context,
+            icon: Icons.directions_walk_rounded,
+            label: 'Walk',
+            isActive: provider.currentNavMode == 'walking',
+            onTap: () async {
+              AppHaptics.selectionClick();
+              provider.currentNavMode = 'walking';
+              await provider.calculateAndDrawNativeRoute(context, 'walking');
+              rebuildState(() {});
+            },
+          ),
+          // BIKE
+          _buildGlassyTransportMode(
+            context,
+            icon: Icons.two_wheeler_rounded,
+            label: 'Bike',
+            isActive: provider.currentNavMode == 'twowheeler',
+            onTap: () async {
+              AppHaptics.selectionClick();
+              provider.currentNavMode = 'twowheeler';
+              await provider.calculateAndDrawNativeRoute(context, 'twowheeler');
+              rebuildState(() {});
+            },
+          ),
+          // CAR
+          _buildGlassyTransportMode(
+            context,
+            icon: CupertinoIcons.car_detailed,
+            label: 'Car',
+            isActive: provider.currentNavMode == 'driving',
+            onTap: () async {
+              AppHaptics.selectionClick();
+              provider.currentNavMode = 'driving';
+              await provider.calculateAndDrawNativeRoute(context, 'driving');
+              rebuildState(() {});
+            },
+          ),
+          // HEAVY
+          _buildGlassyTransportMode(
+            context,
+            icon: Icons.local_shipping_rounded,
+            label: 'Heavy',
+            isActive: provider.currentNavMode == 'heavy',
+            onTap: () async {
+              AppHaptics.selectionClick();
+              provider.currentNavMode = 'heavy';
+              await provider.calculateAndDrawNativeRoute(context, 'heavy');
+              rebuildState(() {});
+            },
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildCircularModeButton(BuildContext context, MapProvider provider,
-      IconData icon, String label, String mode, bool isDark) {
-    final isSelected = provider.currentNavMode == mode;
+  Widget _buildGlassyTransportMode(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Minimalist colors: Active is blue, inactive is subtle grey
-    const activeColor = Colors.blueAccent;
-    final inactiveColor = isDark ? Colors.white54 : Colors.black54;
+    final iconColor = isActive
+        ? const Color(0xFF0A84FF)
+        : (isDark ? Colors.white70 : Colors.black87);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 🚀 EXACT MATCH: Using your custom Liquid Button for the true premium glass look
         RidelLiquidButton(
           width: 52,
           height: 52,
-          shapeType: LiquidShapeType.circle, // Perfect circular shape
-          onTap: () async {
-            AppHaptics
-                .selectionClick(); // 🚀 FIX: iOS style subtle selection haptic
-
-            final hasRouteDrawn = provider.engine.mapUIState.value == MapUIState.routeDrawn;
-
-            // If a route is already drawn for this exact mode, do nothing
-            if (isSelected && hasRouteDrawn) return;
-
-            if (!isSelected) {
-              // Mode changed → setNavMode handles re-draw internally
-              await provider.setNavMode(context, mode);
-            } else {
-              // Same mode but no route yet (first tap on freshly selected place)
-              // → Force draw the route for the current default mode
-              if (provider.targetDestination != null) {
-                await provider.autoDrawRouteTo(
-                    provider.targetDestination!, context);
-              }
-            }
-
-            // 🚀 FIX: Force UI to rebuild to show the new active color state locally
-            rebuildState(() {});
-          },
+          shapeType: LiquidShapeType.circle,
+          onTap: onTap,
           child: Center(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
@@ -803,10 +773,9 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                   ScaleTransition(scale: animation, child: child),
               child: Icon(
                 icon,
-                key: ValueKey<bool>(
-                    isSelected), // Ensures smooth transition when color changes
+                key: ValueKey<bool>(isActive),
                 size: 24,
-                color: isSelected ? activeColor : inactiveColor,
+                color: iconColor,
               ),
             ),
           ),
@@ -815,9 +784,11 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
         Text(
           label,
           style: TextStyle(
+            color: isActive
+                ? const Color(0xFF0A84FF)
+                : (isDark ? Colors.white60 : Colors.black54),
             fontSize: 12,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-            color: isSelected ? activeColor : inactiveColor,
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
             letterSpacing: 0.3,
           ),
         ),

@@ -3,6 +3,7 @@ import 'dart:convert'; // 🚀 NEW: For JSON parsing
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http; // 🚀 NEW: For IP Fallback
+import 'package:geocoding/geocoding.dart';
 
 class GlobalLocationService extends ChangeNotifier {
   // --- STATE VARIABLES ---
@@ -10,6 +11,8 @@ class GlobalLocationService extends ChangeNotifier {
   bool _isLocationServiceEnabled = false;
   LocationPermission _permission = LocationPermission.denied;
   bool _isUsingIpFallback = false; // 🚀 NEW: Track if we are using IP location
+  String _currentCity = "Locating..."; // 🚀 NEW: Global city name
+  String _currentState = "";
 
   // LIVE TRACKING & MAP ENGINE STREAMS
   StreamSubscription<Position>? _positionStreamSubscription;
@@ -29,6 +32,8 @@ class GlobalLocationService extends ChangeNotifier {
   double get currentSpeedKmph => _currentSpeedKmph;
   bool get isUsingIpFallback =>
       _isUsingIpFallback; // UI can show "Approximate Location"
+  String get currentCity => _currentCity;
+  String get currentState => _currentState;
   Stream<Position> get engineLocationStream => _engineStreamController.stream;
 
   // ==========================================
@@ -70,12 +75,29 @@ class GlobalLocationService extends ChangeNotifier {
         ).timeout(const Duration(seconds: 8)); // 8 sec timeout thoda better hai
 
         _isUsingIpFallback = false;
+        await _updateCityFromCoordinates(_currentPosition!.latitude, _currentPosition!.longitude);
         notifyListeners();
       } catch (e) {
         debugPrint("GPS Timeout/Error: $e");
         // Sirf timeout hone par hi IP fallback do
         await _fetchLocationFromIP(); 
       }
+    }
+  }
+
+  Future<void> _updateCityFromCoordinates(double lat, double lng) async {
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        _currentCity = place.locality?.isNotEmpty == true ? place.locality! 
+                 : place.subAdministrativeArea?.isNotEmpty == true ? place.subAdministrativeArea! 
+                 : place.administrativeArea?.isNotEmpty == true ? place.administrativeArea! 
+                 : "Delhi";
+        _currentState = place.administrativeArea ?? "";
+      }
+    } catch (e) {
+      debugPrint("Global Reverse Geocoding Failed: $e");
     }
   }
 
@@ -108,10 +130,12 @@ class GlobalLocationService extends ChangeNotifier {
           isMocked: true, // Tells the app this is not exact GPS
         );
 
+        _currentCity = data['city']?.toString() ?? "Unknown Location";
+        _currentState = data['region']?.toString() ?? "";
         _isUsingIpFallback = true;
         notifyListeners();
         debugPrint(
-            "IP Fallback Success: ${data['city']}, ${data['country_name']}");
+            "IP Fallback Success: $_currentCity, $_currentState");
       }
     } catch (e) {
       debugPrint("IP Fallback completely failed: $e");
@@ -128,6 +152,8 @@ class GlobalLocationService extends ChangeNotifier {
       accuracy: 10000.0, altitude: 0, altitudeAccuracy: 0, heading: 0,
       headingAccuracy: 0, speed: 0, speedAccuracy: 0, isMocked: true,
     );
+    _currentCity = "Nagpur";
+    _currentState = "Maharashtra";
     _isUsingIpFallback = true;
     notifyListeners();
   }

@@ -589,12 +589,13 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
                 isDark,
                 Column(
                   children: [
-                    ValueListenableBuilder<ThemeMode>(
-                      valueListenable: ThemeService.themeNotifier,
+                    ValueListenableBuilder<AppThemeMode>(
+                      valueListenable: ThemeService.appThemeNotifier,
                       builder: (context, mode, child) {
-                        String currentModeStr = mode == ThemeMode.dark
-                            ? 'Dark'
-                            : (mode == ThemeMode.light ? 'Light' : 'System');
+                        String currentModeStr = 'System';
+                        if (mode == AppThemeMode.dark) currentModeStr = 'Dark';
+                        if (mode == AppThemeMode.light) currentModeStr = 'Light';
+                        if (mode == AppThemeMode.autoTime) currentModeStr = 'Auto (Time)';
 
                         return Builder(
                           builder: (tileContext) => _tile(
@@ -608,15 +609,17 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
                               AppHaptics.sheetInteraction();
                               RidelGlassDropdown.show(
                                 tileContext,
-                                options: const ['System', 'Light', 'Dark'],
+                                options: const ['System', 'Light', 'Dark', 'Auto (Time)'],
                                 selectedValue: currentModeStr,
                                 onSelected: (val) {
                                   if (val == 'System') {
-                                    ThemeService.switchTheme(ThemeMode.system);
+                                    ThemeService.switchTheme(AppThemeMode.system);
                                   } else if (val == 'Light') {
-                                    ThemeService.switchTheme(ThemeMode.light);
+                                    ThemeService.switchTheme(AppThemeMode.light);
                                   } else if (val == 'Dark') {
-                                    ThemeService.switchTheme(ThemeMode.dark);
+                                    ThemeService.switchTheme(AppThemeMode.dark);
+                                  } else if (val == 'Auto (Time)') {
+                                    ThemeService.switchTheme(AppThemeMode.autoTime);
                                   }
                                 },
                               );

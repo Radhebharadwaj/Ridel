@@ -98,6 +98,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 // ----------------------------------------------------------------------
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  ThemeService.init();
   await AppHaptics.init();
 
   // 1. Load Environment Variables

@@ -18,6 +18,8 @@ class RouteResult {
   final List<Map<String, dynamic>> steps;
   final String firstInstruction;
   final DateTime fetchedAt;
+  final List<List<LatLng>> alternativeRoutes;
+  final List<dynamic> trafficGradientStops;
 
   RouteResult({
     required this.coordinates,
@@ -27,6 +29,8 @@ class RouteResult {
     required this.steps,
     required this.firstInstruction,
     required this.fetchedAt,
+    this.alternativeRoutes = const [],
+    this.trafficGradientStops = const ['interpolate', ['linear'], ['line-progress'], 0.0, '#0A84FF', 1.0, '#0A84FF'],
   });
 
   // Serialization for Offline Fallback
@@ -39,6 +43,8 @@ class RouteResult {
         'steps': steps,
         'firstInstruction': firstInstruction,
         'fetchedAt': fetchedAt.toIso8601String(),
+        'alternativeRoutes': alternativeRoutes.map((route) => route.map((c) => [c.latitude, c.longitude]).toList()).toList(),
+        'trafficGradientStops': trafficGradientStops,
       };
 
   factory RouteResult.fromJson(Map<String, dynamic> json) {
@@ -51,6 +57,10 @@ class RouteResult {
       steps: List<Map<String, dynamic>>.from(json['steps']),
       firstInstruction: json['firstInstruction'],
       fetchedAt: DateTime.parse(json['fetchedAt']),
+      alternativeRoutes: json['alternativeRoutes'] != null
+          ? (json['alternativeRoutes'] as List).map((route) => (route as List).map((c) => LatLng(c[0], c[1])).toList()).toList()
+          : [],
+      trafficGradientStops: json['trafficGradientStops'] ?? ['interpolate', ['linear'], ['line-progress'], 0.0, '#0A84FF', 1.0, '#0A84FF'],
     );
   }
 }
@@ -116,7 +126,7 @@ class RouteEngineService {
   Future<RouteResult?> _fetchWithRetry(
       LatLng origin, LatLng destination, String mode, String cacheKey) async {
     final String olaApiUrl =
-        '$_baseUrl?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=$mode&steps=true&overview=full&api_key=$_apiKey';
+        '$_baseUrl?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=$mode&alternatives=true&steps=true&overview=full&api_key=$_apiKey';
 
     final Uri url = Uri.parse(olaApiUrl);
 
@@ -125,18 +135,22 @@ class RouteEngineService {
       try {
         attempts++;
         // 🚀 FIX: Added GZIP header for reduced bandwidth
-        final response = await _client.get(url, headers: {
+        // 🚨 CRITICAL FIX: Change GET to POST
+        final response = await _client.post(url, headers: {
           'Accept': 'application/json',
           'Accept-Encoding': 'gzip'
         }).timeout(const Duration(seconds: 5));
 
-        if (response.statusCode == 200) {
+        if (response.statusCode == 200 || response.statusCode == 201) {
           final Map<String, dynamic>? primitiveData =
               _processHeavyRouteSync(response.body);
 
           if (primitiveData != null) {
             final List<List<double>> rawCoords = primitiveData['coords'];
             final coords = rawCoords.map((c) => LatLng(c[0], c[1])).toList();
+
+            final List<List<List<double>>> rawAlts = primitiveData['alternatives'] ?? [];
+            final altRoutes = rawAlts.map((alt) => alt.map((c) => LatLng(c[0], c[1])).toList()).toList();
 
             return RouteResult(
               coordinates: coords,
@@ -146,8 +160,12 @@ class RouteEngineService {
               steps: primitiveData['steps'],
               firstInstruction: primitiveData['firstInstruction'],
               fetchedAt: DateTime.now(),
+              alternativeRoutes: altRoutes,
+              trafficGradientStops: primitiveData['gradientStops'] ?? ['interpolate', ['linear'], ['line-progress'], 0.0, '#0A84FF', 1.0, '#0A84FF'],
             );
           }
+        } else {
+           debugPrint("❌ OLA API ERROR: ${response.statusCode} - ${response.body}");
         }
       } catch (e) {
         debugPrint("⚠️ Route API Attempt $attempts failed: $e");
@@ -201,60 +219,117 @@ class RouteEngineService {
     try {
       final data = json.decode(responseBody);
       if (data['routes'] == null || data['routes'].isEmpty) return null;
-      final route = data['routes'][0];
-      if (route['legs'] == null || route['legs'].isEmpty) return null;
-      final leg = route['legs'][0];
-
-      String encodedPolyline = "";
-      if (route['overview_polyline'] is String) {
-        encodedPolyline = route['overview_polyline'];
-      } else if (route['overview_polyline'] is Map &&
-          route['overview_polyline']['points'] != null) {
-        encodedPolyline = route['overview_polyline']['points'];
-      } else if (route['geometry'] is String) {
-        encodedPolyline = route['geometry'];
+      
+      final primary = _parseRouteObject(data['routes'][0]);
+      if (primary == null) return null;
+      
+      List<List<List<double>>> alternatives = [];
+      for (int i = 1; i < data['routes'].length; i++) {
+        final alt = _parseRouteObject(data['routes'][i]);
+        if (alt != null) alternatives.add(alt['coords']);
       }
-      if (encodedPolyline.isEmpty) return null;
-
-      List<List<double>> rawCoords = _decodePolylinePrimitives(encodedPolyline);
-      rawCoords = _simplifyPolyline(rawCoords, 0.00005);
-
-      final geoJson = {
-        "type": "FeatureCollection",
-        "features": [
-          {
-            "type": "Feature",
-            "geometry": {
-              "type": "LineString",
-              "coordinates": rawCoords.map((c) => [c[1], c[0]]).toList()
-            },
-            "properties": {}
-          }
-        ]
-      };
-
-      final rawSteps = leg['steps'] as List<dynamic>? ?? [];
-      final safeSteps = rawSteps.map((s) => s as Map<String, dynamic>).toList();
-      String instruction = "Head to destination";
-      if (safeSteps.isNotEmpty &&
-          safeSteps.first['html_instructions'] != null) {
-        instruction = safeSteps.first['html_instructions']
-            .toString()
-            .replaceAll(RegExp(r'<[^>]*>'), '');
-      }
-
-      return {
-        'coords': rawCoords,
-        'geoJson': geoJson,
-        'distanceKm': leg['distance'] / 1000,
-        'durationMins': (leg['duration'] / 60).ceil(),
-        'steps': safeSteps,
-        'firstInstruction': instruction,
-      };
+      
+      primary['alternatives'] = alternatives;
+      return primary;
     } catch (e) {
       debugPrint("Isolate Decoding Error: $e");
       return null;
     }
+  }
+
+  static Map<String, dynamic>? _parseRouteObject(dynamic route) {
+    if (route['legs'] == null || route['legs'].isEmpty) return null;
+    final leg = route['legs'][0];
+
+    String encodedPolyline = "";
+    if (route['overview_polyline'] is String) {
+      encodedPolyline = route['overview_polyline'];
+    } else if (route['overview_polyline'] is Map &&
+        route['overview_polyline']['points'] != null) {
+      encodedPolyline = route['overview_polyline']['points'];
+    } else if (route['geometry'] is String) {
+      encodedPolyline = route['geometry'];
+    }
+    if (encodedPolyline.isEmpty) return null;
+
+    List<List<double>> rawCoords = _decodePolylinePrimitives(encodedPolyline);
+    rawCoords = _simplifyPolyline(rawCoords, 0.00005);
+
+    final geoJson = {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": rawCoords.map((c) => [c[1], c[0]]).toList()
+          },
+          "properties": {}
+        }
+      ]
+    };
+
+    final rawSteps = leg['steps'] as List<dynamic>? ?? [];
+    final safeSteps = rawSteps.map((s) => s as Map<String, dynamic>).toList();
+    String instruction = "Head to destination";
+    if (safeSteps.isNotEmpty &&
+        safeSteps.first['html_instructions'] != null) {
+      instruction = safeSteps.first['html_instructions']
+          .toString()
+          .replaceAll(RegExp(r'<[^>]*>'), '');
+    }
+
+    // Process traffic speed
+    List<dynamic> gradientStops = ['interpolate', ['linear'], ['line-progress']];
+    double currentDist = 0.0;
+    double totalDist = (leg['distance'] as num?)?.toDouble() ?? 1.0;
+    double lastProgress = -1.0;
+    
+    for (var step in safeSteps) {
+      double stepDist = (step['distance'] as num?)?.toDouble() ?? 0.0;
+      double progress = currentDist / totalDist;
+      if (progress > 1.0) progress = 1.0;
+      
+      if (progress <= lastProgress) {
+        progress = lastProgress + 0.00001; // ensure strictly increasing
+      }
+      lastProgress = progress;
+      
+      String color = '#0A84FF'; // default Apple Blue / Free flow
+      if (step['traffic_speed'] != null) {
+        final speed = step['traffic_speed'];
+        if (speed == 1 || speed == 'jam') {
+          color = '#FF3B30';
+        } else if (speed == 2 || speed == 'sluggish') {
+          color = '#FFD600';
+        } else if (speed == 3 || speed == 'free') {
+          color = '#00C853';
+        }
+      }
+      
+      gradientStops.add(progress);
+      gradientStops.add(color);
+      currentDist += stepDist;
+    }
+
+    if (gradientStops.length <= 3) {
+      gradientStops.addAll([0.0, '#0A84FF', 1.0, '#0A84FF']);
+    } else {
+      double endProgress = 1.0;
+      if (endProgress <= lastProgress) endProgress = lastProgress + 0.00001;
+      gradientStops.add(endProgress);
+      gradientStops.add(gradientStops[gradientStops.length - 2]); 
+    }
+
+    return {
+      'coords': rawCoords,
+      'geoJson': geoJson,
+      'distanceKm': leg['distance'] / 1000,
+      'durationMins': (leg['duration'] / 60).ceil(),
+      'steps': safeSteps,
+      'firstInstruction': instruction,
+      'gradientStops': gradientStops,
+    };
   }
 
   static List<List<double>> _decodePolylinePrimitives(String polyline) {

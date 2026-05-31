@@ -108,7 +108,7 @@ class MapProvider extends ChangeNotifier {
       if (routeResult != null && routeResult.coordinates.isNotEmpty) {
         debugPrint("✅ [ROUTE ENGINE] Ola API Success! Received ${routeResult.coordinates.length} points.");
         
-        await drawNativeRoute(routeResult.coordinates);
+        await drawNativeRoute(routeResult);
         debugPrint("✅ [ROUTE ENGINE] Native MapLibre Draw Success!");
         
         isRouteCalculated = true;
@@ -122,13 +122,110 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> drawNativeRoute(List<LatLng> routePoints) async {
+  bool isNavigating = false;
+
+  Future<void> start3DNavigation() async {
+    if (controller == null) return;
+
+    isNavigating = true;
+    notifyListeners();
+
+    // 1. Get current user location
+    final pos = engine.locService?.currentPosition;
+    if (pos == null) return;
+    final LatLng currentLocation = LatLng(pos.latitude, pos.longitude);
+
+    // 2. Animate Camera to 3D Perspective (Tilt/Pitch)
+    await controller!.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: currentLocation,
+          zoom: 18.5, // Deep zoom for navigation
+          tilt: 60.0, // 3D Pitch angle
+        ),
+      ),
+      duration: const Duration(milliseconds: 1200),
+    );
+
+    // 3. THE MAGIC: Lock camera to compass and change puck to Directional Triangle
+    try {
+      // TrackingCompass makes the map rotate automatically as the device rotates
+      await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.trackingCompass);
+    } catch (e) {
+      debugPrint("⚠️ Native Tracking Mode Error: $e");
+    }
+  }
+
+  // Helper to toggle custom transit layers during routing
+  Future<void> _toggleTransitLayers(bool show) async {
+    if (controller == null) return;
+
+    // Use the actual logic from MapLayerController to find transit layers
+    final transitLayers = engine.layers?.availableLayers
+        .where((l) => l.contains('transit') || l.contains('railway')) ?? [];
+
+    for (String layerId in transitLayers) {
+      try {
+        await engine.layers?.setLayerVisibleSafe(layerId, show);
+      } catch (e) {
+        debugPrint("⚠️ Could not toggle layer $layerId: $e");
+      }
+    }
+  }
+
+  Future<bool> handleRouteClick(Point<double> point, LatLng coordinates) async {
+    if (controller == null || !_isRouteDrawn || _drawnAltRoutesCount == 0 || _currentRouteResult == null) {
+      return false;
+    }
+    
+    List<String> altLayerIds = List.generate(_drawnAltRoutesCount, (i) => 'alt-route-layer-$i');
+    final features = await controller!.queryRenderedFeatures(point, altLayerIds, null);
+    
+    if (features.isNotEmpty) {
+      AppHaptics.selectionClick();
+      final feature = features.first;
+      int tappedIndex = 0;
+      if (feature is Map && feature['properties'] is Map && feature['properties']['index'] != null) {
+        tappedIndex = feature['properties']['index'];
+      }
+      
+      final tappedAlt = _currentRouteResult!.alternativeRoutes[tappedIndex];
+      final currentPrimary = _currentRouteResult!.coordinates;
+      
+      // Swap routes visually
+      _currentRouteResult!.alternativeRoutes[tappedIndex] = currentPrimary;
+      final newResult = RouteResult(
+        coordinates: tappedAlt,
+        geoJson: _currentRouteResult!.geoJson,
+        distanceKm: _currentRouteResult!.distanceKm,
+        durationMins: _currentRouteResult!.durationMins,
+        steps: _currentRouteResult!.steps,
+        firstInstruction: _currentRouteResult!.firstInstruction,
+        fetchedAt: _currentRouteResult!.fetchedAt,
+        alternativeRoutes: _currentRouteResult!.alternativeRoutes,
+        trafficGradientStops: _currentRouteResult!.trafficGradientStops,
+      );
+      
+      await drawNativeRoute(newResult);
+      return true; // Handled ghost line tap
+    }
+    return false;
+  }
+
+  int _drawnAltRoutesCount = 0;
+  RouteResult? _currentRouteResult;
+
+  Future<void> drawNativeRoute(RouteResult routeResult) async {
+    _currentRouteResult = routeResult;
+    final routePoints = routeResult.coordinates;
     if (controller == null || routePoints.isEmpty) return;
 
     // 1. Clear previous route if it exists
-    await clearNativeRoute();
+    await clearNativeRoute(preserveState: true);
+    
+    await _toggleTransitLayers(false); // 🚨 Hide metro lines when route is drawn
 
-    // 2. Convert LatLng list to GeoJSON LineString coordinates (Note: GeoJSON uses [longitude, latitude])
+    // 2. Convert LatLng list to GeoJSON LineString coordinates
     final coordinates = routePoints.map((p) => [p.longitude, p.latitude]).toList();
 
     final geoJson = {
@@ -146,16 +243,49 @@ class MapProvider extends ChangeNotifier {
     };
 
     try {
+      // Draw Alternative Routes (Ghost lines)
+      _drawnAltRoutesCount = routeResult.alternativeRoutes.length;
+      for (int i = 0; i < _drawnAltRoutesCount; i++) {
+        final altRoute = routeResult.alternativeRoutes[i];
+        if (altRoute.isEmpty) continue;
+        
+        final altGeoJson = {
+          "type": "FeatureCollection",
+          "features": [
+            {
+              "type": "Feature",
+              "properties": {"index": i},
+              "geometry": {
+                "type": "LineString",
+                "coordinates": altRoute.map((p) => [p.longitude, p.latitude]).toList()
+              }
+            }
+          ]
+        };
+        
+        await controller!.addGeoJsonSource('alt-route-source-$i', altGeoJson);
+        await controller!.addLineLayer(
+          'alt-route-source-$i',
+          'alt-route-layer-$i',
+          const LineLayerProperties(
+            lineColor: '#A0A0A0', // Ghost grey
+            lineWidth: 4.0,
+            lineCap: 'round',
+            lineJoin: 'round',
+          ),
+        );
+      }
+
       // 3. Add GeoJSON Source
       await controller!.addGeoJsonSource('route-source', geoJson);
 
-      // 4. Add Native Premium Line Layer
+      // 4. Add Native Premium Line Layer with Gradient
       await controller!.addLineLayer(
         'route-source', // source id
         'route-layer',  // layer id
-        const LineLayerProperties(
-          lineColor: '#0A84FF', // Premium Apple Maps Blue
-          lineWidth: 5.5,
+        LineLayerProperties(
+          lineGradient: routeResult.trafficGradientStops, // Data-driven traffic speed segments
+          lineWidth: 6.0,
           lineCap: 'round',
           lineJoin: 'round',
         ),
@@ -181,13 +311,42 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> clearNativeRoute() async {
+  Future<void> clearNativeRoute({bool preserveState = false}) async {
     if (controller != null && _isRouteDrawn) {
       try {
         await controller!.removeLayer('route-layer');
         await controller!.removeSource('route-source');
+        
+        for (int i = 0; i < _drawnAltRoutesCount; i++) {
+          try {
+            await controller!.removeLayer('alt-route-layer-$i');
+            await controller!.removeSource('alt-route-source-$i');
+          } catch (_) {}
+        }
+        _drawnAltRoutesCount = 0;
+
         _isRouteDrawn = false;
-        isRouteCalculated = false;
+        
+        if (!preserveState) {
+          isRouteCalculated = false;
+          _currentRouteResult = null;
+          
+          await _toggleTransitLayers(true); // 🚨 Restore metro lines when route is cancelled
+          isNavigating = false; // Reset navigation state
+          
+          // 🚨 Revert the camera tracking and puck to normal
+          try {
+            // Reset rotation to North-Up
+            await controller!.animateCamera(CameraUpdate.bearingTo(0.0), duration: const Duration(milliseconds: 500));
+            await controller!.animateCamera(CameraUpdate.tiltTo(0.0), duration: const Duration(milliseconds: 500));
+            
+            // Reset modes
+            await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+          } catch (e) {
+            debugPrint("⚠️ Native Tracking Reset Error: $e");
+          }
+        }
+        
         notifyListeners();
       } catch (e) {
         debugPrint("🗺️ ROUTE CLEAR ERROR: $e");

@@ -1328,6 +1328,12 @@
       "languageVersion": "3.1"
     },
     {
+      "name": "sunrise_sunset_calc",
+      "rootUri": "file:///home/radhe/.pub-cache/hosted/pub.dev/sunrise_sunset_calc-3.0.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "supabase",
       "rootUri": "file:///home/radhe/.pub-cache/hosted/pub.dev/supabase-2.10.6",
       "packageUri": "lib/",

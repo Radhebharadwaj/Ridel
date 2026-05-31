@@ -9,7 +9,6 @@ import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/services/weather_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
-import 'package:ridel/features/map/services/place_api_services.dart';
 import 'package:ridel/features/map/services/weather_cache_service.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
 
@@ -74,20 +73,13 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
   }
 
   Future<void> _resolveLocationAndFetchWeather() async {
-    final mapProvider = Provider.of<MapProvider>(context, listen: false);
     final locService =
         Provider.of<GlobalLocationService>(context, listen: false);
 
     double? lat;
     double? lng;
 
-    if (mapProvider.tappedPlaceFromMap != null) {
-      lat = mapProvider.tappedPlaceFromMap!.latitude;
-      lng = mapProvider.tappedPlaceFromMap!.longitude;
-    } else if (mapProvider.currentMapCenter != null) {
-      lat = mapProvider.currentMapCenter!.latitude;
-      lng = mapProvider.currentMapCenter!.longitude;
-    } else if (locService.currentPosition != null) {
+    if (locService.currentPosition != null) {
       lat = locService.currentPosition!.latitude;
       lng = locService.currentPosition!.longitude;
     }
@@ -124,14 +116,14 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
 
   Future<void> _fetchSmartWeatherAndName(double lat, double lng) async {
     try {
-      final place = await PlaceEnrichmentService().reverseGeocode(lat, lng);
-      String fullName = place.name.isNotEmpty ? place.name : place.address;
-      List<String> parts = fullName.split(', ');
+      final locService = Provider.of<GlobalLocationService>(context, listen: false);
+      String fullName = locService.currentCity;
+      String stateName = locService.currentState;
 
       if (mounted) {
         setState(() {
-          _currentCityName = parts.isNotEmpty ? parts[0] : fullName;
-          _currentStateName = parts.length >= 2 ? parts[1] : "";
+          _currentCityName = fullName;
+          _currentStateName = stateName;
         });
       }
 

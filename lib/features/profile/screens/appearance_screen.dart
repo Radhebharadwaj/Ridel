@@ -11,9 +11,9 @@ class AppearanceSheetContent extends StatelessWidget {
     // Listen to changes for UI update
     return AnimatedBuilder(
       animation: Listenable.merge(
-          [ThemeService.themeNotifier, ThemeService.fontNotifier]),
+          [ThemeService.appThemeNotifier, ThemeService.fontNotifier]),
       builder: (context, _) {
-        final currentMode = ThemeService.themeNotifier.value;
+        final currentMode = ThemeService.appThemeNotifier.value;
         final currentFont = ThemeService.fontNotifier.value;
         final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -78,20 +78,26 @@ class AppearanceSheetContent extends StatelessWidget {
                         child: _ThemeTab(
                             "Dark",
                             Icons.dark_mode_rounded,
-                            currentMode == ThemeMode.dark,
-                            () => ThemeService.switchTheme(ThemeMode.dark))),
+                            currentMode == AppThemeMode.dark,
+                            () => ThemeService.switchTheme(AppThemeMode.dark))),
                     Expanded(
                         child: _ThemeTab(
                             "Light",
                             Icons.light_mode_rounded,
-                            currentMode == ThemeMode.light,
-                            () => ThemeService.switchTheme(ThemeMode.light))),
+                            currentMode == AppThemeMode.light,
+                            () => ThemeService.switchTheme(AppThemeMode.light))),
                     Expanded(
                         child: _ThemeTab(
                             "System",
                             Icons.phone_android_rounded,
-                            currentMode == ThemeMode.system,
-                            () => ThemeService.switchTheme(ThemeMode.system))),
+                            currentMode == AppThemeMode.system,
+                            () => ThemeService.switchTheme(AppThemeMode.system))),
+                    Expanded(
+                        child: _ThemeTab(
+                            "Auto",
+                            Icons.access_time_rounded,
+                            currentMode == AppThemeMode.autoTime,
+                            () => ThemeService.switchTheme(AppThemeMode.autoTime))),
                   ],
                 ),
               ),

@@ -60,6 +60,7 @@ dependencies:
   # --- 8. EXTRAS ---
   speech_to_text: ^7.3.0
   collection: ^1.19.1
+  sunrise_sunset_calc: any
 
   http: ^1.6.0
   url_launcher: ^6.2.1
