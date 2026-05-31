@@ -9,57 +9,57 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// 🚀 1. The Clean Data Model
 class RouteResult {
-  final List<LatLng> coordinates;
+  final List<List<LatLng>> allRoutesCoordinates;
   final Map<String, dynamic> geoJson;
   final double distanceKm;
   final int durationMins;
   final List<Map<String, dynamic>> steps;
   final String firstInstruction;
   final DateTime fetchedAt;
-  final List<List<LatLng>> alternativeRoutes;
   final List<dynamic> trafficGradientStops;
 
+  // Backward-compatibility getters
+  List<LatLng> get coordinates => allRoutesCoordinates.isNotEmpty ? allRoutesCoordinates.first : [];
+  List<List<LatLng>> get alternativeRoutes => allRoutesCoordinates.length > 1 ? allRoutesCoordinates.sublist(1) : [];
+
   RouteResult({
-    required this.coordinates,
+    required this.allRoutesCoordinates,
     required this.geoJson,
     required this.distanceKm,
     required this.durationMins,
     required this.steps,
     required this.firstInstruction,
     required this.fetchedAt,
-    this.alternativeRoutes = const [],
     this.trafficGradientStops = const ['interpolate', ['linear'], ['line-progress'], 0.0, '#0A84FF', 1.0, '#0A84FF'],
   });
 
   // Serialization for Offline Fallback
   Map<String, dynamic> toJson() => {
-        'coordinates':
-            coordinates.map((c) => [c.latitude, c.longitude]).toList(),
+        'allRoutesCoordinates':
+            allRoutesCoordinates.map((route) => route.map((c) => [c.latitude, c.longitude]).toList()).toList(),
         'geoJson': geoJson,
         'distanceKm': distanceKm,
         'durationMins': durationMins,
         'steps': steps,
         'firstInstruction': firstInstruction,
         'fetchedAt': fetchedAt.toIso8601String(),
-        'alternativeRoutes': alternativeRoutes.map((route) => route.map((c) => [c.latitude, c.longitude]).toList()).toList(),
         'trafficGradientStops': trafficGradientStops,
       };
 
   factory RouteResult.fromJson(Map<String, dynamic> json) {
     return RouteResult(
-      coordinates:
-          (json['coordinates'] as List).map((c) => LatLng(c[0], c[1])).toList(),
+      allRoutesCoordinates: json['allRoutesCoordinates'] != null
+          ? (json['allRoutesCoordinates'] as List)
+              .map((route) => (route as List).map((c) => LatLng(c[0], c[1])).toList())
+              .toList()
+          : [],
       geoJson: json['geoJson'],
       distanceKm: json['distanceKm'],
       durationMins: json['durationMins'],
       steps: List<Map<String, dynamic>>.from(json['steps']),
       firstInstruction: json['firstInstruction'],
       fetchedAt: DateTime.parse(json['fetchedAt']),
-      alternativeRoutes: json['alternativeRoutes'] != null
-          ? (json['alternativeRoutes'] as List).map((route) => (route as List).map((c) => LatLng(c[0], c[1])).toList()).toList()
-          : [],
       trafficGradientStops: json['trafficGradientStops'] ?? ['interpolate', ['linear'], ['line-progress'], 0.0, '#0A84FF', 1.0, '#0A84FF'],
     );
   }
@@ -146,21 +146,17 @@ class RouteEngineService {
               _processHeavyRouteSync(response.body);
 
           if (primitiveData != null) {
-            final List<List<double>> rawCoords = primitiveData['coords'];
-            final coords = rawCoords.map((c) => LatLng(c[0], c[1])).toList();
-
-            final List<List<List<double>>> rawAlts = primitiveData['alternatives'] ?? [];
-            final altRoutes = rawAlts.map((alt) => alt.map((c) => LatLng(c[0], c[1])).toList()).toList();
+            final List<List<List<double>>> rawAll = primitiveData['allRoutes'];
+            final List<List<LatLng>> allRoutesCoordinates = rawAll.map((route) => route.map((c) => LatLng(c[0], c[1])).toList()).toList();
 
             return RouteResult(
-              coordinates: coords,
+              allRoutesCoordinates: allRoutesCoordinates,
               geoJson: primitiveData['geoJson'],
               distanceKm: primitiveData['distanceKm'],
               durationMins: primitiveData['durationMins'],
               steps: primitiveData['steps'],
               firstInstruction: primitiveData['firstInstruction'],
               fetchedAt: DateTime.now(),
-              alternativeRoutes: altRoutes,
               trafficGradientStops: primitiveData['gradientStops'] ?? ['interpolate', ['linear'], ['line-progress'], 0.0, '#0A84FF', 1.0, '#0A84FF'],
             );
           }
@@ -223,13 +219,13 @@ class RouteEngineService {
       final primary = _parseRouteObject(data['routes'][0]);
       if (primary == null) return null;
       
-      List<List<List<double>>> alternatives = [];
+      List<List<List<double>>> allRoutes = [primary['coords']];
       for (int i = 1; i < data['routes'].length; i++) {
         final alt = _parseRouteObject(data['routes'][i]);
-        if (alt != null) alternatives.add(alt['coords']);
+        if (alt != null) allRoutes.add(alt['coords']);
       }
       
-      primary['alternatives'] = alternatives;
+      primary['allRoutes'] = allRoutes;
       return primary;
     } catch (e) {
       debugPrint("Isolate Decoding Error: $e");

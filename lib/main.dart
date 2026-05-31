@@ -35,7 +35,7 @@ import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/widgets/ridel_sheet.dart';
 import 'package:ridel/features/auth/widgets/login_approval_sheet.dart';
 import 'package:ridel/features/auth/services/auth_service.dart';
-import 'package:flutter/gestures.dart';
+
 
 // ======================================================================
 // 🚀 GLOBAL APP STATES

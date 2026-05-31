@@ -72,8 +72,6 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
-  // Track route source to remove it later
-  bool _isRouteDrawn = false;
 
   // State flag for UI
   bool isRouteCalculated = false;
@@ -110,10 +108,11 @@ class MapProvider extends ChangeNotifier {
       debugPrint("⏳ [ROUTE ENGINE] Waiting for Ola Maps API...");
       final routeResult = await _routingService.getRoute(origin, targetDestination!, mode: mode);
       
-      if (routeResult != null && routeResult.coordinates.isNotEmpty) {
-        debugPrint("✅ [ROUTE ENGINE] Ola API Success! Received ${routeResult.coordinates.length} points.");
+      if (routeResult != null && routeResult.allRoutesCoordinates.isNotEmpty) {
+        debugPrint("✅ [ROUTE ENGINE] Ola API Success! Received ${routeResult.allRoutesCoordinates.first.length} points.");
         
-        await drawNativeRoute(routeResult);
+        _currentRouteResult = routeResult;
+        await drawNativeRoute(routeResult.allRoutesCoordinates);
         debugPrint("✅ [ROUTE ENGINE] Native MapLibre Draw Success!");
         
         isRouteCalculated = true;
@@ -179,11 +178,12 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<bool> handleRouteClick(Point<double> point, LatLng coordinates) async {
-    if (controller == null || !_isRouteDrawn || _drawnAltRoutesCount == 0 || _currentRouteResult == null) {
+    if (controller == null || _drawnRoutesCount <= 1 || _currentRouteResult == null) {
       return false;
     }
     
-    List<String> altLayerIds = List.generate(_drawnAltRoutesCount, (i) => 'alt-route-layer-$i');
+    // Alt layers start from index 1 (index 0 is primary)
+    List<String> altLayerIds = List.generate(_drawnRoutesCount - 1, (i) => 'route-layer-${i + 1}');
     final features = await controller!.queryRenderedFeatures(point, altLayerIds, null);
     
     if (features.isNotEmpty) {
@@ -198,112 +198,83 @@ class MapProvider extends ChangeNotifier {
       final currentPrimary = _currentRouteResult!.coordinates;
       
       // Swap routes visually
-      _currentRouteResult!.alternativeRoutes[tappedIndex] = currentPrimary;
+      List<List<LatLng>> updatedRoutes = List.from(_currentRouteResult!.allRoutesCoordinates);
+      updatedRoutes[0] = tappedAlt;
+      updatedRoutes[tappedIndex + 1] = currentPrimary;
+
       final newResult = RouteResult(
-        coordinates: tappedAlt,
+        allRoutesCoordinates: updatedRoutes,
         geoJson: _currentRouteResult!.geoJson,
         distanceKm: _currentRouteResult!.distanceKm,
         durationMins: _currentRouteResult!.durationMins,
         steps: _currentRouteResult!.steps,
         firstInstruction: _currentRouteResult!.firstInstruction,
         fetchedAt: _currentRouteResult!.fetchedAt,
-        alternativeRoutes: _currentRouteResult!.alternativeRoutes,
         trafficGradientStops: _currentRouteResult!.trafficGradientStops,
       );
       
-      await drawNativeRoute(newResult);
+      _currentRouteResult = newResult;
+      await drawNativeRoute(newResult.allRoutesCoordinates);
       return true; // Handled ghost line tap
     }
     return false;
   }
 
-  int _drawnAltRoutesCount = 0;
+  int _drawnRoutesCount = 0;
   RouteResult? _currentRouteResult;
 
-  Future<void> drawNativeRoute(RouteResult routeResult) async {
-    _currentRouteResult = routeResult;
-    final routePoints = routeResult.coordinates;
-    if (controller == null || routePoints.isEmpty) return;
+  Future<void> drawNativeRoute(List<List<LatLng>> allRoutes) async {
+    if (controller == null || allRoutes.isEmpty) return;
 
     // 1. Clear previous route if it exists
     await clearNativeRoute(preserveState: true);
     
     await _toggleTransitLayers(false); // 🚨 Hide metro lines when route is drawn
+    
+    _drawnRoutesCount = allRoutes.length;
 
-    // 2. Convert LatLng list to GeoJSON LineString coordinates
-    final coordinates = routePoints.map((p) => [p.longitude, p.latitude]).toList();
+    for (int i = 0; i < allRoutes.length; i++) {
+      final routePoints = allRoutes[i];
+      final isPrimary = i == 0; // First route is primary
+      final coordinates = routePoints.map((p) => [p.longitude, p.latitude]).toList();
 
-    final geoJson = {
-      "type": "FeatureCollection",
-      "features": [
-        {
-          "type": "Feature",
-          "properties": {},
-          "geometry": {
-            "type": "LineString",
-            "coordinates": coordinates
-          }
-        }
-      ]
-    };
-
-    try {
-      // Draw Alternative Routes (Ghost lines)
-      _drawnAltRoutesCount = routeResult.alternativeRoutes.length;
-      for (int i = 0; i < _drawnAltRoutesCount; i++) {
-        final altRoute = routeResult.alternativeRoutes[i];
-        if (altRoute.isEmpty) continue;
-        
-        final altGeoJson = {
-          "type": "FeatureCollection",
-          "features": [
-            {
-              "type": "Feature",
-              "properties": {"index": i},
-              "geometry": {
-                "type": "LineString",
-                "coordinates": altRoute.map((p) => [p.longitude, p.latitude]).toList()
-              }
+      final geoJson = {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": {"index": i},
+            "geometry": {
+              "type": "LineString",
+              "coordinates": coordinates
             }
-          ]
-        };
-        
-        await controller!.addGeoJsonSource('alt-route-source-$i', altGeoJson);
+          }
+        ]
+      };
+
+      try {
+        await controller!.addGeoJsonSource('route-source-$i', geoJson);
         await controller!.addLineLayer(
-          'alt-route-source-$i',
-          'alt-route-layer-$i',
-          const LineLayerProperties(
-            lineColor: '#8E8E93', // 🚨 FADED GREY FOR ALTERNATIVES
-            lineWidth: 4.0,
+          'route-source-$i', 
+          'route-layer-$i',
+          LineLayerProperties(
+            lineColor: isPrimary ? '#0A84FF' : '#8E8E93', // Premium Blue vs Ghost Grey
+            lineWidth: isPrimary ? 6.5 : 4.0, // Primary is thicker
+            lineOpacity: isPrimary ? 1.0 : 0.6, // Alternatives are slightly transparent
             lineCap: 'round',
             lineJoin: 'round',
-            lineOpacity: 0.7, // Slightly transparent
           ),
         );
+      } catch (e) {
+        debugPrint("🗺️ ROUTE DRAW ERROR for index $i: $e");
       }
+    }
 
-      // 3. Add GeoJSON Source
-      await controller!.addGeoJsonSource('route-source', geoJson);
-
-      // 4. Add Native Premium Line Layer with Gradient
-      await controller!.addLineLayer(
-        'route-source', // source id
-        'route-layer',  // layer id
-        LineLayerProperties(
-          lineWidth: 6.5, // Thick and prominent
-          lineCap: 'round',
-          lineJoin: 'round',
-          lineColor: '#0A84FF', // 🚨 PREMIUM APPLE BLUE
-          lineGradient: routeResult.trafficGradientStops, // Data-driven traffic speed segments
-        ),
-      );
-      
-      _isRouteDrawn = true;
-      
-      // 5. Adjust Camera to fit the whole route
+    // 5. Adjust Camera to fit the PRIMARY route
+    if (allRoutes.isNotEmpty) {
       await controller!.animateCamera(
         CameraUpdate.newLatLngBounds(
-          _calculateBounds(routePoints),
+          _calculateBounds(allRoutes.first),
           bottom: 300, // Padding for your bottom sheets
           left: 50,
           right: 50,
@@ -311,53 +282,45 @@ class MapProvider extends ChangeNotifier {
         ),
         duration: const Duration(milliseconds: 800),
       );
-      
-      notifyListeners();
-    } catch (e) {
-      debugPrint("🗺️ ROUTE DRAW ERROR: $e");
     }
+    
+    notifyListeners();
   }
 
   Future<void> clearNativeRoute({bool preserveState = false}) async {
-    if (controller != null && _isRouteDrawn) {
-      try {
-        await controller!.removeLayer('route-layer');
-        await controller!.removeSource('route-source');
-        
-        for (int i = 0; i < _drawnAltRoutesCount; i++) {
-          try {
-            await controller!.removeLayer('alt-route-layer-$i');
-            await controller!.removeSource('alt-route-source-$i');
-          } catch (_) {}
+    if (controller != null && _drawnRoutesCount > 0) {
+      for (int i = 0; i < _drawnRoutesCount; i++) {
+        try {
+          await controller!.removeLayer('route-layer-$i');
+          await controller!.removeSource('route-source-$i');
+        } catch (e) {
+          debugPrint("🗺️ ROUTE CLEAR ERROR for index $i: $e");
         }
-        _drawnAltRoutesCount = 0;
-
-        _isRouteDrawn = false;
-        
-        if (!preserveState) {
-          isRouteCalculated = false;
-          _currentRouteResult = null;
-          
-          await _toggleTransitLayers(true); // 🚨 Restore metro lines when route is cancelled
-          isNavigating = false; // Reset navigation state
-          
-          // 🚨 Revert the camera tracking and puck to normal
-          try {
-            // Reset rotation to North-Up
-            await controller!.animateCamera(CameraUpdate.bearingTo(0.0), duration: const Duration(milliseconds: 500));
-            await controller!.animateCamera(CameraUpdate.tiltTo(0.0), duration: const Duration(milliseconds: 500));
-            
-            // Reset modes
-            await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
-          } catch (e) {
-            debugPrint("⚠️ Native Tracking Reset Error: $e");
-          }
-        }
-        
-        notifyListeners();
-      } catch (e) {
-        debugPrint("🗺️ ROUTE CLEAR ERROR: $e");
       }
+      
+      _drawnRoutesCount = 0;
+      
+      if (!preserveState) {
+        isRouteCalculated = false;
+        _currentRouteResult = null;
+        
+        await _toggleTransitLayers(true); // 🚨 Restore metro lines when route is cancelled
+        isNavigating = false; // Reset navigation state
+        
+        // 🚨 Revert the camera tracking and puck to normal
+        try {
+          // Reset rotation to North-Up
+          await controller!.animateCamera(CameraUpdate.bearingTo(0.0), duration: const Duration(milliseconds: 500));
+          await controller!.animateCamera(CameraUpdate.tiltTo(0.0), duration: const Duration(milliseconds: 500));
+          
+          // Reset modes
+          await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+        } catch (e) {
+          debugPrint("⚠️ Native Tracking Reset Error: $e");
+        }
+      }
+      
+      notifyListeners();
     }
   }
 
@@ -772,9 +735,9 @@ class MapProvider extends ChangeNotifier {
         destinationCoords,
       );
 
-      if (routeData != null && routeData.coordinates.isNotEmpty) {
+      if (routeData != null && routeData.allRoutesCoordinates.isNotEmpty) {
         _lastRouteData = routeData;
-        List<LatLng> routePoints = routeData.coordinates;
+        List<LatLng> routePoints = routeData.allRoutesCoordinates.first;
             
         if (routePoints.isNotEmpty) {
           debugPrint("🔍 MAP PROVIDER AUDIT (1st Point): Lat=${routePoints.first.latitude}, Lng=${routePoints.first.longitude}");
