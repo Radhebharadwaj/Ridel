@@ -8,6 +8,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/place_model.dart';
 import 'supabase_search_db.dart';
+import 'package:ridel/core/services/place_service.dart';
 
 // ── Cache Entry with TTL (Apple Maps Standard) ──
 class _SearchCacheEntry {
@@ -85,8 +86,15 @@ class MasterSearchService {
       if (primaryResults.isNotEmpty) return primaryResults;
     } catch (_) {}
 
-    // Attempt 2: Fallback to Nominatim OSM
-    debugPrint("🔄 MasterSearch: Supabase empty, falling back to Nominatim...");
+    // Attempt 2: Premium Autocomplete (Ola Maps)
+    try {
+      debugPrint("🔄 MasterSearch: Trying Premium Autocomplete...");
+      final premiumResults = await PlaceService().searchPremiumPlaces(query, userLocation: location);
+      if (premiumResults.isNotEmpty) return premiumResults;
+    } catch (_) {}
+
+    // Attempt 3: Fallback to Nominatim OSM
+    debugPrint("🔄 MasterSearch: Premium empty, falling back to Nominatim...");
     return await _fallbackNominatimSearch(query, location);
   }
 

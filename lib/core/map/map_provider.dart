@@ -80,6 +80,13 @@ class MapProvider extends ChangeNotifier {
 
   bool isFlying = false;
 
+  String? mapSelectionPlaceType;
+
+  void setMapSelectionMode(String? type) {
+    mapSelectionPlaceType = type;
+    notifyListeners();
+  }
+
   // Stops the camera instantly if the user taps the screen
   void stopCameraFlight() {
     if (isFlying && controller != null) {
@@ -579,7 +586,9 @@ class MapProvider extends ChangeNotifier {
 
   void clearTargetLocation() {
     targetLocation = null;
+    targetDestination = null;
     isCinematicSearch = false;
+    notifyListeners();
   }
 
   Future<void> flyToPlace(double lat, double lng) async {
@@ -599,6 +608,7 @@ class MapProvider extends ChangeNotifier {
       debugPrint("⚠️ flyToPlace Error: $e");
     } finally {
       isFlying = false; 
+      notifyListeners(); // 🚀 Force a fresh frame notify so the UI perfectly syncs when camera stops
     }
   }
 

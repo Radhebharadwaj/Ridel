@@ -220,15 +220,10 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
                   borderRadius: BorderRadius.circular(100),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      blurRadius: 25,
-                      spreadRadius: -2,
-                      offset: const Offset(0, 12),
-                    ),
-                    BoxShadow(
                       color: Colors.black.withValues(alpha: 0.15),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
+                      blurRadius: 30,
+                      spreadRadius: 0,
+                      offset: const Offset(0, 8),
                     ),
                   ],
                 ),
@@ -236,39 +231,19 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
                   borderRadius: BorderRadius.circular(100),
                   clipBehavior: Clip.antiAlias,
                   child: BackdropFilter(
-                    filter: ImageFilter.blur(
-                        sigmaX: 25, sigmaY: 25), // 🌟 High blur
+                    filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(100),
-                        // 🌟 FIX 2: True Glass + Gradient!
-                        // Isme dark base aur white shine dono blend kiye hain.
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: isDark
-                              ? [
-                                  Colors.white.withValues(
-                                      alpha: 0.15), // Top reflection
-                                  const Color(0xFF0B0E17).withValues(
-                                      alpha: 0.65), // Dark Glass Body
-                                  const Color(0xFF0B0E17)
-                                      .withValues(alpha: 0.85), // Bottom Depth
-                                ]
-                              : [
-                                  Colors.white.withValues(alpha: 0.95),
-                                  Colors.white.withValues(alpha: 0.65),
-                                  Colors.white.withValues(alpha: 0.50),
-                                ],
-                          stops: const [0.0, 0.3, 1.0],
-                        ),
+                        color: isDark 
+                            ? Colors.black.withValues(alpha: 0.3)
+                            : Colors.white.withValues(alpha: 0.5),
                         border: Border.all(
-                          color: isDark
-                              ? Colors.white
-                                  .withValues(alpha: 0.15) // Crisp glass edge
-                              : Colors.black.withValues(alpha: 0.08),
+                          color: isDark 
+                              ? Colors.white.withValues(alpha: 0.12)
+                              : Colors.white.withValues(alpha: 0.5),
                           width: 1.0,
                         ),
                       ),

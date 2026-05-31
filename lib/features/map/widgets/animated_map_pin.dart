@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
@@ -34,82 +35,90 @@ class AnimatedMapPin extends StatefulWidget {
 class AnimatedMapPinState extends State<AnimatedMapPin>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
+  Timer? _projectionTimer;
   Offset? _screenPos;
-
-  // Throttle: only re-project every N frames to avoid flooding method channel
-  int _frameCounter = 0;
-  static const int _projectionInterval = 2; // every 2nd frame ≈ 30fps position updates
+  bool _isProjecting = false;
 
   @override
   void initState() {
     super.initState();
+    // 1. Visual Pulse (Safe at 60fps, purely Flutter Canvas)
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2400),
     )..repeat();
-    _pulseController.addListener(_onTick);
-    _projectPosition();
+
+    // 2. Heavy JS Interop Projection (Throttled to ~30fps to prevent Web Freezes)
+    _projectionTimer = Timer.periodic(const Duration(milliseconds: 35), (_) {
+      if (!_isProjecting) {
+        _isProjecting = true;
+        _updatePosition().whenComplete(() => _isProjecting = false);
+      }
+    });
   }
 
   @override
   void didUpdateWidget(AnimatedMapPin oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.target != widget.target || oldWidget.mapController != widget.mapController) {
-      _projectPosition(); // Immediately re-project on target change
+
+    if (oldWidget.target != widget.target) {
+      _updatePosition();
+      // Force projection after the camera settles
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (mounted) _updatePosition();
+      });
     }
   }
 
-  void _onTick() {
-    _frameCounter++;
-    if (_frameCounter % _projectionInterval == 0) {
-      _projectPosition();
-    }
-  }
+  void syncPosition() => _updatePosition();
 
-  /// Call externally on camera idle / camera move events for extra accuracy.
-  void syncPosition() => _projectPosition();
-
-  Future<void> _projectPosition() async {
+  Future<void> _updatePosition() async {
     final ctrl = widget.mapController;
     final target = widget.target;
     if (ctrl == null || target == null) {
       if (_screenPos != null && mounted) setState(() => _screenPos = null);
       return;
     }
+    
     try {
       final pt = await ctrl.toScreenLocation(target);
+      // MapLibre sometimes returns x:0, y:0 when the coordinate is off-screen or unprojectable
+      if (pt.x == 0 && pt.y == 0) return; 
+      
       final next = Offset(pt.x.toDouble(), pt.y.toDouble());
       if (mounted && next != _screenPos) {
         setState(() => _screenPos = next);
       }
-    } catch (_) {
-      // Map controller disposed or not ready — safe to ignore
+    } catch (e) {
+      debugPrint("📍 PIN PROJECTION ERROR: $e");
     }
   }
 
   @override
   void dispose() {
-    _pulseController.removeListener(_onTick);
+    _projectionTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    debugPrint("📍 PIN RENDER CHECK -> Target: ${widget.target}, ScreenPos: $_screenPos");
     if (_screenPos == null || widget.target == null) {
       return const SizedBox.shrink();
     }
 
-    const double canvasSize = 140.0;
+    const double pinWidth = 140.0;
+    const double pinHeight = 140.0;
 
     return Positioned(
-      left: _screenPos!.dx - canvasSize / 2,
-      top: _screenPos!.dy - canvasSize / 2,
+      left: _screenPos!.dx - (pinWidth / 2),
+      top: _screenPos!.dy - pinHeight,
       child: IgnorePointer(
         child: RepaintBoundary(
           child: SizedBox(
-            width: canvasSize,
-            height: canvasSize,
+            width: pinWidth,
+            height: pinHeight,
             child: AnimatedBuilder(
               animation: _pulseController,
               builder: (_, __) => CustomPaint(
@@ -144,12 +153,13 @@ class _PulsePinPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
+    final double safeProgress = progress.clamp(0.0, 1.0);
 
     // ── PULSE RING 1 ──
-    _paintPulseRing(canvas, center, progress);
+    _paintPulseRing(canvas, center, safeProgress);
 
-    // ── PULSE RING 2 (phase-offset by 0.5 for continuous breathing) ──
-    _paintPulseRing(canvas, center, (progress + 0.5) % 1.0);
+    // ── PULSE RING 2 (phase-offset by 0.5 for continuous breathing) ─────────────────
+    _paintPulseRing(canvas, center, (safeProgress + 0.5) % 1.0);
 
     // ── CASING (Theme-Aware) ──
     if (isDark) {

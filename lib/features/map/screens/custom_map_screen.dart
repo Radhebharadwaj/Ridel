@@ -10,6 +10,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'dart:async';
 import 'package:ridel/core/services/global_location_service.dart';
+import 'package:ridel/core/services/saved_places_service.dart';
 
 import '../map_engine/map_engine.dart';
 import '../map_engine/controllers/map_mode_controller.dart';
@@ -150,7 +151,13 @@ class _CustomMapScreenState extends State<CustomMapScreen>
     if (provider.targetLocation != null) {
       final target = provider.targetLocation!;
       _engine.executeSearchFlight(target, place: provider.tappedPlaceFromMap);
-      provider.clearTargetLocation();
+      
+      provider.targetLocation = null;
+      provider.isCinematicSearch = false;
+      
+      provider.setTargetDestination(target);
+      provider.setDestinationSelected(true);
+      provider.engine.setUIState(MapUIState.placeSelected);
     }
   }
 
@@ -318,6 +325,75 @@ class _CustomMapScreenState extends State<CustomMapScreen>
     }
   }
 
+  void _showConfirmationDialog(BuildContext context, String type, LatLng coordinates) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "Set as $type?",
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text("Choose Another"),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () {
+                      final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                      // Save the place via SavedPlacesService
+                      try {
+                        final savedPlacesService = Provider.of<SavedPlacesService>(context, listen: false);
+                        savedPlacesService.savePlace(context, type.toLowerCase(), coordinates.latitude, coordinates.longitude);
+                      } catch (e) {
+                         debugPrint("Failed to get SavedPlacesService");
+                      }
+                      
+                      mapProvider.setMapSelectionMode(null);
+                      mapProvider.clearSearchSession(context);
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text(
+                      "Yes, Set Location",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_hasMapBeenOpened) {
@@ -377,6 +453,12 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                 final mapProvider =
                     Provider.of<MapProvider>(context, listen: false);
 
+                if (mapProvider.mapSelectionPlaceType != null) {
+                  mapProvider.setTargetDestination(latlng); 
+                  _showConfirmationDialog(context, mapProvider.mapSelectionPlaceType!, latlng);
+                  return;
+                }
+
                 if (mapProvider.isFlying) {
                   mapProvider.stopCameraFlight();
                   return;
@@ -434,6 +516,13 @@ class _CustomMapScreenState extends State<CustomMapScreen>
               },
               onMapCreated: (controller) {
                 controller.addListener(_onCameraMove);
+
+                // 🧭 CRITICAL FIX: Store the controller on MapProvider's engine
+                // so that provider.controller is non-null for AnimatedMapPin
+                // and all other consumers that project LatLng → screen coords.
+                final mapProvider =
+                    Provider.of<MapProvider>(context, listen: false);
+                mapProvider.engine.mapController = controller;
               },
               onStyleLoadedCallback: () {
                 final mapProvider =

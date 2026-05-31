@@ -99,15 +99,29 @@ class MapCameraController {
   }
 
   void _onCameraTick(Duration elapsed) {
-    if (_latSim == null) return;
+    // 🛡️ Capture all 5 simulations into local finals to prevent
+    // mid-tick nullification from cancelAnimations() race condition.
+    final latSim = _latSim;
+    final lngSim = _lngSim;
+    final zoomSim = _zoomSim;
+    final tiltSim = _tiltSim;
+    final bearingSim = _bearingSim;
+
+    // All 5 must be non-null to animate
+    if (latSim == null || lngSim == null || zoomSim == null ||
+        tiltSim == null || bearingSim == null) {
+      _cameraTicker?.stop();
+      return;
+    }
+
     _elapsedTime = elapsed.inMicroseconds / 1000000.0;
 
-    final lat = _latSim!.x(_elapsedTime);
-    final lng = _lngSim!.x(_elapsedTime);
-    final zoom = (_zoomSim!.x(_elapsedTime)).clamp(2.0, 22.0);
-    final tilt = _tiltSim!.x(_elapsedTime);
+    final lat = latSim.x(_elapsedTime);
+    final lng = lngSim.x(_elapsedTime);
+    final zoom = (zoomSim.x(_elapsedTime)).clamp(2.0, 22.0);
+    final tilt = tiltSim.x(_elapsedTime);
     
-    double bearing = _bearingSim!.x(_elapsedTime);
+    double bearing = bearingSim.x(_elapsedTime);
     bearing = bearing % 360.0;
     if (bearing < 0) {
       bearing += 360.0;
@@ -124,11 +138,11 @@ class MapCameraController {
       )));
     }
 
-    if (_latSim!.isDone(_elapsedTime) && 
-        _lngSim!.isDone(_elapsedTime) && 
-        _zoomSim!.isDone(_elapsedTime) &&
-        _bearingSim!.isDone(_elapsedTime) &&
-        _tiltSim!.isDone(_elapsedTime)) {
+    if (latSim.isDone(_elapsedTime) && 
+        lngSim.isDone(_elapsedTime) && 
+        zoomSim.isDone(_elapsedTime) &&
+        bearingSim.isDone(_elapsedTime) &&
+        tiltSim.isDone(_elapsedTime)) {
       _cameraTicker?.stop();
     }
   }

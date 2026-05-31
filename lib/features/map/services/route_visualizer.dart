@@ -11,6 +11,12 @@ class RouteVisualizer {
   static const String _coreLayerId = 'route-layer';
   static const String _glowLayerId = 'route-glow';
 
+  static String _safeColor(String? value, [String fallback = '#000000']) =>
+      (value?.isNotEmpty == true ? value! : fallback);
+
+  static double _safeDouble(double? value, double fallback) =>
+      value != null && value > 0 ? value : fallback;
+
   /// Clears all route layers and the source from the map.
   static Future<void> clearRoute(MapLibreMapController? controller) async {
     if (controller == null) return;
@@ -78,12 +84,12 @@ class RouteVisualizer {
       _sourceId,
       _shadowLayerId,
       LineLayerProperties(
-        lineColor: '#000000',
-        lineWidth: 12.0,
-        lineOpacity: isDark ? 0.35 : 0.15,
+        lineColor: _safeColor('#000000'),
+        lineWidth: _safeDouble(12.0, 8.0),
+        lineOpacity: _safeDouble(isDark ? 0.35 : 0.15, 0.15),
         lineCap: 'round',
         lineJoin: 'round',
-        lineBlur: 8.0, // Soft shadow blur
+        lineBlur: _safeDouble(8.0, 4.0), // Soft shadow blur
         lineTranslate: [0, 3], // Offset downwards for 3D effect
       ),
     );
@@ -95,9 +101,9 @@ class RouteVisualizer {
       _sourceId,
       _casingLayerId,
       LineLayerProperties(
-        lineColor: casingColor,
-        lineWidth: 8.0,
-        lineOpacity: casingOpacity,
+        lineColor: _safeColor(casingColor),
+        lineWidth: _safeDouble(8.0, 5.0),
+        lineOpacity: _safeDouble(casingOpacity, 0.15),
         lineCap: 'round',
         lineJoin: 'round',
       ),
@@ -109,10 +115,10 @@ class RouteVisualizer {
     await controller.addLineLayer(
       _sourceId,
       _coreLayerId,
-      const LineLayerProperties(
-        lineColor: '#00E5FF', // Ridel Neon Cyan
-        lineWidth: 5.0,
-        lineOpacity: 1.0,
+      LineLayerProperties(
+        lineColor: _safeColor('#00E5FF'), // Ridel Neon Cyan
+        lineWidth: _safeDouble(5.0, 5.0),
+        lineOpacity: _safeDouble(1.0, 1.0),
         lineCap: 'round',
         lineJoin: 'round',
       ),
@@ -124,13 +130,13 @@ class RouteVisualizer {
     await controller.addLineLayer(
       _sourceId,
       _glowLayerId,
-      const LineLayerProperties(
-        lineColor: '#00E5FF',
-        lineWidth: 14.0,
-        lineOpacity: 0.12,
+      LineLayerProperties(
+        lineColor: _safeColor('#00E5FF'),
+        lineWidth: _safeDouble(14.0, 10.0),
+        lineOpacity: _safeDouble(0.12, 0.12),
         lineCap: 'round',
         lineJoin: 'round',
-        lineBlur: 6.0,
+        lineBlur: _safeDouble(6.0, 4.0),
       ),
     );
   }

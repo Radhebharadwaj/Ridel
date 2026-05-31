@@ -570,10 +570,11 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
+                      child: TextField(
+                        controller: _searchCtrl,
+                        focusNode: _searchFocus,
+                        textAlignVertical: TextAlignVertical.center,
                         onTap: () {
-                          FocusScope.of(context).requestFocus(_searchFocus);
                           if (_sheetController.isAttached) {
                             _sheetController.animateTo(
                               _safeMaxSize,
@@ -581,41 +582,31 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                               curve: Curves.easeOutCubic,
                             );
                           }
-                        },
-                        child: TextField(
-                          controller: _searchCtrl,
-                          focusNode: _searchFocus,
-                          textAlignVertical: TextAlignVertical.center,
-                          onTap: () {
-                            FocusScope.of(context).requestFocus(_searchFocus);
-                            if (_sheetController.isAttached) {
-                              _sheetController.animateTo(
-                                _safeMaxSize,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOutCubic,
-                              );
+                          Future.delayed(const Duration(milliseconds: 350), () {
+                            if (mounted && !_searchFocus.hasFocus) {
+                              FocusScope.of(context).requestFocus(_searchFocus);
                             }
-                          },
-                          style: TextStyle(
-                            color: isDark ? Colors.white : Colors.black,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w400,
-                          ),
-                          textInputAction: TextInputAction.search,
-                          decoration: InputDecoration(
-                            hintText: 'Ridel Maps',
-                            hintStyle: TextStyle(
-                              color: isDark ? Colors.white54 : Colors.black54,
-                              fontSize: 16,
-                            ),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: const EdgeInsets.only(bottom: 2),
-                          ),
-                          onSubmitted: (value) {
-                            _handleSearchExecution(value);
-                          },
+                          });
+                        },
+                        style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
                         ),
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          hintText: 'Ridel Maps',
+                          hintStyle: TextStyle(
+                            color: isDark ? Colors.white54 : Colors.black54,
+                            fontSize: 16,
+                          ),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.only(bottom: 2),
+                        ),
+                        onSubmitted: (value) {
+                          _handleSearchExecution(value);
+                        },
                       ),
                     ),
                     ValueListenableBuilder(

@@ -21,6 +21,12 @@ class MapLayerController {
 
   static const String _pinSourceId = "apple-premium-pin-source";
 
+  static String _safeColorString(String? color, [String fallback = '#000000']) =>
+      (color?.isNotEmpty == true ? color! : fallback);
+
+  static double _safeSize(double? value, double fallback) =>
+      value != null && value > 0 ? value : fallback;
+
   // Red Pulsing Dot layers
   static const String _redGlowLayerId = "apple-premium-red-glow";
   static const String _redStaticAuraLayerId = "apple-premium-red-static-aura";
@@ -102,8 +108,8 @@ class MapLayerController {
   }
 
   static Map<String, dynamic> _buildPointGeoJson(Map<String, dynamic> args) {
-    final double lat = args['lat'];
-    final double lng = args['lng'];
+    final double lat = (args['lat'] as num?)?.toDouble() ?? 0.0;
+    final double lng = (args['lng'] as num?)?.toDouble() ?? 0.0;
     return {
       "type": "FeatureCollection",
       "features": [
@@ -227,9 +233,9 @@ class MapLayerController {
           _pinSourceId,
           _redGlowLayerId,
           CircleLayerProperties(
-              circleColor: hexColor,
+              circleColor: _safeColorString(hexColor, '#FF3B30'),
               circleOpacity: 0.2,
-              circleRadius: 18.0,
+              circleRadius: _safeSize(18.0, 8.0),
               circlePitchAlignment: "map",
               circleStrokeWidth: 0));
 
@@ -237,9 +243,9 @@ class MapLayerController {
           _pinSourceId,
           _redStaticAuraLayerId,
           CircleLayerProperties(
-              circleColor: hexColor,
+              circleColor: _safeColorString(hexColor, '#FF3B30'),
               circleOpacity: 0.15,
-              circleRadius: 14.0,
+              circleRadius: _safeSize(14.0, 6.0),
               circlePitchAlignment: "map",
               circleStrokeWidth: 0));
 
@@ -257,9 +263,9 @@ class MapLayerController {
           _pinSourceId,
           _redCoreLayerId,
           CircleLayerProperties(
-              circleColor: hexColor,
+              circleColor: _safeColorString(hexColor, '#FF3B30'),
               circleOpacity: 1.0,
-              circleRadius: 7.5,
+              circleRadius: _safeSize(7.5, 4.0),
               circlePitchAlignment: "map",
               circleStrokeWidth: 0));
     } catch (e) {
@@ -283,9 +289,9 @@ class MapLayerController {
           _pinSourceId,
           _blueGlowLayerId,
           CircleLayerProperties(
-              circleColor: hexColor,
+              circleColor: _safeColorString(hexColor, '#0A84FF'),
               circleOpacity: 0.3,
-              circleRadius: 25.0,
+              circleRadius: _safeSize(25.0, 10.0),
               circlePitchAlignment: "map",
               circleStrokeWidth: 0));
 
@@ -305,9 +311,9 @@ class MapLayerController {
           _pinSourceId,
           _blueCoreLayerId,
           CircleLayerProperties(
-              circleColor: hexColor,
+              circleColor: _safeColorString(hexColor, '#0A84FF'),
               circleOpacity: 1.0,
-              circleRadius: 7.0,
+              circleRadius: _safeSize(7.0, 4.0),
               circlePitchAlignment: "map",
               circleStrokeWidth: 0));
 

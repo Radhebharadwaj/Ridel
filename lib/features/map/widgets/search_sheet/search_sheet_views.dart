@@ -35,32 +35,26 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     required Color iconColor,
     required VoidCallback onTap,
   }) {
-    // 🚀 Exact glassmorphism base color matching the rest of the app's premium frosted panels
     final Color glassBaseColor = isDark
         ? const Color(0xFF1E1E1E).withValues(alpha: 0.65)
         : Colors.white.withValues(alpha: 0.75);
 
     return RidelBounceButton(
       onTap: () {
-        AppHaptics.lightImpact(); // Added Haptic for better UX
+        AppHaptics.lightImpact();
         onTap();
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 🚀 Premium Frosted Glass Circle (52x52)
-          SizedBox(
+          Container(
             width: 52,
             height: 52,
-            child: RidelLiquidButton(
-              width: 52,
-              height: 52,
-              shapeType: LiquidShapeType.circle,
-              glassTint: glassBaseColor,
-              child: Center(
-                child: Icon(icon, size: 24, color: iconColor),
-              ),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: glassBaseColor,
             ),
+            child: Icon(icon, size: 24, color: iconColor),
           ),
           const SizedBox(height: 8),
           Text(
@@ -216,6 +210,10 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                           itemBuilder: (context, index) {
                             final place = _recentSearches[index];
                             final isLast = index == _recentSearches.length - 1;
+                            
+                            // Fetch provider safely BEFORE the gesture callback using the stable build context
+                            final safeProvider = Provider.of<MapProvider>(context, listen: false);
+
                             return Dismissible(
                               key: Key('recent_${index}_${place.name}'),
                               direction: DismissDirection.endToStart,
@@ -234,49 +232,104 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                               },
                               child: Column(
                                 children: [
-                                  ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                    ),
-                                    leading: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            isDark ? Colors.white12 : Colors.black12,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        CupertinoIcons.clock,
-                                        color: Colors.grey,
-                                        size: 18,
-                                      ),
-                                    ),
-                                    title: Text(
-                                      place.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: isDark ? Colors.white : Colors.black,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    subtitle: Text(
-                                      place.address,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color:
-                                            isDark ? Colors.white54 : Colors.black54,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    onTap: () {
+                                  Listener(
+                                    behavior: HitTestBehavior.opaque,
+                                    // Trigger INSTANTLY on touch, before any keyboard unfocus events can destroy the widget
+                                    onPointerDown: (event) async {
+                                      debugPrint("💥 RAW POINTER DOWN REGISTERED ON: ${place.name}");
                                       AppHaptics.selectionClick();
-                                      FocusManager.instance.primaryFocus?.unfocus();
-                                      _handleSearchExecution(place.name, place);
+                                      
+                                      try {
+                                        // 1. Lock State FIRST using the pre-fetched safe provider
+                                        safeProvider.setDestinationSelected(true);
+                                        safeProvider.engine.setUIState(MapUIState.placeSelected);
+                                        
+                                        // Safely animate sheet to Pill View size
+                                        if (_sheetController.isAttached) {
+                                          _sheetController.animateTo(
+                                            _safeMinSize,
+                                            duration: const Duration(milliseconds: 300),
+                                            curve: Curves.easeOutCubic,
+                                          );
+                                        }
+                                        
+                                        // 2. NOW unfocus the keyboard
+                                        FocusManager.instance.primaryFocus?.unfocus();
+                                        
+                                        // 3. Process Coordinates
+                                        double lat = place.latitude;
+                                        double lng = place.longitude;
+                                        
+                                        if (lat == 0.0 || lng == 0.0) {
+                                          if (place.placeId.isNotEmpty) {
+                                            try {
+                                              final exactCoords = await PlaceService.getPlaceDetails(place.placeId);
+                                              if (exactCoords != null) {
+                                                lat = exactCoords.latitude;
+                                                lng = exactCoords.longitude;
+                                              }
+                                            } catch (_) {}
+                                          }
+                                        }
+                                        
+                                        // 4. Fly Camera
+                                        if (lat != 0.0 && lng != 0.0) {
+                                          safeProvider.setTargetDestination(LatLng(lat, lng));
+                                          rebuildState(() => _selectedPlace = place);
+                                          if (_sheetController.isAttached) {
+                                            _sheetController.animateTo(
+                                              _safeMinSize,
+                                              duration: const Duration(milliseconds: 300),
+                                              curve: Curves.easeOutCubic,
+                                            );
+                                          }
+                                          await safeProvider.flyToPlace(lat, lng);
+                                        } else {
+                                          safeProvider.engine.setUIState(MapUIState.idle);
+                                        }
+                                      } catch (e) {
+                                        debugPrint("🔥 CRASH CAUGHT: $e");
+                                      }
                                     },
-                                  ),
+                                      child: ListTile(
+                                        contentPadding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                        ),
+                                        leading: Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                isDark ? Colors.white12 : Colors.black12,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            CupertinoIcons.clock,
+                                            color: Colors.grey,
+                                            size: 18,
+                                          ),
+                                        ),
+                                        title: Text(
+                                          place.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: isDark ? Colors.white : Colors.black,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        subtitle: Text(
+                                          place.address,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color:
+                                                isDark ? Colors.white54 : Colors.black54,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   if (!isLast)
                                     Divider(
                                       height: 1,
@@ -298,7 +351,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
             ),
           if (showRecentSearches && !isSelected)
             const SizedBox(height: 16),
-          if (!isSelected)
+          if (!isSelected && !isFocused && isEmpty)
             Material(
               color: isDark
                   ? Colors.white.withValues(alpha: 0.05)
@@ -647,7 +700,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
       ..._searchResults.where((apiPlace) => !localMatches.any((local) => local.name == apiPlace.name))
     ];
 
-    if (_isSearching && localMatches.isEmpty) {
+    if (_isSearching && combinedResults.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: _buildProfileStyleCard(
@@ -742,46 +795,106 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
             final index = entry.key;
             final place = entry.value;
             final isLast = index == combinedResults.length - 1;
+            
+            // Fetch provider safely BEFORE the gesture callback using the stable build context
+            final safeProvider = Provider.of<MapProvider>(context, listen: false);
+
             return Column(
               children: [
-                ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white12 : Colors.black12,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      CupertinoIcons.location_solid,
-                      color: Colors.grey,
-                      size: 18,
-                    ),
-                  ),
-                  title: Text(
-                    place.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isDark ? Colors.white : Colors.black,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                  subtitle: Text(
-                    place.address,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isDark ? Colors.white60 : Colors.black54,
-                      fontSize: 13,
-                    ),
-                  ),
-                  onTap: () {
+                Listener(
+                  behavior: HitTestBehavior.opaque,
+                  // Trigger INSTANTLY on touch, before any keyboard unfocus events can destroy the widget
+                  onPointerDown: (event) async {
+                    debugPrint("💥 RAW POINTER DOWN REGISTERED ON: ${place.name}");
                     AppHaptics.selectionClick();
-                    _submitSearch(place);
+                    
+                    try {
+                      // 1. Lock State FIRST using the pre-fetched safe provider
+                      safeProvider.setDestinationSelected(true);
+                      safeProvider.engine.setUIState(MapUIState.placeSelected);
+                      
+                      // Safely animate sheet to Pill View size
+                      if (_sheetController.isAttached) {
+                        _sheetController.animateTo(
+                          _safeMinSize,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOutCubic,
+                        );
+                      }
+                      
+                      // 2. NOW unfocus the keyboard
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      
+                      // 3. Process Coordinates
+                      double lat = place.latitude;
+                      double lng = place.longitude;
+                      
+                      if (lat == 0.0 || lng == 0.0) {
+                        if (place.placeId.isNotEmpty) {
+                          try {
+                            final exactCoords = await PlaceService.getPlaceDetails(place.placeId);
+                            if (exactCoords != null) {
+                              lat = exactCoords.latitude;
+                              lng = exactCoords.longitude;
+                            }
+                          } catch (_) {}
+                        }
+                      }
+                      
+                      // 4. Fly Camera
+                      if (lat != 0.0 && lng != 0.0) {
+                        safeProvider.setTargetDestination(LatLng(lat, lng));
+                        rebuildState(() => _selectedPlace = place);
+                        if (_sheetController.isAttached) {
+                          _sheetController.animateTo(
+                            _safeMinSize,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOutCubic,
+                          );
+                        }
+                        await safeProvider.flyToPlace(lat, lng);
+                      } else {
+                        safeProvider.engine.setUIState(MapUIState.idle); // Fallback
+                      }
+                    } catch (e) {
+                      debugPrint("🔥 CRASH CAUGHT: $e");
+                    }
                   },
+                  child: ListTile(
+                    contentPadding:
+                        const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white12 : Colors.black12,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        CupertinoIcons.location_solid,
+                        color: Colors.grey,
+                        size: 18,
+                      ),
+                    ),
+                    title: Text(
+                      place.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
+                    ),
+                    subtitle: Text(
+                      place.address,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isDark ? Colors.white60 : Colors.black54,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
                 ),
                 if (!isLast)
                   Divider(

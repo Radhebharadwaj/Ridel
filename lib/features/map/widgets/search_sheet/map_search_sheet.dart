@@ -23,6 +23,7 @@ import 'package:ridel/core/utils/ridel_bounce_button.dart';
 import 'package:ridel/features/map/models/place_model.dart';
 import 'package:ridel/features/map/services/master_search_service.dart';
 import 'package:ridel/features/map/services/map_share_service.dart';
+import 'package:ridel/core/services/place_service.dart';
 import 'package:ridel/features/map/services/place_api_services.dart';
 import 'package:ridel/features/map/services/route_visualizer.dart';
 import 'package:ridel/features/map/services/route_engine_service.dart';
@@ -107,7 +108,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   final ValueNotifier<double> _sheetProgress = ValueNotifier(0);
   Timer? _debounce;
-  String _lastQuery = '';
+
 
   bool _showDragHandle = true;
   Timer? _dragHandleTimer;
@@ -166,18 +167,15 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     try {
       final supabase = Supabase.instance.client;
       final user = supabase.auth.currentUser;
-      if (user == null) {
-        if (!mounted) return;
-        _showPremiumNotification('Please log in to save Home/Work locations.',
-            isError: true);
-        return;
+      
+      Map<String, dynamic>? data;
+      if (user != null) {
+        data = await supabase
+            .from('user_profiles')
+            .select('home_place, work_place')
+            .eq('id', user.id)
+            .maybeSingle();
       }
-
-      final data = await supabase
-          .from('user_profiles')
-          .select('home_place, work_place')
-          .eq('id', user.id)
-          .maybeSingle();
 
       if (!mounted) return; // 🛡️ CRITICAL ASYNC SAFETY
 
@@ -204,16 +202,19 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         AppHaptics.success();
       } else {
         setState(() => _selectedActionType = type);
-        _searchFocus.requestFocus();
+        
+        final mapProvider = Provider.of<MapProvider>(context, listen: false);
+        mapProvider.setMapSelectionMode(type);
 
+        // Collapse sheet to show the full map
         if (_sheetController.isAttached) {
-          _sheetController.animateTo(_safeMidSize,
+          _sheetController.animateTo(_safeMinSize,
               duration: const Duration(milliseconds: 350),
               curve: Curves.easeOutCubic);
         }
 
         _showPremiumNotification(
-            'Search and select a location to save as $type');
+            'Tap anywhere on the map to set $type');
       }
     } catch (e) {
       debugPrint("Smart Quick Action Error: $e");
@@ -243,6 +244,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     if (widget.isMapTabActive) unawaited(_slideController.forward());
 
     _searchFocus.addListener(() {
+      /* 🚀 CANCELLED THE FOCUS ASSASSIN
       _wakeUpDragHandle();
       if (_searchFocus.hasFocus) {
         if (!_showSearchList) setState(() => _showSearchList = true);
@@ -255,8 +257,15 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         try {
           _nearbyTileCtrl.collapse();
         } catch (_) {}
+        
+        final provider = Provider.of<MapProvider>(context, listen: false);
+        // ONLY revert to idle if we aren't actively looking at a selected place
+        if (provider.engine.mapUIState.value != MapUIState.placeSelected) {
+          provider.engine.setUIState(MapUIState.idle);
+        }
       }
       setState(() {});
+      */
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -299,18 +308,22 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     setState(() {
       _isSearching = true;
       _showSearchList = true;
-      // Clear previous results if the query is significantly different
-      if (!_lastQuery.startsWith(currentQuery) && !currentQuery.startsWith(_lastQuery)) {
-        _searchResults = [];
-      }
+      // Removed the aggressive _searchResults clearing to keep previous 
+      // suggestions visible while the debounce timer runs and fetches new ones.
     });
-    _lastQuery = currentQuery;
 
     _debounce?.cancel();
 
-    _debounce = Timer(const Duration(milliseconds: 300), () async {
+    _debounce = Timer(const Duration(milliseconds: 500), () async {
       debugPrint("🔍 DEBUG SEARCH: Sending query -> '$currentQuery'");
-      final results = await MasterSearchService().searchPlaces(currentQuery);
+      final globalLoc = Provider.of<GlobalLocationService>(context, listen: false);
+      final pos = globalLoc.currentPosition;
+      final latLng = pos != null ? LatLng(pos.latitude, pos.longitude) : null;
+      
+      final results = await MasterSearchService().searchPlaces(
+        currentQuery,
+        userLocation: latLng, // Pass user location for parameter broadening
+      );
       debugPrint("🔍 DEBUG SEARCH: Received ${results.length} results for '$currentQuery'");
       
       if (mounted && _searchCtrl.text.trim() == currentQuery) {
@@ -481,14 +494,39 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     String? categoryQuery,
   ]) async {
     AppHaptics.lightImpact();
-    _searchFocus.unfocus();
 
     if (categoryQuery != null) {
       widget.onSearchSubmitted(categoryQuery);
     } else {
-      final placeToSubmit = selectedPlace ??
+      PlaceModel? initialPlace = selectedPlace ??
           (_searchResults.isNotEmpty ? _searchResults.first : null);
-      if (placeToSubmit != null) {
+      if (initialPlace != null) {
+        PlaceModel placeToSubmit = initialPlace;
+        // --- NEW: Fetch exact coordinates if they are 0.0 ---
+        if (placeToSubmit.latitude == 0.0 || placeToSubmit.longitude == 0.0) {
+           if (placeToSubmit.placeId.isNotEmpty) {
+             try {
+               final exactCoords = await PlaceService.getPlaceDetails(placeToSubmit.placeId);
+               if (exactCoords != null && exactCoords.latitude != 0.0 && exactCoords.longitude != 0.0) {
+                  placeToSubmit = PlaceModel(
+                     placeId: placeToSubmit.placeId,
+                     name: placeToSubmit.name,
+                     address: placeToSubmit.address,
+                     latitude: exactCoords.latitude,
+                     longitude: exactCoords.longitude,
+                     categories: placeToSubmit.categories,
+                     rating: placeToSubmit.rating,
+                     openingHours: placeToSubmit.openingHours,
+                     phone: placeToSubmit.phone,
+                     imageUrls: placeToSubmit.imageUrls,
+                  );
+               }
+             } catch (_) {
+               // Silently fail to fallback
+             }
+           }
+        }
+
         setState(() {
           _selectedPlace = placeToSubmit;
           _showSearchList = false;
@@ -548,20 +586,24 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
         if (mounted) {
           try {
-            final mapProvider =
-                Provider.of<MapProvider>(context, listen: false);
-
-            // 🧭 Step 1: Fly camera to the place & drop a pin
-            mapProvider.flyToPlace(
-                placeToSubmit.latitude, placeToSubmit.longitude);
-
-            // 🧭 Step 2: Update state machine → placeSelected
-            // This triggers QuickActionButtons to morph to "Directions"
-            mapProvider.setDestinationSelected(true);
-
-            // 🚫 Do NOT auto-draw route here — the user must first pick a
-            // transport mode from the Walk/Bike/Car/Heavy buttons, which
-            // calls setNavMode → autoDrawRouteTo → routeDrawn.
+            if (placeToSubmit.latitude != 0.0 && placeToSubmit.longitude != 0.0) {
+              final validLatLng = LatLng(placeToSubmit.latitude, placeToSubmit.longitude);
+              
+              // Update provider with valid data
+              final provider = Provider.of<MapProvider>(context, listen: false);
+              provider.setTargetDestination(validLatLng);
+              
+              // Safely fly camera
+              await provider.flyToPlace(validLatLng.latitude, validLatLng.longitude);
+            } else {
+              // CRITICAL FALLBACK: If coordinates are STILL missing, abort flight 
+              // and revert UI to prevent a permanent locked/broken state.
+              debugPrint("🚨 ABORTING FLIGHT: Valid coordinates not found for this place.");
+              final provider = Provider.of<MapProvider>(context, listen: false);
+              provider.setTargetDestination(null);
+              provider.setDestinationSelected(false);
+              provider.engine.setUIState(MapUIState.idle);
+            }
           } catch (e) {
             debugPrint('⚠️ _submitSearch map wiring error: $e');
           }
@@ -596,6 +638,10 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         curve: Curves.easeOutCubic, // Apple snap
       );
     }
+    
+    _searchFocus.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+    
     Future.delayed(const Duration(milliseconds: 200), () {
       if (mounted) {
         _searchCtrl.clear();
@@ -646,12 +692,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         _currentRoute = null;
         _showSearchList = true;
       });
-      // Optionally shrink sheet down to min size naturally
-      if (_sheetController.isAttached && !_searchFocus.hasFocus) {
-        _sheetController.animateTo(_safeMinSize,
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeOutCubic);
-      }
+      // 🚀 FIX: Sheet should NOT collapse here! It should retain current size
+      // if (_sheetController.isAttached && !_searchFocus.hasFocus) {
+      //   _sheetController.animateTo(_safeMinSize,
+      //       duration: const Duration(milliseconds: 350),
+      //       curve: Curves.easeOutCubic);
+      // }
     }
 
     if (provider.tappedPlaceFromMap != null) {
@@ -909,43 +955,41 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   void _handleCancelTap() {
     AppHaptics.lightImpact();
-    if (_showDirections) {
-      _closeDirectionsView();
-      return;
-    }
-    final hasFocusOrText = _searchFocus.hasFocus || _searchCtrl.text.isNotEmpty;
-    final isExpanded = _sheetController.isAttached &&
-        _sheetController.size > (_safeMinSize + 0.05);
 
-    if (hasFocusOrText) {
-      _searchFocus.unfocus();
+    // 🚀 NEW: Clear map selection mode on cancel
+    final mapProvider = Provider.of<MapProvider>(context, listen: false);
+    if (mapProvider.mapSelectionPlaceType != null) {
+      mapProvider.setMapSelectionMode(null);
+      setState(() => _selectedActionType = null);
+    }
+
+    // Safely unfocus keyboard no matter what
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    bool hasText = _searchCtrl.text.isNotEmpty;
+    bool isExpanded = _sheetController.isAttached && _sheetController.size > (_safeMinSize + 0.05);
+    bool isActivelySearching = hasText || mapProvider.engine.mapUIState.value != MapUIState.idle || isExpanded;
+
+    if (isActivelySearching) {
+      // CONDITION 1: User is searching -> Reset to Idle State
       _searchCtrl.clear();
-      widget.onSearchSubmitted('');
+
       if (_sheetController.isAttached) {
-        unawaited(
-          _sheetController.animateTo(
-            _safeMinSize,
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeOutCubic,
-          ),
+        _sheetController.animateTo(
+          _safeMinSize, // EXACTLY matches minChildSize
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
         );
       }
-    } else if (isExpanded) {
-      if (_sheetController.isAttached) {
-        unawaited(
-          _sheetController.animateTo(
-            _safeMinSize,
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeOutCubic,
-          ),
-        );
+
+      if (mapProvider.engine.mapUIState.value != MapUIState.idle) {
+        mapProvider.engine.setUIState(MapUIState.idle);
       }
     } else {
-      _searchFocus.unfocus();
+      // CONDITION 2: User is already in Idle state -> Go Back to Dashboard!
       setState(() => _isSearchMode = false);
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => widget.onSearchModeChanged(false));
-      widget.onBackToPreviousTab();
+      WidgetsBinding.instance.addPostFrameCallback((_) => widget.onSearchModeChanged(false));
+      widget.onBackToPreviousTab(); // Ridel's specific routing method
     }
   }
 

@@ -111,8 +111,7 @@ class PlaceEnrichmentService {
     try {
       final response = await _fetchWithRetry(url);
       if (response != null && response.statusCode == 200) {
-        // 🚀 FIX: Isolate.run prevents UI stutter
-        final PlaceModel? place = await Isolate.run(
+        final PlaceModel? place = await _runInIsolate(
             () => _parseOlaReverseSync(response.body, lat, lng));
         if (place != null) {
           _saveToCache(_geocodeCache, cacheKey, place);
@@ -147,7 +146,7 @@ class PlaceEnrichmentService {
       }
 
       if (response != null && response.statusCode == 200) {
-        return await Isolate.run(() => _parseWikiSync(response!.body));
+        return await _runInIsolate(() => _parseWikiSync(response!.body));
       }
     } catch (_) {}
     return null;
@@ -167,7 +166,7 @@ class PlaceEnrichmentService {
       ).timeout(_apiTimeout);
 
       if (response.statusCode == 200) {
-        return await Isolate.run(() => _parseOSMSync(response.body));
+        return await _runInIsolate(() => _parseOSMSync(response.body));
       }
     } catch (_) {}
     return null;
@@ -200,6 +199,13 @@ class PlaceEnrichmentService {
   // =========================================================================
   // 🧹 MEMORY MANAGEMENT
   // =========================================================================
+
+  static Future<T> _runInIsolate<T>(T Function() callback) async {
+    if (kIsWeb) {
+      return callback();
+    }
+    return await Isolate.run(callback);
+  }
 
   void _saveToCache<T>(LinkedHashMap<String, T> cache, String key, T item) {
     if (cache.length >= _maxCacheSize) cache.remove(cache.keys.first);

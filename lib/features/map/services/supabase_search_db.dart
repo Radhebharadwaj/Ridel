@@ -31,7 +31,18 @@ class SupabaseSearchService {
   /// 🔥 BACKGROUND MAGIC: Saves successful searches
   Future<void> logSuccessfulSearch(PlaceModel place) async {
     try {
-      await _supabase.rpc('log_smart_place_search', params: place.toJson());
+      final params = <String, dynamic>{
+        'p_address': place.address,
+        'p_categories': place.categories.isNotEmpty
+            ? place.categories.join(', ')
+            : 'unknown',
+        'p_lat': place.latitude,
+        'p_lng': place.longitude,
+        'p_name': place.name,
+        'p_place_id': place.placeId,
+      };
+
+      await _supabase.rpc('log_smart_place_search', params: params);
       if (kDebugMode) print("✅ SILENT SYNC: Place '${place.name}' logged!");
     } catch (e) {
       if (kDebugMode) print("❌ SILENT SYNC FAILED: $e");

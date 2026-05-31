@@ -118,7 +118,7 @@ class PlaceIntelligenceService {
       );
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> batchData = await Isolate.run(
+        final Map<String, dynamic> batchData = await _runMaybeInIsolate(
           () => json.decode(response.body) as Map<String, dynamic>,
         );
         for (final entry in batchData.entries) {
@@ -156,6 +156,13 @@ class PlaceIntelligenceService {
     _pendingRequests.clear();
   }
 
+  static Future<T> _runMaybeInIsolate<T>(T Function() callback) async {
+    if (kIsWeb) {
+      return callback();
+    }
+    return await Isolate.run(callback);
+  }
+
   // ────────── Private Helpers ──────────
 
   Future<PlaceIntelligence?> _performNetworkFetch(
@@ -182,7 +189,7 @@ class PlaceIntelligenceService {
       );
 
       if (response.statusCode == 200) {
-        final data = await Isolate.run(
+        final data = await _runMaybeInIsolate(
           () => json.decode(response.body) as Map<String, dynamic>,
         );
         if (data.isEmpty) return null;
@@ -206,7 +213,7 @@ class PlaceIntelligenceService {
 
   Future<void> _persistToDisk(String key, _CacheEntry entry) async {
     try {
-      final jsonStr = await Isolate.run(() => json.encode(entry.toJson()));
+      final jsonStr = await _runMaybeInIsolate(() => json.encode(entry.toJson()));
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('place_cache_$key', jsonStr);
     } catch (e) {
@@ -235,7 +242,7 @@ class PlaceIntelligenceService {
       final jsonStr = prefs.getString(key);
       if (jsonStr == null) continue;
       try {
-        final data = await Isolate.run(
+        final data = await _runMaybeInIsolate(
             () => json.decode(jsonStr) as Map<String, dynamic>);
         final entry = _CacheEntry.fromJson(data);
         final cacheKey = key.substring('place_cache_'.length);
@@ -252,8 +259,8 @@ class PlaceIntelligenceService {
     final jsonStr = prefs.getString('place_cache_$key');
     if (jsonStr == null) return null;
     try {
-      final data =
-          await Isolate.run(() => json.decode(jsonStr) as Map<String, dynamic>);
+      final data = await _runMaybeInIsolate(
+          () => json.decode(jsonStr) as Map<String, dynamic>);
       return _CacheEntry.fromJson(data);
     } catch (_) {
       await prefs.remove('place_cache_$key');
