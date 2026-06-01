@@ -332,18 +332,31 @@ class MapProvider extends ChangeNotifier {
 
       try {
         await controller!.addGeoJsonSource('route-source-$i', geoJson);
+        final bool isWalking = currentNavMode == 'walking';
+        LineLayerProperties lineProperties;
+        if (isWalking) {
+          lineProperties = LineLayerProperties(
+            lineColor: isPrimary ? "#0A84FF" : "#A1A1AA",
+            lineWidth: isPrimary ? 4.5 : 3.0,
+            lineCap: "round",
+            lineJoin: "round",
+            lineDasharray: [0.0, 2.5],
+            lineOpacity: isPrimary ? 1.0 : 0.6,
+          );
+        } else {
+          lineProperties = LineLayerProperties(
+            lineColor: isPrimary ? "#0A84FF" : "#8E8E93",
+            lineWidth: isPrimary ? 6.5 : 4.0,
+            lineCap: "round",
+            lineJoin: "round",
+            lineOpacity: isPrimary ? 1.0 : 0.6,
+          );
+        }
+
         await controller!.addLineLayer(
           'route-source-$i',
           'route-layer-$i',
-          LineLayerProperties(
-            lineColor:
-                isPrimary ? '#0A84FF' : '#8E8E93', // Premium Blue vs Ghost Grey
-            lineWidth: isPrimary ? 6.5 : 4.0, // Primary is thicker
-            lineOpacity:
-                isPrimary ? 1.0 : 0.6, // Alternatives are slightly transparent
-            lineCap: 'round',
-            lineJoin: 'round',
-          ),
+          lineProperties,
         );
 
         // 3. ADD TIME LABELS FOR ALL ROUTES
@@ -403,6 +416,60 @@ class MapProvider extends ChangeNotifier {
       );
     }
 
+    // 6. DRAW THE "WALK TO ROAD" AND "ROAD TO DESTINATION" CONNECTORS
+    if (allRoutes.isNotEmpty && allRoutes[0].isNotEmpty) {
+      try {
+        final List<List<List<double>>> connectorLines = [];
+        final pos = engine.locService?.currentPosition;
+        
+        // 1. ORIGIN GAP: User Location -> Start of Route
+        if (pos != null) {
+          final LatLng routeStart = allRoutes[0].first;
+          connectorLines.add([
+            [pos.longitude, pos.latitude],
+            [routeStart.longitude, routeStart.latitude]
+          ]);
+        }
+
+        // 2. DESTINATION GAP: End of Route -> Destination Pin
+        if (targetDestination != null) {
+          final LatLng routeEnd = allRoutes[0].last;
+          connectorLines.add([
+            [routeEnd.longitude, routeEnd.latitude],
+            [targetDestination!.longitude, targetDestination!.latitude]
+          ]);
+        }
+
+        // Draw the connectors if any gaps exist
+        if (connectorLines.isNotEmpty) {
+          try { await controller!.removeLayer('connectors-layer'); } catch (_) {}
+          try { await controller!.removeSource('connectors-source'); } catch (_) {}
+
+          await controller!.addGeoJsonSource("connectors-source", {
+            "type": "Feature",
+            "geometry": {
+              "type": "MultiLineString",
+              "coordinates": connectorLines
+            }
+          });
+          
+          await controller!.addLineLayer(
+            "connectors-source", 
+            "connectors-layer",
+            LineLayerProperties(
+              lineColor: "#0A84FF", // Match the primary route color
+              lineWidth: 3.5,
+              lineCap: "round",
+              lineJoin: "round",
+              lineDasharray: [0.0, 2.5], // Premium circular dots
+            )
+          );
+        }
+      } catch (e) {
+        debugPrint("⚠️ Failed to draw route connectors: $e");
+      }
+    }
+
     notifyListeners();
   }
 
@@ -414,6 +481,9 @@ class MapProvider extends ChangeNotifier {
         try { await controller!.removeLayer('eta-layer-$i'); } catch (_) {}
         try { await controller!.removeSource('eta-source-$i'); } catch (_) {}
       }
+      
+      try { await controller!.removeLayer('connectors-layer'); } catch (_) {}
+      try { await controller!.removeSource('connectors-source'); } catch (_) {}
 
       _drawnRoutesCount = 0;
       if (!preserveState) {
@@ -458,7 +528,10 @@ class MapProvider extends ChangeNotifier {
         try { await controller!.removeSource('eta-source-$i'); } catch (_) {}
       }
       
-      // Also clear destination pin layer if it exists
+      // Also clear destination pin circle if it exists
+      await clearNativeDestinationPin();
+      
+      // Keep legacy cleanup just in case
       try { await controller!.removeLayer('selected-destination-layer'); } catch (_) {}
       try { await controller!.removeSource('selected-destination-source'); } catch (_) {}
       

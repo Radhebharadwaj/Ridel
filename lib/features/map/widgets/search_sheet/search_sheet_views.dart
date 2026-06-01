@@ -35,10 +35,6 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     required Color iconColor,
     required VoidCallback onTap,
   }) {
-    final Color glassBaseColor = isDark
-        ? const Color(0xFF1E1E1E).withValues(alpha: 0.65)
-        : Colors.white.withValues(alpha: 0.75);
-
     return RidelBounceButton(
       onTap: () {
         AppHaptics.lightImpact();
@@ -52,7 +48,24 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
             height: 52,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: glassBaseColor,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.20),
+                  Colors.white.withValues(alpha: 0.10),
+                  Colors.white.withValues(alpha: 0.06),
+                ],
+              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 20,
+                  spreadRadius: -2,
+                  offset: const Offset(0, 14),
+                ),
+              ],
             ),
             child: Icon(icon, size: 24, color: iconColor),
           ),
@@ -1008,8 +1021,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
             final place = entry.value;
             final isLast = index == combinedResults.length - 1;
             
-            // Fetch provider safely BEFORE the gesture callback using the stable build context
-            final safeProvider = Provider.of<MapProvider>(context, listen: false);
+            
 
             return Column(
               children: [
@@ -1019,69 +1031,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                   onPointerDown: (event) async {
                     debugPrint("💥 RAW POINTER DOWN REGISTERED ON: ${place.name}");
                     AppHaptics.selectionClick();
-                    
-                    try {
-                      // 1. SAVE THE SEARCH TO HISTORY
-                      safeProvider.saveNewSearch(place);
-
-                      // 2. Lock State FIRST using the pre-fetched safe provider
-                      safeProvider.setDestinationSelected(true);
-                      safeProvider.engine.setUIState(MapUIState.placeSelected);
-                      
-                      // Safely animate sheet to Pill View size
-                      if (_sheetController.isAttached) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (_sheetController.isAttached) {
-                            _sheetController.animateTo(
-                              _safeMinSize,
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeOutCubic,
-                            );
-                          }
-                        });
-                      }
-                      
-                      // 2. NOW unfocus the keyboard
-                      FocusManager.instance.primaryFocus?.unfocus();
-                      
-                      // 3. Process Coordinates
-                      double lat = place.latitude;
-                      double lng = place.longitude;
-                      
-                      if (lat == 0.0 || lng == 0.0) {
-                        if (place.placeId.isNotEmpty) {
-                          try {
-                            final exactCoords = await PlaceService.getPlaceDetails(place.placeId);
-                            if (exactCoords != null) {
-                              lat = exactCoords.latitude;
-                              lng = exactCoords.longitude;
-                            }
-                          } catch (_) {}
-                        }
-                      }
-                      
-                      // 4. Fly Camera
-                      if (lat != 0.0 && lng != 0.0) {
-                        safeProvider.setTargetDestination(LatLng(lat, lng));
-                        rebuildState(() => _selectedPlace = place);
-                        if (_sheetController.isAttached) {
-                          _sheetController.animateTo(
-                            _safeMinSize,
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeOutCubic,
-                          );
-                        }
-                        // Drop the native Red Circle at the selected place coordinates
-                        if (lat != 0.0 && lng != 0.0) {
-                          safeProvider.addNativeDestinationPin(LatLng(lat, lng));
-                        }
-                        await safeProvider.flyToPlace(lat, lng);
-                      } else {
-                        safeProvider.engine.setUIState(MapUIState.idle); // Fallback
-                      }
-                    } catch (e) {
-                      debugPrint("🔥 CRASH CAUGHT: $e");
-                    }
+                    await _selectPlaceFromList(place);
                   },
                   child: ListTile(
                     contentPadding:

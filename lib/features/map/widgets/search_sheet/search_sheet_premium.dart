@@ -110,7 +110,7 @@ extension _PremiumDetailsExt on _MapSearchSheetState {
                 onPressed: () {
                   AppHaptics.lightImpact();
                   final provider = Provider.of<MapProvider>(context, listen: false);
-                  provider.cancelAndClearRoute();
+                  _handleCancelRoute(context, provider);
                 },
                 constraints: const BoxConstraints(),
                 padding: EdgeInsets.zero,

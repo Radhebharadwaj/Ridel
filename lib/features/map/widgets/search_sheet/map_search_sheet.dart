@@ -377,7 +377,112 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     }
   }
 
+  void _handleCancelRoute(BuildContext context, MapProvider provider) {
+    // 1. Cache the ENTIRE necessary state BEFORE clearing it
+    final cachedPlace = _selectedPlace;
+    final cachedCoords = provider.targetDestination;
+    final cachedNavMode = provider.currentNavMode;
+    final wasRouteCalculated = provider.isRouteCalculated;
+    
+    // 2. Clear the UI and Map
+    provider.cancelAndClearRoute();
+    
+    // 3. Show the Undo Toast
+    ToastService.showActionToast(
+      context, 
+      message: "Route cleared", 
+      actionLabel: "UNDO", 
+      onActionTap: () async {
+        AppHaptics.selectionClick();
+        
+        // RESTORE LOGIC:
+        if (cachedPlace != null) {
+          // A. Restore the basic place data and pin
+          await _selectPlaceFromList(cachedPlace); 
+          
+          // B. Restore the route if it was previously active
+          if (wasRouteCalculated) {
+            provider.currentNavMode = cachedNavMode;
+            if (!context.mounted) return;
+            await provider.calculateAndDrawNativeRoute(context, cachedNavMode);
+          }
+        } else if (cachedCoords != null) {
+          // Fallback manual restore
+          provider.addNativeDestinationPin(cachedCoords);
+          provider.setTargetDestination(cachedCoords);
+          provider.setDestinationSelected(true);
+          provider.engine.setUIState(MapUIState.placeSelected);
+        }
+      }
+    );
+  }
 
+  Future<void> _selectPlaceFromList(PlaceModel place) async {
+    final safeProvider = Provider.of<MapProvider>(context, listen: false);
+    
+    try {
+      // 1. SAVE THE SEARCH TO HISTORY
+      safeProvider.saveNewSearch(place);
+
+      // 2. Lock State FIRST
+      safeProvider.setDestinationSelected(true);
+      safeProvider.engine.setUIState(MapUIState.placeSelected);
+      
+      // Safely animate sheet to Pill View size
+      if (_sheetController.isAttached) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_sheetController.isAttached) {
+            _sheetController.animateTo(
+              _safeMinSize,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+            );
+          }
+        });
+      }
+      
+      // 3. Process Coordinates
+      double lat = place.latitude;
+      double lng = place.longitude;
+      
+      if (lat == 0.0 || lng == 0.0) {
+        if (place.placeId.isNotEmpty) {
+          try {
+            final exactCoords = await PlaceService.getPlaceDetails(place.placeId);
+            if (exactCoords != null) {
+              lat = exactCoords.latitude;
+              lng = exactCoords.longitude;
+            }
+          } catch (_) {}
+        }
+      }
+      
+      // 4. Fly Camera
+      if (lat != 0.0 && lng != 0.0) {
+        safeProvider.setTargetDestination(LatLng(lat, lng));
+        setState(() => _selectedPlace = place);
+        if (_sheetController.isAttached) {
+          _sheetController.animateTo(
+            _safeMinSize,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+          );
+        }
+        
+        // Drop the native Red Circle at the selected place coordinates
+        safeProvider.addNativeDestinationPin(LatLng(lat, lng));
+        await safeProvider.flyToPlace(lat, lng);
+      } else {
+        if (mounted) {
+          ToastService.showError(context, "Location coordinates not found.");
+        }
+      }
+      
+      widget.onSearchSubmitted(place.name);
+    } catch (e) {
+      debugPrint("💥 CRITICAL ERROR DURING PLACE SELECTION: $e");
+    }
+  }
 
   Future<void> _handleSearchExecution(String query, [PlaceModel? savedPlace]) async {
     _searchFocus.unfocus();

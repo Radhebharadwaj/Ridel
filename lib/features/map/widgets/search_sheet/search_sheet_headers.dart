@@ -508,7 +508,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                 bgColor: mattePillBase,
                 onTap: () {
                   final provider = Provider.of<MapProvider>(context, listen: false);
-                  provider.cancelAndClearRoute();
+                  _handleCancelRoute(context, provider);
                 },
               ),
             ],
@@ -613,8 +613,29 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                           isDense: true,
                           contentPadding: const EdgeInsets.only(bottom: 2),
                         ),
-                        onSubmitted: (value) {
-                          _handleSearchExecution(value);
+                        onSubmitted: (value) async {
+                          FocusScope.of(context).unfocus();
+                          final query = value.trim();
+                          if (query.isEmpty) return;
+
+                          List<PlaceModel> suggestions = List.from(_searchResults);
+                          
+                          if (suggestions.isEmpty) {
+                            final globalLoc = Provider.of<GlobalLocationService>(context, listen: false);
+                            final pos = globalLoc.currentPosition;
+                            final latLng = pos != null ? LatLng(pos.latitude, pos.longitude) : null;
+                            suggestions = await MasterSearchService().searchPlaces(query, userLocation: latLng);
+                          }
+
+                          if (!mounted) return;
+
+                          if (suggestions.isNotEmpty) {
+                            final topSuggestion = suggestions.first;
+                            AppHaptics.selectionClick();
+                            await _selectPlaceFromList(topSuggestion);
+                          } else {
+                            ToastService.showInfo(context, "No places found for '$query'");
+                          }
                         },
                       ),
                     ),
