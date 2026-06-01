@@ -98,89 +98,89 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 // ----------------------------------------------------------------------
 // 🚀 MAIN FUNCTION
 // ----------------------------------------------------------------------
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-    debugPrint('⚠️ FLUTTER UI ERROR: ${details.exception}');
-  };
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      debugPrint('⚠️ FLUTTER UI ERROR: ${details.exception}');
+    };
 
-  PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('🔥 PLATFORM ERROR: $error');
-    return true; 
-  };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      debugPrint('🔥 PLATFORM ERROR: $error');
+      return true; 
+    };
 
-  ThemeService.init();
-  await AppHaptics.init();
+    ThemeService.init();
+    await AppHaptics.init();
 
-  // 1. Load Environment Variables
-  try {
-    await dotenv.load(fileName: ".env");
-  } catch (e) {
-    debugPrint("❌ Env Error: $e");
-  }
+    // 1. Load Environment Variables
+    try {
+      await dotenv.load(fileName: ".env");
+    } catch (e) {
+      debugPrint("❌ Env Error: $e");
+    }
 
-  // 2. Web Database Factory
-  if (kIsWeb) {
-    databaseFactory = databaseFactoryFfiWeb;
-  }
-
-  // 3. 🔥 FIREBASE INITIALIZATION (Dual Platform Support)
-  try {
+    // 2. Web Database Factory
     if (kIsWeb) {
-      // 🚀 Web Setup with your keys
-      await Firebase.initializeApp(
-        options: const FirebaseOptions(
-          apiKey: "AIzaSyCylXea35MHpJ4SlcODDAgB5wj6h5SgnzY",
-          authDomain: "pixra-ridel.firebaseapp.com",
-          projectId: "pixra-ridel",
-          storageBucket: "pixra-ridel.firebasestorage.app",
-          messagingSenderId: "20390923828",
-          appId: "1:20390923828:web:8206196e9cfd1b16790461",
-          measurementId: "G-NK274DS7S2",
-        ),
+      databaseFactory = databaseFactoryFfiWeb;
+    }
+
+    // 3. 🔥 FIREBASE INITIALIZATION (Dual Platform Support)
+    try {
+      if (kIsWeb) {
+        // 🚀 Web Setup with your keys
+        await Firebase.initializeApp(
+          options: const FirebaseOptions(
+            apiKey: "AIzaSyCylXea35MHpJ4SlcODDAgB5wj6h5SgnzY",
+            authDomain: "pixra-ridel.firebaseapp.com",
+            projectId: "pixra-ridel",
+            storageBucket: "pixra-ridel.firebasestorage.app",
+            messagingSenderId: "20390923828",
+            appId: "1:20390923828:web:8206196e9cfd1b16790461",
+            measurementId: "G-NK274DS7S2",
+          ),
+        );
+      } else {
+        // 🚀 Mobile Setup (Uses google-services.json)
+        await Firebase.initializeApp();
+        FirebaseMessaging.onBackgroundMessage(
+            _firebaseMessagingBackgroundHandler);
+      }
+      debugPrint("🔥 Firebase Ready!");
+    } catch (e) {
+      debugPrint("❌ Firebase Error: $e");
+    }
+
+    // 4. SUPABASE INITIALIZATION
+    try {
+      await Supabase.initialize(
+        url: AppConfig.supabaseUrl,
+        anonKey: AppConfig.supabaseAnonKey,
       );
-    } else {
-      // 🚀 Mobile Setup (Uses google-services.json)
-      await Firebase.initializeApp();
-      FirebaseMessaging.onBackgroundMessage(
-          _firebaseMessagingBackgroundHandler);
-    }
-    debugPrint("🔥 Firebase Ready!");
-  } catch (e) {
-    debugPrint("❌ Firebase Error: $e");
-  }
 
-  // 4. SUPABASE INITIALIZATION
-  try {
-    await Supabase.initialize(
-      url: AppConfig.supabaseUrl,
-      anonKey: AppConfig.supabaseAnonKey,
+      final supabaseClient = Supabase.instance.client;
+      if (supabaseClient.auth.currentSession != null) {
+        DatabaseHelper.instance.initBackgroundSync();
+        // 🚀 Fetch/Save FCM Token & Permissions
+        AuthService().setupAndSaveDeviceToken();
+      }
+    } catch (e) {
+      debugPrint("❌ Supabase Error: $e");
+    }
+
+    MetroService().initialize();
+    await NotificationService().init();
+
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+      ),
     );
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
-    final supabaseClient = Supabase.instance.client;
-    if (supabaseClient.auth.currentSession != null) {
-      DatabaseHelper.instance.initBackgroundSync();
-      // 🚀 Fetch/Save FCM Token & Permissions
-      AuthService().setupAndSaveDeviceToken();
-    }
-  } catch (e) {
-    debugPrint("❌ Supabase Error: $e");
-  }
-
-  MetroService().initialize();
-  await NotificationService().init();
-
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      systemNavigationBarColor: Colors.transparent,
-    ),
-  );
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-
-  runZonedGuarded(() {
     runApp(
       MultiProvider(
         providers: [

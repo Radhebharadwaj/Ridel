@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:math' show Point;
 import 'dart:convert';
+import 'dart:ui' as ui;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,7 +25,6 @@ class MapProvider extends ChangeNotifier {
   final MapEngine engine = MapEngine();
   final RouteEngineService _routingService = RouteEngineService();
 
-
   MapLibreMapController? get controller => engine.mapController;
   bool get _isMapReady => controller != null;
 
@@ -37,7 +38,7 @@ class MapProvider extends ChangeNotifier {
     if (controller == null) return;
 
     // 🚨 1. STRICT CLEANUP: Wipe out the old route and reset UI state immediately
-    await clearNativeRoute(); 
+    await clearNativeRoute();
     isRouteCalculated = false; // Ensure the Start button reverts to Directions
 
     // 🚨 2. STRICT CLEANUP: Remove the old pin
@@ -72,22 +73,25 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
-
   // State flag for UI
   bool isRouteCalculated = false;
 
-  Future<void> calculateAndDrawNativeRoute(BuildContext context, String mode) async {
+  Future<void> calculateAndDrawNativeRoute(
+      BuildContext context, String mode) async {
     debugPrint("🚀 [ROUTE ENGINE] Triggered for mode: $mode");
-    
+
     if (targetDestination == null) {
       debugPrint("❌ [ROUTE ENGINE] Failed: targetDestination is null.");
       return;
     }
 
     // 🚨 CRITICAL FIX: We must use the user's actual live location, NOT the camera position.
-    final locService = Provider.of<GlobalLocationService>(context, listen: false);
+    final locService =
+        Provider.of<GlobalLocationService>(context, listen: false);
     final currentPos = locService.currentPosition;
-    LatLng? origin = currentPos != null ? LatLng(currentPos.latitude, currentPos.longitude) : null;
+    LatLng? origin = currentPos != null
+        ? LatLng(currentPos.latitude, currentPos.longitude)
+        : null;
 
     if (origin == null) {
       // 2. FALLBACK: Fetch fresh GPS location to guarantee Ola API gets an origin!
@@ -100,26 +104,31 @@ class MapProvider extends ChangeNotifier {
       }
     }
 
-    debugPrint("📍 [ROUTE ENGINE] Origin: ${origin.latitude}, ${origin.longitude}");
-    debugPrint("📍 [ROUTE ENGINE] Destination: ${targetDestination!.latitude}, ${targetDestination!.longitude}");
+    debugPrint(
+        "📍 [ROUTE ENGINE] Origin: ${origin.latitude}, ${origin.longitude}");
+    debugPrint(
+        "📍 [ROUTE ENGINE] Destination: ${targetDestination!.latitude}, ${targetDestination!.longitude}");
 
     try {
-      // Fetch route from Ola Maps. 
+      // Fetch route from Ola Maps.
       debugPrint("⏳ [ROUTE ENGINE] Waiting for Ola Maps API...");
-      final routeResult = await _routingService.getRoute(origin, targetDestination!, mode: mode);
-      
+      final routeResult = await _routingService
+          .getRoute(origin, targetDestination!, mode: mode);
+
       if (routeResult != null && routeResult.allRoutesCoordinates.isNotEmpty) {
-        debugPrint("✅ [ROUTE ENGINE] Ola API Success! Received ${routeResult.allRoutesCoordinates.first.length} points.");
-        
+        debugPrint(
+            "✅ [ROUTE ENGINE] Ola API Success! Received ${routeResult.allRoutesCoordinates.first.length} points.");
+
         _currentRouteResult = routeResult;
         await drawNativeRoute(routeResult.allRoutesCoordinates);
         debugPrint("✅ [ROUTE ENGINE] Native MapLibre Draw Success!");
-        
+
         isRouteCalculated = true;
         engine.setUIState(MapUIState.routeDrawn);
         notifyListeners();
       } else {
-        debugPrint("⚠️ [ROUTE ENGINE] Ola API returned empty coordinates or null.");
+        debugPrint(
+            "⚠️ [ROUTE ENGINE] Ola API returned empty coordinates or null.");
       }
     } catch (e) {
       debugPrint("💥 [ROUTE ENGINE] CRASH: $e");
@@ -154,7 +163,8 @@ class MapProvider extends ChangeNotifier {
     // 3. THE MAGIC: Lock camera to compass and change puck to Directional Triangle
     try {
       // TrackingCompass makes the map rotate automatically as the device rotates
-      await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.trackingCompass);
+      await controller!
+          .updateMyLocationTrackingMode(MyLocationTrackingMode.trackingCompass);
     } catch (e) {
       debugPrint("⚠️ Native Tracking Mode Error: $e");
     }
@@ -164,23 +174,26 @@ class MapProvider extends ChangeNotifier {
 
   Future<void> _setTransitLayersOpacity(double opacity) async {
     if (controller == null) return;
-    
+
     // Dynamically track exact layer IDs if empty
     if (activeMetroLayerIds.isEmpty) {
       final allLayers = await controller!.getLayerIds();
-      activeMetroLayerIds = allLayers.map((e) => e.toString()).where((id) => 
-        id.toLowerCase().contains('transit') || 
-        id.toLowerCase().contains('railway') || 
-        id.toLowerCase().contains('metro')
-      ).toList();
-      debugPrint("🚇 Tracked Exact Metro/Transit Layer IDs: $activeMetroLayerIds");
+      activeMetroLayerIds = allLayers
+          .map((e) => e.toString())
+          .where((id) =>
+              id.toLowerCase().contains('transit') ||
+              id.toLowerCase().contains('railway') ||
+              id.toLowerCase().contains('metro'))
+          .toList();
+      debugPrint(
+          "🚇 Tracked Exact Metro/Transit Layer IDs: $activeMetroLayerIds");
     }
 
     if (activeMetroLayerIds.isEmpty) {
       debugPrint("⚠️ Cannot fade metro: Layer IDs list is still empty!");
       return;
     }
-    
+
     for (String layerId in activeMetroLayerIds) {
       try {
         // Use setLayerProperties for guaranteed results natively
@@ -196,27 +209,34 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<bool> handleRouteClick(Point<double> point, LatLng coordinates) async {
-    if (controller == null || _drawnRoutesCount <= 1 || _currentRouteResult == null) {
+    if (controller == null ||
+        _drawnRoutesCount <= 1 ||
+        _currentRouteResult == null) {
       return false;
     }
-    
+
     // Alt layers start from index 1 (index 0 is primary)
-    List<String> altLayerIds = List.generate(_drawnRoutesCount - 1, (i) => 'route-layer-${i + 1}');
-    final features = await controller!.queryRenderedFeatures(point, altLayerIds, null);
-    
+    List<String> altLayerIds =
+        List.generate(_drawnRoutesCount - 1, (i) => 'route-layer-${i + 1}');
+    final features =
+        await controller!.queryRenderedFeatures(point, altLayerIds, null);
+
     if (features.isNotEmpty) {
       AppHaptics.selectionClick();
       final feature = features.first;
       int tappedIndex = 0;
-      if (feature is Map && feature['properties'] is Map && feature['properties']['index'] != null) {
+      if (feature is Map &&
+          feature['properties'] is Map &&
+          feature['properties']['index'] != null) {
         tappedIndex = feature['properties']['index'];
       }
-      
+
       final tappedAlt = _currentRouteResult!.alternativeRoutes[tappedIndex];
       final currentPrimary = _currentRouteResult!.coordinates;
-      
+
       // Swap routes visually
-      List<List<LatLng>> updatedRoutes = List.from(_currentRouteResult!.allRoutesCoordinates);
+      List<List<LatLng>> updatedRoutes =
+          List.from(_currentRouteResult!.allRoutesCoordinates);
       updatedRoutes[0] = tappedAlt;
       updatedRoutes[tappedIndex + 1] = currentPrimary;
 
@@ -230,7 +250,7 @@ class MapProvider extends ChangeNotifier {
         fetchedAt: _currentRouteResult!.fetchedAt,
         trafficGradientStops: _currentRouteResult!.trafficGradientStops,
       );
-      
+
       _currentRouteResult = newResult;
       await drawNativeRoute(newResult.allRoutesCoordinates);
       return true; // Handled ghost line tap
@@ -240,22 +260,64 @@ class MapProvider extends ChangeNotifier {
 
   int _drawnRoutesCount = 0;
   RouteResult? _currentRouteResult;
+  RouteResult? get currentRouteResult => _currentRouteResult;
+
+  // Smart helper to stagger label placements to prevent overlaps
+  LatLng _getStaggeredMidpoint(List<LatLng> coords, int routeIndex) {
+    if (coords.isEmpty) return const LatLng(0, 0);
+    
+    double fraction = 0.5; // Primary route stays exactly in the middle (50%)
+    if (routeIndex == 1) fraction = 0.40; // 1st alternate sits a bit earlier (40%)
+    if (routeIndex == 2) fraction = 0.60; // 2nd alternate sits a bit further (60%)
+    if (routeIndex > 2) fraction = 0.35;  // Fallback for extra routes
+    
+    int targetIndex = (coords.length * fraction).floor();
+    
+    // Safety bounds
+    if (targetIndex >= coords.length) targetIndex = coords.length - 1;
+    if (targetIndex < 0) targetIndex = 0;
+    
+    return coords[targetIndex];
+  }
+
+  // Method to handle route swapping
+  Future<void> swapRoute(int tappedIndex) async {
+    if (_currentRouteResult == null ||
+        tappedIndex == 0 ||
+        tappedIndex >= _currentRouteResult!.allRoutesCoordinates.length) {
+      return;
+    }
+
+    AppHaptics.selectionClick();
+
+    // Swap the coordinates and raw routes in the result object
+    final tappedCoords =
+        _currentRouteResult!.allRoutesCoordinates.removeAt(tappedIndex);
+    _currentRouteResult!.allRoutesCoordinates.insert(0, tappedCoords);
+
+    // Redraw the map with the new order (Index 0 is always drawn as Primary Blue)
+    await drawNativeRoute(_currentRouteResult!.allRoutesCoordinates);
+    notifyListeners();
+  }
+
+
 
   Future<void> drawNativeRoute(List<List<LatLng>> allRoutes) async {
     if (controller == null || allRoutes.isEmpty) return;
 
     // 1. Clear previous route if it exists
     await clearNativeRoute(preserveState: true);
-    
+
     // 🚨 Activate Focus Mode (Dim transit lines to 15% opacity)
     await _setTransitLayersOpacity(0.15);
-    
+
     _drawnRoutesCount = allRoutes.length;
 
     for (int i = 0; i < allRoutes.length; i++) {
       final routePoints = allRoutes[i];
       final isPrimary = i == 0; // First route is primary
-      final coordinates = routePoints.map((p) => [p.longitude, p.latitude]).toList();
+      final coordinates =
+          routePoints.map((p) => [p.longitude, p.latitude]).toList();
 
       final geoJson = {
         "type": "FeatureCollection",
@@ -263,10 +325,7 @@ class MapProvider extends ChangeNotifier {
           {
             "type": "Feature",
             "properties": {"index": i},
-            "geometry": {
-              "type": "LineString",
-              "coordinates": coordinates
-            }
+            "geometry": {"type": "LineString", "coordinates": coordinates}
           }
         ]
       };
@@ -274,15 +333,56 @@ class MapProvider extends ChangeNotifier {
       try {
         await controller!.addGeoJsonSource('route-source-$i', geoJson);
         await controller!.addLineLayer(
-          'route-source-$i', 
+          'route-source-$i',
           'route-layer-$i',
           LineLayerProperties(
-            lineColor: isPrimary ? '#0A84FF' : '#8E8E93', // Premium Blue vs Ghost Grey
+            lineColor:
+                isPrimary ? '#0A84FF' : '#8E8E93', // Premium Blue vs Ghost Grey
             lineWidth: isPrimary ? 6.5 : 4.0, // Primary is thicker
-            lineOpacity: isPrimary ? 1.0 : 0.6, // Alternatives are slightly transparent
+            lineOpacity:
+                isPrimary ? 1.0 : 0.6, // Alternatives are slightly transparent
             lineCap: 'round',
             lineJoin: 'round',
           ),
+        );
+
+        // 3. ADD TIME LABELS FOR ALL ROUTES
+        final String etaText = isPrimary 
+            ? "${_currentRouteResult?.durationMins ?? 45} min" 
+            : "+${i * 4 + 2} min"; 
+            
+        final String sourceId = 'eta-source-$i';
+        final String layerId = 'eta-layer-$i';
+        final String imageId = 'eta-image-$i';
+
+        // 🚨 1. Use the new staggered midpoint logic
+        final midpoint = _getStaggeredMidpoint(routePoints, i);
+        
+        // 1. Generate and Add the Image
+        final Uint8List imageBytes = await _generateETAPillImage(etaText, isPrimary);
+        await controller!.addImage(imageId, imageBytes);
+        
+        // 2. Add Point Source
+        await controller!.addGeoJsonSource(sourceId, {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [midpoint.longitude, midpoint.latitude]
+          }
+        });
+
+        // 3. Add Symbol Layer (ICON ONLY, NO TEXT)
+        await controller!.addSymbolLayer(
+          sourceId,
+          layerId,
+          SymbolLayerProperties(
+            iconImage: imageId,
+            iconSize: 0.35, // Scale down the high-res image
+            iconAnchor: "bottom", 
+            iconOffset: [0, -1.0], 
+            symbolSortKey: isPrimary ? 2 : 1, 
+            iconAllowOverlap: true, // Let our stagger logic handle spacing
+          )
         );
       } catch (e) {
         debugPrint("🗺️ ROUTE DRAW ERROR for index $i: $e");
@@ -302,46 +402,82 @@ class MapProvider extends ChangeNotifier {
         duration: const Duration(milliseconds: 800),
       );
     }
-    
+
     notifyListeners();
   }
 
   Future<void> clearNativeRoute({bool preserveState = false}) async {
     if (controller != null && _drawnRoutesCount > 0) {
       for (int i = 0; i < _drawnRoutesCount; i++) {
-        try {
-          await controller!.removeLayer('route-layer-$i');
-          await controller!.removeSource('route-source-$i');
-        } catch (e) {
-          debugPrint("🗺️ ROUTE CLEAR ERROR for index $i: $e");
-        }
+        try { await controller!.removeLayer('route-layer-$i'); } catch (_) {}
+        try { await controller!.removeSource('route-source-$i'); } catch (_) {}
+        try { await controller!.removeLayer('eta-layer-$i'); } catch (_) {}
+        try { await controller!.removeSource('eta-source-$i'); } catch (_) {}
       }
-      
+
       _drawnRoutesCount = 0;
-            if (!preserveState) {
-          isRouteCalculated = false;
-          _currentRouteResult = null;
-          
-          // 🚨 Deactivate Focus Mode (Restore transit lines to 100% opacity)
-          await _setTransitLayersOpacity(1.0);
-          
-          isNavigating = false; // Reset navigation state
-        
+      if (!preserveState) {
+        isRouteCalculated = false;
+        _currentRouteResult = null;
+
+        // 🚨 Deactivate Focus Mode (Restore transit lines to 100% opacity)
+        await _setTransitLayersOpacity(1.0);
+
+        isNavigating = false; // Reset navigation state
+
         // 🚨 Revert the camera tracking and puck to normal
         try {
           // Reset rotation to North-Up
-          await controller!.animateCamera(CameraUpdate.bearingTo(0.0), duration: const Duration(milliseconds: 500));
-          await controller!.animateCamera(CameraUpdate.tiltTo(0.0), duration: const Duration(milliseconds: 500));
-          
+          await controller!.animateCamera(CameraUpdate.bearingTo(0.0),
+              duration: const Duration(milliseconds: 500));
+          await controller!.animateCamera(CameraUpdate.tiltTo(0.0),
+              duration: const Duration(milliseconds: 500));
+
           // Reset modes
-          await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+          await controller!
+              .updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
         } catch (e) {
           debugPrint("⚠️ Native Tracking Reset Error: $e");
         }
       }
-      
+
       notifyListeners();
     }
+  }
+
+  // Helper to safely fully clear everything and notify UI
+  Future<void> cancelAndClearRoute() async {
+    // 1. Clear MapLibre Native Layers (Lines AND ETA Pills)
+    if (controller != null) {
+      for (int i = 0; i < 5; i++) { // Safely loop up to max possible routes
+        try { await controller!.removeLayer('route-layer-$i'); } catch (_) {}
+        try { await controller!.removeSource('route-source-$i'); } catch (_) {}
+        
+        // 🚨 CRITICAL: Clear the ETA pills we added
+        try { await controller!.removeLayer('eta-layer-$i'); } catch (_) {}
+        try { await controller!.removeSource('eta-source-$i'); } catch (_) {}
+      }
+      
+      // Also clear destination pin layer if it exists
+      try { await controller!.removeLayer('selected-destination-layer'); } catch (_) {}
+      try { await controller!.removeSource('selected-destination-source'); } catch (_) {}
+      
+      // Deactivate Focus Mode (Restore transit lines to 100% opacity)
+      await _setTransitLayersOpacity(1.0);
+    }
+
+    // 2. Reset all routing state variables to null/empty
+    _drawnRoutesCount = 0;
+    isRouteCalculated = false;
+    _currentRouteResult = null;
+    targetDestination = null; 
+    _tappedPlaceFromMap = null;
+    _isDestinationSelected = false;
+    isNavigating = false;
+    currentNavMode = 'driving';
+
+    // 3. Notify the UI to rebuild (This brings the Search Bar back!)
+    notifyListeners();
   }
 
   // Helper to calculate camera bounds
@@ -354,7 +490,8 @@ class MapProvider extends ChangeNotifier {
       if (p.longitude < minLng) minLng = p.longitude;
       if (p.longitude > maxLng) maxLng = p.longitude;
     }
-    return LatLngBounds(southwest: LatLng(minLat, minLng), northeast: LatLng(maxLat, maxLng));
+    return LatLngBounds(
+        southwest: LatLng(minLat, minLng), northeast: LatLng(maxLat, maxLng));
   }
 
   DateTime? _lastSearchTime;
@@ -392,7 +529,8 @@ class MapProvider extends ChangeNotifier {
         targetStationLocation != null &&
         _lastRouteData != null) {
       if (controller != null) {
-        RouteVisualizer.drawRoute(controller, _lastRouteData!.coordinates, _currentTheme);
+        RouteVisualizer.drawRoute(
+            controller, _lastRouteData!.coordinates, _currentTheme);
       }
     }
   }
@@ -416,7 +554,7 @@ class MapProvider extends ChangeNotifier {
     mapSelectionPlaceType = type;
     notifyListeners();
   }
-  
+
   bool _isEditingHistory = false;
   bool get isEditingHistory => _isEditingHistory;
 
@@ -442,7 +580,8 @@ class MapProvider extends ChangeNotifier {
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
-    final String encoded = jsonEncode(recentSearches.map((p) => p.toJson()).toList());
+    final String encoded =
+        jsonEncode(recentSearches.map((p) => p.toJson()).toList());
     await prefs.setString('recent_searches', encoded);
 
     final user = Supabase.instance.client.auth.currentUser;
@@ -457,16 +596,18 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<void> deleteSelectedHistory() async {
-    recentSearches.removeWhere((place) => selectedForDeletion.contains(place.placeId));
+    recentSearches
+        .removeWhere((place) => selectedForDeletion.contains(place.placeId));
     selectedForDeletion.clear();
     _isEditingHistory = false;
     notifyListeners(); // Force UI update
 
     // Update Local Storage
     final prefs = await SharedPreferences.getInstance();
-    final String encoded = jsonEncode(recentSearches.map((p) => p.toJson()).toList());
+    final String encoded =
+        jsonEncode(recentSearches.map((p) => p.toJson()).toList());
     await prefs.setString('recent_searches', encoded);
-    
+
     // Note: Delete selected IDs from Supabase if logged in
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
@@ -486,7 +627,7 @@ class MapProvider extends ChangeNotifier {
     // Nuke Local Storage
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('recent_searches');
-    
+
     // Note: Clear all user history from Supabase if logged in
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
@@ -524,7 +665,7 @@ class MapProvider extends ChangeNotifier {
       isFlying = false;
       debugPrint("Drone Flight Interrupted by User!");
       // Assuming AppHaptics is available. If not, remove this line.
-      AppHaptics.lightImpact(); 
+      AppHaptics.lightImpact();
     }
   }
 
@@ -532,7 +673,7 @@ class MapProvider extends ChangeNotifier {
 
   Future<void> setNavMode(BuildContext context, String mode) async {
     if (currentNavMode == mode) return; // Ignore if same mode
-    
+
     currentNavMode = mode;
     notifyListeners(); // 🚀 Instantly update the button UI to show the active state
 
@@ -549,7 +690,8 @@ class MapProvider extends ChangeNotifier {
       // 🧭 State Machine: place selected → placeSelected, deselected → idle
       if (value && engine.mapUIState.value == MapUIState.idle) {
         engine.setUIState(MapUIState.placeSelected);
-      } else if (!value && engine.mapUIState.value == MapUIState.placeSelected) {
+      } else if (!value &&
+          engine.mapUIState.value == MapUIState.placeSelected) {
         engine.setUIState(MapUIState.idle);
       }
 
@@ -584,12 +726,13 @@ class MapProvider extends ChangeNotifier {
   Future<void> loadSearchHistory() async {
     final prefs = await SharedPreferences.getInstance();
     final String? historyJson = prefs.getString('recent_searches');
-    
+
     if (historyJson != null) {
       final List<dynamic> decoded = jsonDecode(historyJson);
-      recentSearches = decoded.map((item) => PlaceModel.fromJson(item)).toList();
+      recentSearches =
+          decoded.map((item) => PlaceModel.fromJson(item)).toList();
     }
-    
+
     // Optional: Sync from Supabase if logged in
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
@@ -602,14 +745,15 @@ class MapProvider extends ChangeNotifier {
     // Prevent duplicates
     recentSearches.removeWhere((p) => p.placeId == newPlace.placeId);
     recentSearches.insert(0, newPlace); // Add to top
-    
+
     // Keep only last 10-15 searches to save space
     if (recentSearches.length > 15) recentSearches.removeLast();
     notifyListeners();
 
     // Save Locally
     final prefs = await SharedPreferences.getInstance();
-    final String encoded = jsonEncode(recentSearches.map((p) => p.toJson()).toList());
+    final String encoded =
+        jsonEncode(recentSearches.map((p) => p.toJson()).toList());
     await prefs.setString('recent_searches', encoded);
 
     // Sync to Supabase if logged in
@@ -624,7 +768,9 @@ class MapProvider extends ChangeNotifier {
           'address': newPlace.address,
           'latitude': newPlace.latitude,
           'longitude': newPlace.longitude,
-          'category': newPlace.categories.isNotEmpty ? newPlace.categories.first : 'unknown',
+          'category': newPlace.categories.isNotEmpty
+              ? newPlace.categories.first
+              : 'unknown',
           'created_at': DateTime.now().toIso8601String(),
         });
       } catch (_) {}
@@ -656,8 +802,8 @@ class MapProvider extends ChangeNotifier {
     AppHaptics.lightImpact();
 
     try {
-      final PlaceModel place = await PlaceEnrichmentService().reverseGeocode(
-          latLng.latitude, latLng.longitude);
+      final PlaceModel place = await PlaceEnrichmentService()
+          .reverseGeocode(latLng.latitude, latLng.longitude);
       setTappedPlace(place);
     } catch (e) {
       debugPrint("Tap Handler Error: $e");
@@ -682,11 +828,11 @@ class MapProvider extends ChangeNotifier {
   Future<void> clearSearchSession(BuildContext context) async {
     targetDestination = null;
     setDestinationSelected(false);
-    
+
     if (controller != null) {
       // 1. Clear the visual polyline layers completely
       await RouteVisualizer.clearRoute(controller);
-      
+
       // 2. Remove the manual dropped pin or search symbol layer
       await engine.layers?.removeSearchPin();
 
@@ -695,7 +841,7 @@ class MapProvider extends ChangeNotifier {
         _currentDroppedPin = null;
       }
     }
-    
+
     clearTappedPlace();
 
     // 🧭 State Machine: Full reset to idle
@@ -758,9 +904,10 @@ class MapProvider extends ChangeNotifier {
       if (routeData != null && routeData.allRoutesCoordinates.isNotEmpty) {
         _lastRouteData = routeData;
         List<LatLng> routePoints = routeData.allRoutesCoordinates.first;
-            
+
         if (routePoints.isNotEmpty) {
-          debugPrint("🔍 MAP PROVIDER AUDIT (1st Point): Lat=${routePoints.first.latitude}, Lng=${routePoints.first.longitude}");
+          debugPrint(
+              "🔍 MAP PROVIDER AUDIT (1st Point): Lat=${routePoints.first.latitude}, Lng=${routePoints.first.longitude}");
         }
 
         debugPrint("✅ Route decoded successfully. Drawing on map...");
@@ -922,7 +1069,8 @@ class MapProvider extends ChangeNotifier {
             circleStrokeColor: "#FFFFFF"));
 
         if (controller != null) {
-          await RouteVisualizer.drawRoute(controller, routeData.coordinates, _currentTheme);
+          await RouteVisualizer.drawRoute(
+              controller, routeData.coordinates, _currentTheme);
         }
 
         engine.navigation.startNavigation(routeData);
@@ -1074,18 +1222,18 @@ class MapProvider extends ChangeNotifier {
     final target = LatLng(lat, lng);
     targetDestination = target;
     notifyListeners(); // 🧭 Triggers Consumer → AnimatedMapPin overlay appears
-    
+
     isFlying = true;
     try {
       await controller?.animateCamera(
         CameraUpdate.newLatLngZoom(target, 16.0),
       );
-      
+
       AppHaptics.mediumImpact();
     } catch (e) {
       debugPrint("⚠️ flyToPlace Error: $e");
     } finally {
-      isFlying = false; 
+      isFlying = false;
       notifyListeners(); // 🚀 Force a fresh frame notify so the UI perfectly syncs when camera stops
     }
   }
@@ -1122,7 +1270,8 @@ class MapProvider extends ChangeNotifier {
     if (targetDestination == null || controller == null) return;
 
     // 1. Fetch Current Location (Origin)
-    final locService = Provider.of<GlobalLocationService>(context, listen: false);
+    final locService =
+        Provider.of<GlobalLocationService>(context, listen: false);
     final pos = locService.currentPosition;
     if (pos == null) {
       debugPrint("GPS not available for routing.");
@@ -1142,16 +1291,21 @@ class MapProvider extends ChangeNotifier {
         _lastRouteData = route;
 
         // 3. Draw the Route on the Map
-        await RouteVisualizer.drawRoute(controller, route.coordinates, _currentTheme);
+        await RouteVisualizer.drawRoute(
+            controller, route.coordinates, _currentTheme);
 
         // 🧭 State Machine: Route drawn successfully
         engine.setUIState(MapUIState.routeDrawn);
 
         // 4. Smoothly animate camera to fit the entire route bounds
-        final double minLat = math.min(originLoc.latitude, targetDestination!.latitude);
-        final double maxLat = math.max(originLoc.latitude, targetDestination!.latitude);
-        final double minLng = math.min(originLoc.longitude, targetDestination!.longitude);
-        final double maxLng = math.max(originLoc.longitude, targetDestination!.longitude);
+        final double minLat =
+            math.min(originLoc.latitude, targetDestination!.latitude);
+        final double maxLat =
+            math.max(originLoc.latitude, targetDestination!.latitude);
+        final double minLng =
+            math.min(originLoc.longitude, targetDestination!.longitude);
+        final double maxLng =
+            math.max(originLoc.longitude, targetDestination!.longitude);
 
         await controller!.animateCamera(
           CameraUpdate.newLatLngBounds(
@@ -1159,7 +1313,8 @@ class MapProvider extends ChangeNotifier {
               southwest: LatLng(minLat, minLng),
               northeast: LatLng(maxLat, maxLng),
             ),
-            left: 50, right: 50, top: 100, bottom: 400, // padding to account for the UI sheet
+            left: 50, right: 50, top: 100,
+            bottom: 400, // padding to account for the UI sheet
           ),
           duration: const Duration(milliseconds: 1200),
         );
@@ -1174,7 +1329,8 @@ class MapProvider extends ChangeNotifier {
   Future<void> startActiveNavigation(BuildContext context) async {
     if (controller == null || targetDestination == null) return;
 
-    final locService = Provider.of<GlobalLocationService>(context, listen: false);
+    final locService =
+        Provider.of<GlobalLocationService>(context, listen: false);
     final pos = locService.currentPosition;
     if (pos == null) {
       debugPrint("Cannot start navigation: User location unknown.");
@@ -1210,7 +1366,8 @@ class MapProvider extends ChangeNotifier {
     if (controller == null) return;
 
     // 1. Get current location
-    final locService = Provider.of<GlobalLocationService>(context, listen: false);
+    final locService =
+        Provider.of<GlobalLocationService>(context, listen: false);
     final currentPos = locService.currentPosition;
 
     if (currentPos == null) {
@@ -1222,12 +1379,14 @@ class MapProvider extends ChangeNotifier {
 
     // 2. Fetch and draw the route silently
     try {
-      final route = await _routingService.getRoute(originLoc, destination, mode: currentNavMode);
+      final route = await _routingService.getRoute(originLoc, destination,
+          mode: currentNavMode);
 
       if (route != null) {
         _lastRouteData = route;
         targetDestination = destination;
-        await RouteVisualizer.drawRoute(controller, route.coordinates, _currentTheme);
+        await RouteVisualizer.drawRoute(
+            controller, route.coordinates, _currentTheme);
 
         // 🧭 State Machine: Route drawn successfully
         engine.setUIState(MapUIState.routeDrawn);
@@ -1258,4 +1417,49 @@ class MapProvider extends ChangeNotifier {
     engine.dispose();
     super.dispose();
   }
+}
+
+Future<Uint8List> _generateETAPillImage(String text, bool isPrimary) async {
+  final ui.PictureRecorder recorder = ui.PictureRecorder();
+  final Canvas canvas = Canvas(recorder);
+
+  // 🚨 TRANSLUCENT GLASS EFFECT 
+  // Apple Blue for primary, Dark Grey for alternates, both slightly transparent
+  final Color bgColor = isPrimary 
+      ? const Color(0xFF0A84FF).withValues(alpha: 0.85) 
+      : const Color(0xFF2C2C2E).withValues(alpha: 0.85); 
+
+  // High-res text for crisp rendering
+  final TextSpan span = TextSpan(
+    text: text,
+    style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold),
+  );
+  final TextPainter tp = TextPainter(text: span, textDirection: TextDirection.ltr);
+  tp.layout();
+
+  // Padding
+  const double paddingX = 28.0; // Slightly wider for the perfect pill look
+  const double paddingY = 16.0;
+  final double width = tp.width + (paddingX * 2);
+  final double height = tp.height + (paddingY * 2);
+
+  // 🚨 PERFECT PILL SHAPE (Radius = height / 2)
+  final RRect rrect = RRect.fromLTRBR(0, 0, width, height, Radius.circular(height / 2));
+  
+  // Draw translucent background
+  canvas.drawRRect(rrect, Paint()..color = bgColor);
+  
+  // Draw subtle glassy border
+  canvas.drawRRect(rrect, Paint()
+    ..color = Colors.white.withValues(alpha: 0.3)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2.5
+  );
+
+  // Center the text
+  tp.paint(canvas, Offset((width - tp.width) / 2, (height - tp.height) / 2));
+
+  final ui.Image image = await recorder.endRecording().toImage(width.toInt(), height.toInt());
+  final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+  return byteData!.buffer.asUint8List();
 }

@@ -71,7 +71,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     );
   }
 
-  Widget _buildUnifiedExploreView(bool isDark, double progress) {
+  Widget _buildUnifiedExploreView(bool isDark, double progress, {bool isExpandedList = false}) {
     final provider = Provider.of<MapProvider>(context);
     final iconColor = isDark ? Colors.white70 : Colors.black87;
     final isFocused = _searchFocus.hasFocus;
@@ -266,14 +266,14 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                 ),
                               ),
                             )
-                          : ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 320), // Height for approx 5 items
-                        child: ListView.builder(
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: true,
-                          physics: const ClampingScrollPhysics(),
-                          itemCount: provider.recentSearches.length,
-                          itemBuilder: (context, index) {
+                          : Builder(
+                              builder: (context) {
+                                final listView = ListView.builder(
+                                  padding: EdgeInsets.zero,
+                                  shrinkWrap: !isExpandedList,
+                                  physics: const ClampingScrollPhysics(),
+                                  itemCount: provider.recentSearches.length,
+                                  itemBuilder: (context, index) {
                             final place = provider.recentSearches[index];
                             final isLast = index == provider.recentSearches.length - 1;
                             
@@ -437,9 +437,16 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                               ),
                             );
                           },
-                        ),
-                      ),
-                    ],
+                        );
+                        return isExpandedList
+                            ? Expanded(child: listView)
+                            : ConstrainedBox(
+                                constraints: const BoxConstraints(maxHeight: 320),
+                                child: listView,
+                              );
+                      },
+                    ),
+                  ],
                   ),
                 ),
               ),
@@ -793,22 +800,33 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                   ],
                 ),
                 
-                // 2. Distance Badge (If available)
-                if (provider.currentRouteDistance != null && provider.currentRouteDistance!.isNotEmpty) ...[
+                // 2. Combined ETA & Distance Badge
+                if (provider.currentRouteResult != null) ...[
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 12), 
                     child: Divider(color: Colors.white24, height: 1)
                   ),
-                  Row(
-                    children: [
-                      const Icon(Icons.route_rounded, color: Colors.blueAccent, size: 18),
-                      const SizedBox(width: 10),
-                      Text(
-                        "Distance: ${provider.currentRouteDistance}", 
-                        style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 14)
-                      ),
-                    ],
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0A84FF).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF0A84FF).withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.schedule_rounded, color: Color(0xFF0A84FF), size: 18),
+                        const SizedBox(width: 6),
+                        // Beautiful ETA & Distance Typography
+                        Text(
+                          "${provider.currentRouteResult!.durationMins} min • ${provider.currentRouteResult!.distanceKm.toStringAsFixed(1)} km", 
+                          style: const TextStyle(color: Color(0xFF0A84FF), fontWeight: FontWeight.bold, fontSize: 14)
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(height: 20),
                 ],
               ],
             ),
@@ -885,7 +903,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     );
   }
 
-  Widget _buildSearchResultsView(bool isDark) {
+  Widget _buildSearchResultsView(bool isDark, {bool isExpanded = false}) {
     final query = _searchCtrl.text.trim().toLowerCase();
     final provider = Provider.of<MapProvider>(context, listen: false);
     final localMatches = provider.recentSearches.where((place) => place.name.toLowerCase().contains(query)).toList();
@@ -976,17 +994,15 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     }
     final dynamicRadius = combinedResults.length == 1 ? 50.0 : 24.0;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: _buildProfileStyleCard(
-        context,
-        isDark: isDark,
-        bgColor: isDark ? const Color(0xFF1C1F26) : Colors.white,
-        borderRadius: dynamicRadius,
-        child: ListView(
-          padding: EdgeInsets.zero,
-          shrinkWrap: true,
-          physics: const ClampingScrollPhysics(),
+    final card = _buildProfileStyleCard(
+      context,
+      isDark: isDark,
+      bgColor: isDark ? const Color(0xFF1C1F26) : Colors.white,
+      borderRadius: dynamicRadius,
+      child: ListView(
+        padding: EdgeInsets.zero,
+        shrinkWrap: !isExpanded,
+        physics: const ClampingScrollPhysics(),
           children: combinedResults.asMap().entries.map((entry) {
             final index = entry.key;
             final place = entry.value;
@@ -1115,15 +1131,21 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
             );
           }).toList(),
         ),
-      ),
     );
+
+    Widget content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: card,
+    );
+
+    return isExpanded ? Expanded(child: content) : content;
   }
 
-  Widget _buildSheetContent(bool isDark, double progress) {
+  Widget _buildSheetContent(bool isDark, double progress, {bool isExpanded = false}) {
     if (_searchCtrl.text.isNotEmpty && _selectedPlace == null) {
-      return _buildSearchResultsView(isDark);
+      return _buildSearchResultsView(isDark, isExpanded: isExpanded);
     }
-    return _buildUnifiedExploreView(isDark, progress);
+    return _buildUnifiedExploreView(isDark, progress, isExpandedList: isExpanded);
   }
 
   Widget _buildNearbyTile(

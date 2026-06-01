@@ -1049,6 +1049,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     snaps.sort();
     snaps = snaps.toSet().toList();
     
+    // 🚨 Dynamic Height Calculation
     final double expandedHeight = screenSize.height - keyboardHeight - MediaQuery.paddingOf(context).top - 20;
     final double defaultIdleHeight = screenSize.height;
 
@@ -1070,7 +1071,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
             height: isKeyboardOpen ? expandedHeight : defaultIdleHeight,
-            margin: EdgeInsets.only(bottom: keyboardHeight),
+            padding: EdgeInsets.only(bottom: keyboardHeight > 0 ? 0 : 0),
             child: SlideTransition(
               position: _slideAnimation,
               child: NotificationListener<Notification>(
@@ -1146,9 +1147,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         },
         child: DraggableScrollableSheet(
           controller: _sheetController,
-          initialChildSize: midS,
+          initialChildSize: isKeyboardOpen ? 1.0 : midS,
           minChildSize: minS,
-          maxChildSize: maxS,
+          maxChildSize: isKeyboardOpen ? 1.0 : maxS,
           snap: true,
           snapAnimationDuration: const Duration(milliseconds: 350),
           snapSizes: snaps,
@@ -1225,7 +1226,16 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                         width: 1.0,
                                       ),
                                     ),
-                                    child: ScrollConfiguration(
+                                    child: isKeyboardOpen
+                                        ? Column(
+                                            children: [
+                                              _buildSearchHeader(dynamicHeaderHeight, progress, isDark),
+                                              Expanded(
+                                                child: _buildSheetContent(isDark, progress, isExpanded: true),
+                                              ),
+                                            ],
+                                          )
+                                        : ScrollConfiguration(
                                       behavior: ScrollConfiguration.of(context)
                                           .copyWith(
                                         scrollbars: false,
@@ -1295,6 +1305,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                   ? _buildSheetContent(
                                                       isDark,
                                                       progress,
+                                                      isExpanded: false,
                                                     )
                                                   : const SizedBox(),
                                             ),

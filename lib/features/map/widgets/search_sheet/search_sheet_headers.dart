@@ -2,6 +2,50 @@ part of 'map_search_sheet.dart';
 
 // 🚀 FIX: Named the extension to fix method visibility bugs in the Dart analyzer
 extension _SearchSheetHeadersExt on _MapSearchSheetState {
+  Widget _buildPremiumCircleButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    Color iconColor = Colors.white,
+    Color? bgColor,
+    double size = 44.0,
+    double iconSize = 20.0,
+  }) {
+    return RidelBounceButton(
+      onTap: () {
+        AppHaptics.lightImpact();
+        onTap();
+      },
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withValues(alpha: 0.20),
+              Colors.white.withValues(alpha: 0.10),
+              Colors.white.withValues(alpha: 0.06),
+            ],
+          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 20,
+              spreadRadius: -2,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Icon(icon, color: iconColor, size: iconSize),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDirectionsHeader(double headerHeight, bool isDark) {
     final textColor = isDark ? Colors.white : Colors.black;
     // 🚀 PREMIUM MATTE PILL BASE FOR INPUTS
@@ -373,9 +417,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
     final subTextColor = isDark ? Colors.white54 : Colors.black54;
     final btnIconColor = isDark ? Colors.white : Colors.black;
     final mattePillBase = isDark ? const Color(0xFF1E2129) : Colors.white;
-    final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.12)
-        : Colors.black.withValues(alpha: 0.08);
+
 
     String subtitleText = 'Place • ${_selectedPlace!.address}';
     if (_selectedPlace!.name == 'Dropped Pin' || _selectedPlace!.address.isEmpty || _selectedPlace!.address.contains('Lat:')) {
@@ -394,9 +436,11 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
           ),
           child: Row(
             children: [
-              RidelBounceButton(
+              _buildPremiumCircleButton(
+                icon: CupertinoIcons.share,
+                iconColor: btnIconColor,
+                bgColor: mattePillBase,
                 onTap: () async {
-                  AppHaptics.lightImpact();
                   final shareLink =
                       'https://maps.apple/p/~${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
                   
@@ -407,26 +451,6 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                     'Link copied successfully!',
                   );
                 },
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: mattePillBase,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: borderColor),
-                    boxShadow: AppShadows.buttonSoft,
-                  ),
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 2),
-                      child: Icon(
-                        CupertinoIcons.share,
-                        size: 20,
-                        color: btnIconColor,
-                      ),
-                    ),
-                  ),
-                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -478,28 +502,14 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                 ),
               ),
               const SizedBox(width: 12),
-              RidelBounceButton(
-                onTap: () async {
-                  AppHaptics.lightImpact();
-                  _handleCancelTap();
+              _buildPremiumCircleButton(
+                icon: Icons.close_rounded,
+                iconColor: btnIconColor,
+                bgColor: mattePillBase,
+                onTap: () {
+                  final provider = Provider.of<MapProvider>(context, listen: false);
+                  provider.cancelAndClearRoute();
                 },
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: mattePillBase,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: borderColor),
-                    boxShadow: AppShadows.buttonSoft,
-                  ),
-                  child: Center(
-                    child: Icon(
-                      Icons.close_rounded,
-                      size: 20,
-                      color: btnIconColor,
-                    ),
-                  ),
-                ),
               ),
             ],
           ),

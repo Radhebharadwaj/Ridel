@@ -1,15 +1,15 @@
-import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
-import 'package:ridel/core/widgets/ridel_glass.dart';
+
 import 'package:ridel/features/map/map_engine/map_engine.dart';
 import 'package:ridel/features/map/models/place_model.dart';
 import 'package:ridel/core/services/saved_places_service.dart';
-
+import 'package:ridel/core/utils/ridel_bounce_button.dart';
 class QuickActionButtons extends StatefulWidget {
   final bool isDark;
   final Function(String actionType) onRequestSearch;
@@ -237,35 +237,56 @@ class QuickActionButtonsState extends State<QuickActionButtons>
                               onLongPress: _homePlace != null
                                   ? () => _handleLongPress('Home')
                                   : null,
-                              child: _buildGlassActionBtn(
-                                icon: CupertinoIcons.house_fill,
-                                title: "Home",
-                                subtitle: _homePlace != null ? "Drive" : "Add",
-                                isSet: _homePlace != null,
-                                isDark: isDark,
-                                onTap: _handleHomeTap,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildPremiumCircleButton(
+                                    icon: CupertinoIcons.house_fill,
+                                    iconColor: _homePlace != null ? const Color(0xFF00E5FF) : (isDark ? Colors.white70 : Colors.black87),
+                                    bgColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                                    size: 52.0,
+                                    iconSize: 24.0,
+                                    onTap: _handleHomeTap,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text("Home", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.w500)),
+                                ],
                               ),
                             ),
                             GestureDetector(
                               onLongPress: _workPlace != null
                                   ? () => _handleLongPress('Work')
                                   : null,
-                              child: _buildGlassActionBtn(
-                                icon: CupertinoIcons.briefcase_fill,
-                                title: "Work",
-                                subtitle: _workPlace != null ? "Drive" : "Add",
-                                isSet: _workPlace != null,
-                                isDark: isDark,
-                                onTap: _handleWorkTap,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildPremiumCircleButton(
+                                    icon: CupertinoIcons.briefcase_fill,
+                                    iconColor: _workPlace != null ? const Color(0xFF00E5FF) : (isDark ? Colors.white70 : Colors.black87),
+                                    bgColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                                    size: 52.0,
+                                    iconSize: 24.0,
+                                    onTap: _handleWorkTap,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text("Work", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.w500)),
+                                ],
                               ),
                             ),
-                            _buildGlassActionBtn(
-                              icon: CupertinoIcons.add,
-                              title: "Add",
-                              subtitle: "Place",
-                              isSet: false,
-                              isDark: isDark,
-                              onTap: _handleAddPlaceTap,
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildPremiumCircleButton(
+                                  icon: CupertinoIcons.add,
+                                  iconColor: isDark ? Colors.white : Colors.black87,
+                                  bgColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                                  size: 52.0,
+                                  iconSize: 26.0,
+                                  onTap: _handleAddPlaceTap,
+                                ),
+                                const SizedBox(height: 8),
+                                Text("Add Place", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.w500)),
+                              ],
                             ),
                           ],
                         ),
@@ -381,75 +402,45 @@ class QuickActionButtonsState extends State<QuickActionButtons>
   // 🔘 GLASS ACTION BUTTON (Home / Work / Add)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildGlassActionBtn(
-      {required IconData icon,
-      required String title,
-      required String subtitle,
-      required bool isSet,
-      required bool isDark,
-      required VoidCallback onTap}) {
-    final isLightMode = !isDark;
-    const Color neonCyan = Color(0xFF00E5FF);
-    final Color activeCyan = isLightMode ? Colors.cyan.shade700 : neonCyan;
-    final Color activeColor =
-        isSet ? activeCyan : (isLightMode ? Colors.black87 : Colors.white70);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(40),
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: isLightMode ? Colors.white.withValues(alpha: 0.65) : null,
-                    borderRadius: BorderRadius.circular(40),
-                    border: isLightMode
-                        ? Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.0)
-                        : null,
-                    boxShadow: isLightMode
-                        ? [
-                            BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.05),
-                                blurRadius: 16,
-                                offset: const Offset(0, 4))
-                          ]
-                        : null,
-                  ),
-                  child: isLightMode
-                      ? Center(child: Icon(icon, color: activeColor, size: 24))
-                      : RidelGlass(
-                          borderRadius: BorderRadius.circular(40),
-                          baseColor: Colors.white.withValues(alpha: 0.08),
-                          blurSigma: 20.0,
-                          isVerticalCard: true,
-                          child: Center(
-                              child: Icon(icon, color: activeColor, size: 24)),
-                        ),
-                ),
-              ),
+  Widget _buildPremiumCircleButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    Color iconColor = Colors.white,
+    Color? bgColor,
+    double size = 44.0,
+    double iconSize = 20.0,
+  }) {
+    return RidelBounceButton(
+      onTap: () {
+        AppHaptics.lightImpact();
+        onTap();
+      },
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withValues(alpha: 0.20),
+              Colors.white.withValues(alpha: 0.10),
+              Colors.white.withValues(alpha: 0.06),
+            ],
+          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 20,
+              spreadRadius: -2,
+              offset: const Offset(0, 14),
             ),
-            const SizedBox(height: 8),
-            Text(title,
-                style: TextStyle(
-                    color: isLightMode ? Colors.black87 : Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600)),
-            Text(subtitle,
-                style: TextStyle(
-                    color: isSet
-                        ? activeCyan
-                        : (isLightMode ? Colors.black54 : Colors.white54),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500)),
           ],
+        ),
+        child: Center(
+          child: Icon(icon, color: iconColor, size: iconSize),
         ),
       ),
     );

@@ -364,6 +364,14 @@
       ]
     },
     {
+      "name": "sunrise_sunset_calc",
+      "version": "3.0.0",
+      "dependencies": [
+        "async",
+        "vector_math"
+      ]
+    },
+    {
       "name": "collection",
       "version": "1.19.1",
       "dependencies": []
@@ -2530,14 +2538,6 @@
         "collection",
         "meta",
         "pub_semver"
-      ]
-    },
-    {
-      "name": "sunrise_sunset_calc",
-      "version": "3.0.0",
-      "dependencies": [
-        "async",
-        "vector_math"
       ]
     }
   ],

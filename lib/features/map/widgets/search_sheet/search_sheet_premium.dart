@@ -107,7 +107,11 @@ extension _PremiumDetailsExt on _MapSearchSheetState {
               ),
               IconButton(
                 icon: const Icon(Icons.close, color: Colors.white, size: 24),
-                onPressed: () => _handleCancelTap(), // Re-use my existing method!
+                onPressed: () {
+                  AppHaptics.lightImpact();
+                  final provider = Provider.of<MapProvider>(context, listen: false);
+                  provider.cancelAndClearRoute();
+                },
                 constraints: const BoxConstraints(),
                 padding: EdgeInsets.zero,
               ),

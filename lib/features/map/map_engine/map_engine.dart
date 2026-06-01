@@ -357,7 +357,7 @@ class MapEngine {
     mode.dispose();
     _routeEngine.dispose();
 
-    // 5. Dispose Native Map
-    mapController?.dispose();
+    // 5. Native Map is disposed by MaplibreMap widget lifecycle
+    mapController = null;
   }
 }
