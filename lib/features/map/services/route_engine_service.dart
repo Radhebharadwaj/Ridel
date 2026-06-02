@@ -19,6 +19,7 @@ class RouteResult {
   final String firstInstruction;
   final DateTime fetchedAt;
   final List<dynamic> trafficGradientStops;
+  final List<String>? congestion;
 
   // Backward-compatibility getters
   List<LatLng> get coordinates => allRoutesCoordinates.isNotEmpty ? allRoutesCoordinates.first : [];
@@ -34,6 +35,7 @@ class RouteResult {
     required this.firstInstruction,
     required this.fetchedAt,
     this.trafficGradientStops = const ['interpolate', ['linear'], ['line-progress'], 0.0, '#0A84FF', 1.0, '#0A84FF'],
+    this.congestion,
   });
 
   // Serialization for Offline Fallback
@@ -48,6 +50,7 @@ class RouteResult {
         'firstInstruction': firstInstruction,
         'fetchedAt': fetchedAt.toIso8601String(),
         'trafficGradientStops': trafficGradientStops,
+        'congestion': congestion,
       };
 
   factory RouteResult.fromJson(Map<String, dynamic> json) {
@@ -65,6 +68,7 @@ class RouteResult {
       firstInstruction: json['firstInstruction'],
       fetchedAt: DateTime.parse(json['fetchedAt']),
       trafficGradientStops: json['trafficGradientStops'] ?? ['interpolate', ['linear'], ['line-progress'], 0.0, '#0A84FF', 1.0, '#0A84FF'],
+      congestion: json['congestion'] != null ? List<String>.from(json['congestion']) : null,
     );
   }
 }
@@ -127,6 +131,54 @@ class RouteEngineService {
     }
   }
 
+  Future<RouteResult?> getWaterfallWalkRoute(LatLng origin, LatLng destination) async {
+    // 🥇 TIER 1: Ola Maps (Walking) - Best for short local distances
+    try {
+      debugPrint("🚶‍♂️ Trying Ola Maps (Walking) API...");
+      final route = await getRoute(origin, destination, mode: 'walking');
+      if (route != null) return route;
+      throw Exception("Ola Walking returned null");
+    } catch (e) {
+      debugPrint("⚠️ Ola Walking failed (maybe distance too long): $e");
+    }
+
+    // 🥈 TIER 2: Mapbox (Walking) - The Premium Fallback
+    try {
+      debugPrint("🦊 Ola failed. Trying Mapbox API...");
+      return await _fetchMapboxWalkRoute(origin, destination); 
+    } catch (e) {
+      debugPrint("⚠️ Mapbox failed: $e");
+    }
+
+    // 🥉 TIER 3: OSRM Public - The Free Backup
+    try {
+      debugPrint("🆓 Mapbox failed. Trying Public OSRM API...");
+      // return await _fetchOSRMRoute(origin, destination);
+      throw Exception("OSRM not implemented yet");
+    } catch (e) {
+      debugPrint("⚠️ OSRM Public failed: $e");
+    }
+
+    // 🚨 TIER 4: Ola Maps (Driving) - Ultimate Fallback
+    try {
+      debugPrint("🚗 All walking APIs failed! Falling back to Ola Maps Driving Route.");
+      return await getRoute(origin, destination, mode: 'driving');
+    } catch (e) {
+      debugPrint("❌ CRITICAL: ALL ROUTING TIERS FAILED.");
+      return null;
+    }
+  }
+
+  Future<RouteResult?> _fetchMapboxWalkRoute(LatLng origin, LatLng destination) async {
+    final mapboxKey = dotenv.env['MAPBOX_API_KEY'] ?? '';
+    if (mapboxKey.isEmpty || mapboxKey == 'YOUR_KEY_HERE') {
+      throw Exception("Mapbox key is missing or placeholder. Skipping to next tier.");
+    }
+
+    // Logic for mapbox would go here, throwing exception for now since not implemented yet.
+    throw Exception("Mapbox API call not implemented.");
+  }
+
   Future<RouteResult?> _fetchWithRetry(
       LatLng origin, LatLng destination, String mode, String cacheKey) async {
     // 🚀 DYNAMIC API PROFILE MAPPING
@@ -142,7 +194,7 @@ class RouteEngineService {
     }
 
     final String olaApiUrl =
-        '$_baseUrl?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=$apiMode&alternatives=true&steps=true&overview=full&api_key=$_apiKey';
+        '$_baseUrl?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=$apiMode&alternatives=true&steps=true&overview=full&annotations=congestion&api_key=$_apiKey';
 
     debugPrint("🚀 OLA API EXACT URL: $olaApiUrl");
 
@@ -177,6 +229,7 @@ class RouteEngineService {
               firstInstruction: primitiveData['firstInstruction'],
               fetchedAt: DateTime.now(),
               trafficGradientStops: primitiveData['gradientStops'] ?? ['interpolate', ['linear'], ['line-progress'], 0.0, '#0A84FF', 1.0, '#0A84FF'],
+              congestion: primitiveData['congestion'],
             );
           }
         } else {
@@ -260,6 +313,11 @@ class RouteEngineService {
   static Map<String, dynamic>? _parseRouteObject(dynamic route) {
     if (route['legs'] == null || route['legs'].isEmpty) return null;
     final leg = route['legs'][0];
+
+    List<String>? congestionData;
+    if (leg['annotation'] != null && leg['annotation']['congestion'] != null) {
+      congestionData = List<String>.from(leg['annotation']['congestion']);
+    }
 
     String encodedPolyline = "";
     if (route['overview_polyline'] is String) {
@@ -350,6 +408,7 @@ class RouteEngineService {
       'steps': safeSteps,
       'firstInstruction': instruction,
       'gradientStops': gradientStops,
+      'congestion': congestionData,
     };
   }
 

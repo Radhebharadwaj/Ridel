@@ -1157,9 +1157,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     return Stack(
       children: [
         AnimatedOpacity(
-          opacity: isKeyboardOpen ? 1.0 : 0.0,
+          opacity: (isKeyboardOpen && widget.isMapTabActive) ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 300),
-          child: isKeyboardOpen 
+          child: (isKeyboardOpen && widget.isMapTabActive) 
             ? BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
                 child: Container(color: Colors.black.withValues(alpha: 0.3)),
@@ -1327,16 +1327,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                         width: 1.0,
                                       ),
                                     ),
-                                    child: isKeyboardOpen
-                                        ? Column(
-                                            children: [
-                                              _buildSearchHeader(dynamicHeaderHeight, progress, isDark),
-                                              Expanded(
-                                                child: _buildSheetContent(isDark, progress, isExpanded: true),
-                                              ),
-                                            ],
-                                          )
-                                        : ScrollConfiguration(
+                                    child: ScrollConfiguration(
                                       behavior: ScrollConfiguration.of(context)
                                           .copyWith(
                                         scrollbars: false,
@@ -1347,10 +1338,11 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                       ),
                                       child: CustomScrollView(
                                         controller: scrollController,
-                                        // 🚀 FIX: Removed BouncingScrollPhysics, replaced with ClampingScrollPhysics to prevent overscroll bouncing
-                                        physics: const ClampingScrollPhysics(
-                                            parent:
-                                                AlwaysScrollableScrollPhysics()),
+                                        // 🚀 FIX: Prevent overscroll bouncing, disable scrolling when keyboard is open
+                                        physics: isKeyboardOpen 
+                                            ? const NeverScrollableScrollPhysics() 
+                                            : const ClampingScrollPhysics(
+                                                parent: AlwaysScrollableScrollPhysics()),
                                         keyboardDismissBehavior:
                                             ScrollViewKeyboardDismissBehavior
                                                 .onDrag,
@@ -1406,7 +1398,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                   ? _buildSheetContent(
                                                       isDark,
                                                       progress,
-                                                      isExpanded: false,
+                                                      isExpanded: isKeyboardOpen, // 🚀 Keep expanded content logic
                                                     )
                                                   : const SizedBox(),
                                             ),

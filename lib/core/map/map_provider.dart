@@ -125,15 +125,20 @@ class MapProvider extends ChangeNotifier {
     );
 
     try {
-      // Fetch route from Ola Maps.
-      debugPrint("⏳ [ROUTE ENGINE] Waiting for Ola Maps API...");
-      String apiProfile =
-          (mode == 'walking' || mode == 'walk') ? 'pedestrian' : 'driving';
-      final routeResult = await _routingService.getRoute(
-        origin,
-        targetDestination!,
-        mode: apiProfile,
-      );
+      // Fetch route from Route Engine.
+      debugPrint("⏳ [ROUTE ENGINE] Waiting for Route Engine API...");
+      
+      RouteResult? routeResult;
+      
+      if (mode == 'walking' || mode == 'walk') {
+        routeResult = await _routingService.getWaterfallWalkRoute(origin, targetDestination!);
+      } else {
+        routeResult = await _routingService.getRoute(
+          origin,
+          targetDestination!,
+          mode: 'driving',
+        );
+      }
 
       if (routeResult != null && routeResult.allRoutesCoordinates.isNotEmpty) {
         debugPrint(
@@ -445,18 +450,44 @@ class MapProvider extends ChangeNotifier {
         );
       }
       final primaryCoords = _smoothPolyline(allRoutes[0]);
-      final coordinates =
-          primaryCoords.map((p) => [p.longitude, p.latitude]).toList();
+      
+      List<Map<String, dynamic>> features = [];
+      final congestionData = _currentRouteResult?.congestion;
+
+      if (congestionData != null && congestionData.isNotEmpty) {
+        for (int i = 0; i < primaryCoords.length - 1; i++) {
+          int congestionIndex = (i / primaryCoords.length * congestionData.length).floor();
+          if (congestionIndex >= congestionData.length) congestionIndex = congestionData.length - 1;
+
+          features.add({
+            "type": "Feature",
+            "properties": {
+              "index": 0,
+              "congestion": congestionData[congestionIndex]
+            },
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [primaryCoords[i].longitude, primaryCoords[i].latitude],
+                [primaryCoords[i + 1].longitude, primaryCoords[i + 1].latitude]
+              ]
+            },
+          });
+        }
+      } else {
+        features.add({
+          "type": "Feature",
+          "properties": {"index": 0, "congestion": "low"},
+          "geometry": {
+            "type": "LineString",
+            "coordinates": primaryCoords.map((p) => [p.longitude, p.latitude]).toList()
+          },
+        });
+      }
 
       final geoJson = {
         "type": "FeatureCollection",
-        "features": [
-          {
-            "type": "Feature",
-            "properties": {"index": 0},
-            "geometry": {"type": "LineString", "coordinates": coordinates},
-          },
-        ],
+        "features": features,
       };
 
       try {
@@ -489,12 +520,20 @@ class MapProvider extends ChangeNotifier {
               lineJoin: "round",
             ),
           );
-          // MIDDLE: Core (Vibrant Blue)
+          // MIDDLE: Core (Traffic segmented)
           await controller!.addLineLayer(
             "route-source-0",
             "primary-core",
             const LineLayerProperties(
-              lineColor: "#0A84FF",
+              lineColor: [
+                "match",
+                ["get", "congestion"],
+                "severe", "#8B0000",
+                "heavy", "#FF0000",
+                "moderate", "#FFA500",
+                "low", "#00BFFF",
+                "#00BFFF"
+              ],
               lineWidth: 6.0,
               lineCap: "round",
               lineJoin: "round",
