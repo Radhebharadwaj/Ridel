@@ -2,3 +2,6 @@ build/
 .dart_tool/
 
 .env
+
+# Added by ggshield
+.cache_ggshield

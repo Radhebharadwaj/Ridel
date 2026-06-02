@@ -8,7 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 class RouteResult {
   final List<List<LatLng>> allRoutesCoordinates;
   final Map<String, dynamic> geoJson;
@@ -73,12 +73,27 @@ class RouteResult {
   }
 }
 
+int safeIntFromJson(dynamic value) {
+  if (value == null) return 0;
+  if (value is int) return value;
+  if (value is double) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? 0;
+  return 0;
+}
+
+double safeDoubleFromJson(dynamic value) {
+  if (value == null) return 0.0;
+  if (value is double) return value;
+  if (value is int) return value.toDouble();
+  if (value is String) return double.tryParse(value) ?? 0.0;
+  return 0.0;
+}
+
 /// 🧠 The Ultimate Routing Brain
 class RouteEngineService {
   static const String _baseUrl = 'https://api.olamaps.io/routing/v1/directions';
 
   final http.Client _client = http.Client();
-  late final String _apiKey;
 
   final LinkedHashMap<String, RouteResult> _lruCache =
       LinkedHashMap<String, RouteResult>();
@@ -87,9 +102,7 @@ class RouteEngineService {
 
   final Map<String, Future<RouteResult?>> _inFlightRequests = {};
 
-  RouteEngineService() {
-    _apiKey = dotenv.env['OLA_MAPS_API_KEY'] ?? '';
-  }
+  RouteEngineService();
 
   Future<RouteResult?> getRoute(LatLng origin, LatLng destination,
       {String mode = "driving"}) async {
@@ -113,7 +126,7 @@ class RouteEngineService {
     }
 
     // 3. Network Call
-    final futureReq = _fetchWithRetry(origin, destination, mode, cacheKey);
+    final futureReq = _fetchWaterfallRoute(origin, destination, mode, cacheKey);
     _inFlightRequests[cacheKey] = futureReq;
 
     try {
@@ -131,82 +144,153 @@ class RouteEngineService {
     }
   }
 
-  Future<RouteResult?> getWaterfallWalkRoute(LatLng origin, LatLng destination) async {
-    // 🥇 TIER 1: Ola Maps (Walking) - Best for short local distances
-    try {
-      debugPrint("🚶‍♂️ Trying Ola Maps (Walking) API...");
-      final route = await getRoute(origin, destination, mode: 'walking');
-      if (route != null) return route;
-      throw Exception("Ola Walking returned null");
-    } catch (e) {
-      debugPrint("⚠️ Ola Walking failed (maybe distance too long): $e");
+  RouteResult _sanitizeRouteResult(RouteResult result, String mode) {
+    double distKm = result.distanceKm;
+    int currentMins = result.durationMins;
+
+    // Extract current seconds safely
+    double currentSecs = result.allDurationSeconds.isNotEmpty 
+        ? result.allDurationSeconds[0] 
+        : (currentMins * 60.0);
+
+    // 🧠 HEURISTIC FALLBACK: Average human walks at 5 km/h (12 mins per km)
+    if (mode == 'walk' || mode == 'walking') {
+      // ALWAYS calculate our own walking time (average 12 mins per km)
+      int expectedWalkMins = (distKm * 12).round();
+      currentMins = expectedWalkMins;
+      currentSecs = expectedWalkMins * 60.0;
+      debugPrint("🚶‍♂️ Walk Mode: Ignoring API time. Forcing calculated time: $currentMins mins for $distKm km");
     }
 
-    // 🥈 TIER 2: Mapbox (Walking) - The Premium Fallback
-    try {
-      debugPrint("🦊 Ola failed. Trying Mapbox API...");
-      return await _fetchMapboxWalkRoute(origin, destination); 
-    } catch (e) {
-      debugPrint("⚠️ Mapbox failed: $e");
-    }
+    // 🚨 STRICT SYNC: Ensure both minutes and seconds arrays represent the EXACT same value
+    // This fixes the UI mismatch between the Map Pill and the Bottom Sheet.
+    List<double> syncedDurations = result.allDurationSeconds.isNotEmpty 
+        ? List<double>.from(result.allDurationSeconds) 
+        : [currentSecs];
+    syncedDurations[0] = currentSecs;
 
-    // 🥉 TIER 3: OSRM Public - The Free Backup
-    try {
-      debugPrint("🆓 Mapbox failed. Trying Public OSRM API...");
-      // return await _fetchOSRMRoute(origin, destination);
-      throw Exception("OSRM not implemented yet");
-    } catch (e) {
-      debugPrint("⚠️ OSRM Public failed: $e");
-    }
+    return RouteResult(
+      allRoutesCoordinates: result.allRoutesCoordinates,
+      allDurationSeconds: syncedDurations,
+      geoJson: result.geoJson,
+      distanceKm: distKm,
+      durationMins: currentMins, // Strictly synced with allDurationSeconds[0]
+      steps: result.steps,
+      firstInstruction: result.firstInstruction,
+      fetchedAt: result.fetchedAt,
+      trafficGradientStops: result.trafficGradientStops,
+      congestion: result.congestion,
+    );
+  }
 
-    // 🚨 TIER 4: Ola Maps (Driving) - Ultimate Fallback
-    try {
-      debugPrint("🚗 All walking APIs failed! Falling back to Ola Maps Driving Route.");
-      return await getRoute(origin, destination, mode: 'driving');
-    } catch (e) {
-      debugPrint("❌ CRITICAL: ALL ROUTING TIERS FAILED.");
+  Future<RouteResult?> _fetchWaterfallRoute(LatLng origin, LatLng destination, String mode, String cacheKey) async {
+    if (mode == 'walk' || mode == 'walking') {
+      return getWaterfallWalkRoute(origin, destination);
+    } else {
+      // driving, bike, heavy
+      // Try Ola
+      try {
+        debugPrint("🚗 Trying Ola Maps ($mode) API...");
+        final route = await _getOlaRoute(origin, destination, mode);
+        if (route != null) return _sanitizeRouteResult(route, mode);
+        throw Exception("Ola returned null");
+      } catch (e) {
+        debugPrint("⚠️ Ola failed: $e");
+      }
+
+      // Try Google
+      try {
+        debugPrint("🗺️ Ola failed. Trying Google Maps ($mode) API...");
+        final route = await _getGoogleRoute(origin, destination, mode);
+        if (route != null) return _sanitizeRouteResult(route, mode);
+        throw Exception("Google returned null");
+      } catch (e) {
+        debugPrint("⚠️ Google Maps failed: $e");
+      }
+
+      // Try Mapbox
+      try {
+        debugPrint("🦊 Google failed. Trying Mapbox ($mode) API...");
+        final route = await _getMapboxRoute(origin, destination, mode);
+        if (route != null) return _sanitizeRouteResult(route, mode);
+        throw Exception("Mapbox returned null");
+      } catch (e) {
+        debugPrint("⚠️ Mapbox failed: $e");
+      }
+
+      // Try OSRM
+      try {
+        debugPrint("🆓 Mapbox failed. Trying Public OSRM ($mode) API...");
+        final profile = (mode == 'bike' || mode == 'twowheeler') ? 'bike' : 'driving';
+        final route = await _getOSRMRoute(origin, destination, profile);
+        if (route != null) return _sanitizeRouteResult(route, mode);
+      } catch (e) {
+        debugPrint("⚠️ OSRM Public failed: $e");
+      }
+
       return null;
     }
   }
 
-  Future<RouteResult?> _fetchMapboxWalkRoute(LatLng origin, LatLng destination) async {
-    final mapboxKey = dotenv.env['MAPBOX_API_KEY'] ?? '';
-    if (mapboxKey.isEmpty || mapboxKey == 'YOUR_KEY_HERE') {
-      throw Exception("Mapbox key is missing or placeholder. Skipping to next tier.");
+  Future<RouteResult?> getWaterfallWalkRoute(LatLng origin, LatLng destination) async {
+    // 🥇 TIER 1: Google Maps (Walking)
+    try {
+      debugPrint("🚶‍♂️ Trying Google Maps (Walking) API...");
+      final route = await _getGoogleRoute(origin, destination, 'walking');
+      if (route != null) return _sanitizeRouteResult(route, 'walking');
+      throw Exception("Google Walking returned null");
+    } catch (e) {
+      debugPrint("⚠️ Google Walking failed: $e");
     }
 
-    // Logic for mapbox would go here, throwing exception for now since not implemented yet.
-    throw Exception("Mapbox API call not implemented.");
+    // 🥈 TIER 2: Mapbox (Walking)
+    try {
+      debugPrint("🦊 Google failed. Trying Mapbox API...");
+      final route = await _getMapboxRoute(origin, destination, 'walking');
+      if (route != null) return _sanitizeRouteResult(route, 'walking');
+      throw Exception("Mapbox Walking returned null");
+    } catch (e) {
+      debugPrint("⚠️ Mapbox Walking failed: $e");
+    }
+
+    // 🥉 TIER 3: OSRM Public (Walking)
+    try {
+      debugPrint("🆓 Mapbox failed. Trying Public OSRM API...");
+      final route = await _getOSRMRoute(origin, destination, 'foot');
+      if (route != null) return _sanitizeRouteResult(route, 'walking');
+    } catch (e) {
+      debugPrint("⚠️ OSRM Public Walking failed: $e");
+    }
+
+    debugPrint("❌ CRITICAL: ALL WALKING ROUTING TIERS FAILED.");
+    return null;
   }
 
-  Future<RouteResult?> _fetchWithRetry(
-      LatLng origin, LatLng destination, String mode, String cacheKey) async {
-    // 🚀 DYNAMIC API PROFILE MAPPING
+  Future<RouteResult?> _getOlaRoute(LatLng origin, LatLng destination, String mode) async {
+    final key = dotenv.env['OLA_MAPS_API_KEY'] ?? '';
+    if (key.isEmpty || key == 'YOUR_KEY_HERE') {
+      throw Exception("Ola key is missing or placeholder. Skipping.");
+    }
+
     String apiMode = 'driving';
     if (mode == 'walk' || mode == 'walking' || mode == 'pedestrian') {
       apiMode = 'walking';
     } else if (mode == 'bike' || mode == 'twowheeler') {
       apiMode = 'bike';
     } else if (mode == 'heavy' || mode == 'auto') {
-      apiMode = 'auto'; // Ola's default fallback for heavy/auto
+      apiMode = 'auto'; 
     } else {
       apiMode = 'driving';
     }
 
     final String olaApiUrl =
-        '$_baseUrl?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=$apiMode&alternatives=true&steps=true&overview=full&annotations=congestion&api_key=$_apiKey';
-
-    debugPrint("🚀 OLA API EXACT URL: $olaApiUrl");
-
-    final Uri url = Uri.parse(olaApiUrl);
+        '$_baseUrl?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=$apiMode&alternatives=true&steps=true&traffic_metadata=true&overview=full&api_key=$key';
 
     int attempts = 0;
     while (attempts < 2) {
       try {
         attempts++;
-        // 🚀 FIX: Added GZIP header for reduced bandwidth
-        // 🚨 CRITICAL FIX: Change GET to POST
-        final response = await _client.post(url, headers: {
+        final response = await _client.post(Uri.parse(olaApiUrl), headers: {
           'Accept': 'application/json',
           'Accept-Encoding': 'gzip'
         }).timeout(const Duration(seconds: 5));
@@ -222,9 +306,9 @@ class RouteEngineService {
             return RouteResult(
               allRoutesCoordinates: allRoutesCoordinates,
               geoJson: primitiveData['geoJson'],
-              distanceKm: primitiveData['distanceKm'],
-              durationMins: primitiveData['durationMins'],
-              allDurationSeconds: List<double>.from(primitiveData['allDurationSeconds'] ?? [(primitiveData['durationMins'] * 60).toDouble()]),
+              distanceKm: safeDoubleFromJson(primitiveData['distanceKm']),
+              durationMins: safeIntFromJson(primitiveData['durationMins']),
+              allDurationSeconds: List<double>.from(primitiveData['allDurationSeconds'] ?? [(safeIntFromJson(primitiveData['durationMins']) * 60).toDouble()]),
               steps: primitiveData['steps'],
               firstInstruction: primitiveData['firstInstruction'],
               fetchedAt: DateTime.now(),
@@ -233,18 +317,263 @@ class RouteEngineService {
             );
           }
         } else {
-           debugPrint("❌ OLA API ERROR: ${response.statusCode} - ${response.body}");
+           throw Exception("Ola API HTTP ${response.statusCode}");
         }
       } catch (e) {
-        debugPrint("⚠️ Route API Attempt $attempts failed: $e");
-        if (attempts == 1) {
-          // 🚀 FIX: Added 1 Second Delay before retry to prevent server ban
-          await Future.delayed(const Duration(seconds: 1));
-        }
+        if (attempts == 2) rethrow;
+        await Future.delayed(const Duration(seconds: 1));
       }
     }
     return null;
   }
+
+  Future<RouteResult?> _getGoogleRoute(LatLng origin, LatLng destination, String mode) async {
+    final key = dotenv.env['GOOGLE_MAPS_API_KEY'] ?? '';
+    if (key.isEmpty || key == 'YOUR_KEY_HERE') {
+      throw Exception("Google key is missing or placeholder. Skipping.");
+    }
+    String apiMode = 'driving';
+    if (mode == 'walk' || mode == 'walking') {
+      apiMode = 'walking';
+    } else if (mode == 'bike') {
+      apiMode = 'bicycling';
+    }
+    
+    final url = 'https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=$apiMode&alternatives=true&overview=full&key=$key';
+    
+    final response = await _client.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['status'] == 'OK' && data['routes'] != null && data['routes'].isNotEmpty) {
+        return _parseGoogleRouteResponse(data);
+      } else {
+        throw Exception("Google API Error: ${data['status']}");
+      }
+    } else {
+      throw Exception("Google API HTTP ${response.statusCode}");
+    }
+  }
+
+  Future<RouteResult?> _getMapboxRoute(LatLng origin, LatLng destination, String mode) async {
+    final key = dotenv.env['MAPBOX_API_KEY'] ?? '';
+    if (key.isEmpty || key == 'YOUR_KEY_HERE') {
+      throw Exception("Mapbox key is missing or placeholder. Skipping.");
+    }
+    
+    String profile = 'driving';
+    if (mode == 'walk' || mode == 'walking') {
+      profile = 'walking';
+    } else if (mode == 'bike') {
+      profile = 'cycling';
+    }
+    
+    final url = 'https://api.mapbox.com/directions/v5/mapbox/$profile/${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}?alternatives=true&geometries=geojson&overview=full&annotations=congestion&steps=true&access_token=$key';
+    
+    final response = await _client.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['routes'] != null && data['routes'].isNotEmpty) {
+        return _parseOSRMMapboxRouteResponse(data);
+      } else {
+        throw Exception("Mapbox API No Routes");
+      }
+    } else {
+      throw Exception("Mapbox API HTTP ${response.statusCode}");
+    }
+  }
+
+  Future<RouteResult?> _getOSRMRoute(LatLng origin, LatLng destination, String profile) async {
+    String apiProfile = 'car';
+    if (profile == 'foot' || profile == 'walking' || profile == 'walk') {
+      apiProfile = 'foot';
+    } else if (profile == 'bike') {
+      apiProfile = 'bike';
+    } else if (profile == 'driving') {
+      apiProfile = 'car';
+    }
+
+    final url = 'http://router.project-osrm.org/route/v1/$apiProfile/${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}?overview=full&geometries=geojson&steps=true';
+    
+    final response = await _client.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['routes'] != null && data['routes'].isNotEmpty) {
+        return _parseOSRMMapboxRouteResponse(data);
+      } else {
+        throw Exception("OSRM API No Routes");
+      }
+    } else {
+      throw Exception("OSRM API HTTP ${response.statusCode}");
+    }
+  }
+
+  RouteResult? _parseGoogleRouteResponse(Map<String, dynamic> data) {
+    try {
+      final routes = data['routes'] as List;
+      List<List<LatLng>> allRoutesCoordinates = [];
+      List<double> allDurationSeconds = [];
+      
+      for (var route in routes) {
+        final overviewPolyline = route['overview_polyline']['points'] as String;
+        final coords = decodePolyline(overviewPolyline);
+        allRoutesCoordinates.add(coords);
+        
+        final legs = route['legs'] as List;
+        double duration = 0;
+        if (legs.isNotEmpty) {
+          duration = safeDoubleFromJson(legs[0]['duration']['value']);
+        }
+        allDurationSeconds.add(duration);
+      }
+      
+      final primaryRoute = routes[0];
+      final legs = primaryRoute['legs'] as List;
+      final primaryLeg = legs.isNotEmpty ? legs[0] : null;
+      
+      double distanceKm = 0.0;
+      int durationMins = 0;
+      List<Map<String, dynamic>> steps = [];
+      String firstInstruction = "Head to destination";
+      
+      if (primaryLeg != null) {
+        distanceKm = safeDoubleFromJson(primaryLeg['distance']['value']) / 1000.0;
+        durationMins = (safeDoubleFromJson(primaryLeg['duration']['value']) / 60.0).ceil();
+        
+        final rawSteps = primaryLeg['steps'] as List? ?? [];
+        for (var step in rawSteps) {
+          steps.add({
+            'html_instructions': step['html_instructions'],
+            'distance': safeDoubleFromJson(step['distance']['value']),
+            'duration': safeDoubleFromJson(step['duration']['value']),
+          });
+        }
+        
+        if (steps.isNotEmpty && steps[0]['html_instructions'] != null) {
+          firstInstruction = steps[0]['html_instructions'].toString().replaceAll(RegExp(r'<[^>]*>'), '');
+        }
+      }
+      
+      final geoJson = {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": allRoutesCoordinates.first.map((c) => [c.longitude, c.latitude]).toList()
+            },
+            "properties": {}
+          }
+        ]
+      };
+      
+      return RouteResult(
+        allRoutesCoordinates: allRoutesCoordinates,
+        geoJson: geoJson,
+        distanceKm: distanceKm,
+        durationMins: durationMins,
+        allDurationSeconds: allDurationSeconds,
+        steps: steps,
+        firstInstruction: firstInstruction,
+        fetchedAt: DateTime.now(),
+      );
+    } catch (e) {
+      debugPrint("Error parsing Google Route: $e");
+      return null;
+    }
+  }
+
+  RouteResult? _parseOSRMMapboxRouteResponse(Map<String, dynamic> data) {
+    try {
+      final routes = data['routes'] as List;
+      List<List<LatLng>> allRoutesCoordinates = [];
+      List<double> allDurationSeconds = [];
+      
+      for (var route in routes) {
+        final geometry = route['geometry'];
+        List<LatLng> coords = [];
+        if (geometry != null && geometry['coordinates'] != null) {
+          final coordinates = geometry['coordinates'] as List;
+          for (var c in coordinates) {
+            coords.add(LatLng(safeDoubleFromJson(c[1]), safeDoubleFromJson(c[0])));
+          }
+        }
+        allRoutesCoordinates.add(coords);
+        allDurationSeconds.add(safeDoubleFromJson(route['duration']));
+      }
+      
+      final primaryRoute = routes[0];
+      double distanceKm = safeDoubleFromJson(primaryRoute['distance']) / 1000.0;
+      int durationMins = (safeDoubleFromJson(primaryRoute['duration']) / 60.0).ceil();
+      
+      List<Map<String, dynamic>> steps = [];
+      String firstInstruction = "Head to destination";
+      
+      List<String>? congestionList;
+      if (primaryRoute['legs'] != null && (primaryRoute['legs'] as List).isNotEmpty) {
+        final primaryLeg = primaryRoute['legs'][0];
+        
+        try {
+          // Ola/Mapbox might use 'annotation' or 'annotations'
+          final annotationObj = primaryLeg['annotation'] ?? primaryLeg['annotations'];
+
+          if (annotationObj != null) {
+            final congestionData = annotationObj['congestion'];
+            if (congestionData != null) {
+              congestionList = (congestionData as List).map((e) => e.toString().toLowerCase()).toList();
+              debugPrint("🟢 TRAFFIC DATA FOUND: ${congestionList!.length} segments extracted.");
+            } else {
+              debugPrint("🟡 TRAFFIC DATA MISSING: Annotation object found, but no 'congestion' array. Keys available: ${annotationObj.keys}");
+            }
+          } else {
+            debugPrint("🔴 TRAFFIC DATA MISSING: No annotation object found in legs[0].");
+          }
+        } catch (e) {
+          debugPrint("💥 TRAFFIC EXTRACTION CRASH: $e");
+        }
+
+        final rawSteps = primaryLeg['steps'] as List? ?? [];
+        for (var step in rawSteps) {
+          steps.add({
+            'html_instructions': step['maneuver'] != null ? step['maneuver']['instruction'] : null,
+            'distance': safeDoubleFromJson(step['distance']),
+            'duration': safeDoubleFromJson(step['duration']),
+          });
+        }
+        
+        if (steps.isNotEmpty && steps[0]['html_instructions'] != null) {
+          firstInstruction = steps[0]['html_instructions'].toString().replaceAll(RegExp(r'<[^>]*>'), '');
+        }
+      }
+      
+      final geoJson = {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "geometry": primaryRoute['geometry'],
+            "properties": {}
+          }
+        ]
+      };
+      
+      return RouteResult(
+        allRoutesCoordinates: allRoutesCoordinates,
+        geoJson: geoJson,
+        distanceKm: distanceKm,
+        durationMins: durationMins,
+        allDurationSeconds: allDurationSeconds,
+        steps: steps,
+        firstInstruction: firstInstruction,
+        fetchedAt: DateTime.now(),
+        congestion: congestionList,
+      );
+    } catch (e) {
+      debugPrint("Error parsing OSRM/Mapbox Route: $e");
+      return null;
+    }
+  }
+
 
   void _saveToCache(String key, RouteResult result) {
     if (_lruCache.length >= _maxCacheSize) {
@@ -314,9 +643,29 @@ class RouteEngineService {
     if (route['legs'] == null || route['legs'].isEmpty) return null;
     final leg = route['legs'][0];
 
-    List<String>? congestionData;
-    if (leg['annotation'] != null && leg['annotation']['congestion'] != null) {
-      congestionData = List<String>.from(leg['annotation']['congestion']);
+    List<String>? congestionList;
+    try {
+      var advisory = route['travel_advisory'];
+      if (advisory == null && leg['travel_advisory'] != null) {
+        advisory = leg['travel_advisory'];
+      }
+
+      var congestionData;
+      // 🚨 FIX: Type-check to prevent "String is not a subtype of int" crash
+      if (advisory is List && advisory.isNotEmpty) {
+        congestionData = advisory[0]['congestion']; // If it's an array, grab first object
+      } else if (advisory is Map) {
+        congestionData = advisory['congestion']; // If it's an object, grab key
+      }
+
+      if (congestionData != null && congestionData is List) {
+        congestionList = congestionData.map((e) => e.toString().toLowerCase()).toList();
+        debugPrint("🟢 TRAFFIC DATA SECURED: ${congestionList.length} segments.");
+      } else {
+        debugPrint("🟡 NO CONGESTION DATA inside advisory.");
+      }
+    } catch (e) {
+      debugPrint("💥 TRAFFIC EXTRACTION CRASH: $e");
     }
 
     String encodedPolyline = "";
@@ -328,10 +677,16 @@ class RouteEngineService {
     } else if (route['geometry'] is String) {
       encodedPolyline = route['geometry'];
     }
-    if (encodedPolyline.isEmpty) return null;
+    
+    List<List<double>> rawCoords = [];
+    if (encodedPolyline.isNotEmpty) {
+      PolylinePoints polylinePoints = PolylinePoints();
+      List<PointLatLng> result = polylinePoints.decodePolyline(encodedPolyline);
+      rawCoords = result.map((p) => [p.latitude, p.longitude]).toList(); 
+      debugPrint("🗺️ High-Res Polyline Decoded: ${rawCoords.length} points.");
+    }
 
-    List<List<double>> rawCoords = _decodePolylinePrimitives(encodedPolyline);
-    rawCoords = _simplifyPolyline(rawCoords, 0.00005);
+    if (rawCoords.isEmpty) return null;
 
     final geoJson = {
       "type": "FeatureCollection",
@@ -408,7 +763,7 @@ class RouteEngineService {
       'steps': safeSteps,
       'firstInstruction': instruction,
       'gradientStops': gradientStops,
-      'congestion': congestionData,
+      'congestion': congestionList,
     };
   }
 

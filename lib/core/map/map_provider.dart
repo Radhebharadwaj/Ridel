@@ -146,6 +146,7 @@ class MapProvider extends ChangeNotifier {
         );
 
         _currentRouteResult = routeResult;
+        _lastRouteData = routeResult; // 🚨 Ensure this is added so Bottom Sheet gets data
         await drawNativeRoute(routeResult.allRoutesCoordinates);
         debugPrint("✅ [ROUTE ENGINE] Native MapLibre Draw Success!");
 
@@ -208,12 +209,12 @@ class MapProvider extends ChangeNotifier {
       final allLayers = await controller!.getLayerIds();
       activeMetroLayerIds = allLayers
           .map((e) => e.toString())
-          .where(
-            (id) =>
-                id.toLowerCase().contains('transit') ||
-                id.toLowerCase().contains('railway') ||
-                id.toLowerCase().contains('metro'),
-          )
+          .where((id) {
+            final lowerId = id.toLowerCase();
+            bool isTransit = lowerId.contains('transit') || lowerId.contains('railway') || lowerId.contains('metro');
+            bool isNotSymbol = !lowerId.contains('poi') && !lowerId.contains('label') && !lowerId.contains('text') && !lowerId.contains('symbol');
+            return isTransit && isNotSymbol;
+          })
           .toList();
       debugPrint(
         "🚇 Tracked Exact Metro/Transit Layer IDs: $activeMetroLayerIds",
@@ -449,7 +450,7 @@ class MapProvider extends ChangeNotifier {
           "🚶‍♂️ WALK MODE: Total Routes = ${allRoutes.length}. Primary Route Coords: ${allRoutes[0].length}",
         );
       }
-      final primaryCoords = _smoothPolyline(allRoutes[0]);
+      final primaryCoords = allRoutes[0];
       
       List<Map<String, dynamic>> features = [];
       final congestionData = _currentRouteResult?.congestion;
@@ -508,19 +509,20 @@ class MapProvider extends ChangeNotifier {
           );
         } else {
           await controller!.addGeoJsonSource('route-source-0', geoJson);
-          // 3. Draw Primary Route 3D Glass Tube (Drawn LAST so it sits on top)
-          // BOTTOM: Casing (Dark edges)
+          
+          // 1. BOTTOM: Casing (Deep shadow to give height/3D effect)
           await controller!.addLineLayer(
             "route-source-0",
             "primary-casing",
             const LineLayerProperties(
-              lineColor: "#002B5E",
+              lineColor: "#001D4A", // Very dark navy blue
               lineWidth: 10.0,
               lineCap: "round",
               lineJoin: "round",
             ),
           );
-          // MIDDLE: Core (Traffic segmented)
+          
+          // 2. MIDDLE: Core (Solid Neon Blue or Traffic Colors)
           await controller!.addLineLayer(
             "route-source-0",
             "primary-core",
@@ -531,24 +533,26 @@ class MapProvider extends ChangeNotifier {
                 "severe", "#8B0000",
                 "heavy", "#FF0000",
                 "moderate", "#FFA500",
-                "low", "#00BFFF",
-                "#00BFFF"
+                "low", "#0A84FF", // Apple Neon Blue
+                "#0A84FF" // Default
               ],
               lineWidth: 6.0,
               lineCap: "round",
               lineJoin: "round",
             ),
           );
-          // TOP: Shine (Ultra-thin Sky Blue)
+          
+          // 3. TOP: Shine (Ultra-thin 1px Sky Blue reflection perfectly blending)
           await controller!.addLineLayer(
             "route-source-0",
             "primary-shine",
             const LineLayerProperties(
-              lineColor: "#5AC8FA",
-              lineWidth: 1.0,
-              lineOpacity: 0.8,
+              lineColor: "#AEE5FF", // A slightly softer, more blended sky blue
+              lineWidth: 1.5,
+              lineOpacity: 0.9, 
               lineCap: "round",
               lineJoin: "round",
+              lineBlur: 1.0, // Adds a tiny glow effect to blend the edges seamlessly into the core
             ),
           );
         }
@@ -671,7 +675,7 @@ class MapProvider extends ChangeNotifier {
 
       final String sourceId = 'time-tag-source-$i';
       final String layerId = 'time-tag-layer-$i';
-      final String imageId = 'time-tag-image-$i';
+      final String imageId = 'time-tag-image-$i-${DateTime.now().millisecondsSinceEpoch}';
 
       LatLng midpoint;
       if (isPrimary) {
@@ -726,54 +730,34 @@ class MapProvider extends ChangeNotifier {
 
   Future<void> clearNativeRoute({bool preserveState = false}) async {
     if (controller != null && _drawnRoutesCount > 0) {
+      // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
+      try { await controller!.removeLayer('primary-casing'); } catch (_) {}
+      try { await controller!.removeLayer('primary-core'); } catch (_) {}
+      try { await controller!.removeLayer('primary-shine'); } catch (_) {}
+      try { await controller!.removeLayer('primary-walk-layer'); } catch (_) {}
+      try { await controller!.removeLayer('connectors-layer'); } catch (_) {}
+
       for (int i = 0; i < 5; i++) {
-        try {
-          await controller!.removeLayer('route-layer-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('alt-walk-layer-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('route-source-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('alt-source-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('time-tag-layer-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('time-tag-source-$i');
-        } catch (_) {}
+        try { await controller!.removeLayer('route-layer-$i'); } catch (_) {}
+        try { await controller!.removeLayer('alt-walk-layer-$i'); } catch (_) {}
+        try { await controller!.removeLayer('time-tag-layer-$i'); } catch (_) {}
       }
 
-      try {
-        await controller!.removeLayer('primary-casing');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-core');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-shine');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-walk-layer');
-      } catch (_) {}
-      try {
-        await controller!.removeSource('primary-source');
-      } catch (_) {}
+      // 2. SECURE SOURCE CLEANUP (Only safe to remove after layers are dead)
+      try { await controller!.removeSource('primary-source'); } catch (_) {}
+      try { await controller!.removeSource('connectors-source'); } catch (_) {}
 
-      try {
-        await controller!.removeLayer('connectors-layer');
-      } catch (_) {}
-      try {
-        await controller!.removeSource('connectors-source');
-      } catch (_) {}
+      for (int i = 0; i < 5; i++) {
+        try { await controller!.removeSource('route-source-$i'); } catch (_) {}
+        try { await controller!.removeSource('alt-source-$i'); } catch (_) {}
+        try { await controller!.removeSource('time-tag-source-$i'); } catch (_) {}
+      }
 
       _drawnRoutesCount = 0;
       if (!preserveState) {
         isRouteCalculated = false;
         _currentRouteResult = null;
+        _lastRouteData = null;
 
         // 🚨 Deactivate Focus Mode (Restore transit lines to 100% opacity)
         await _setTransitLayersOpacity(1.0);
@@ -809,45 +793,28 @@ class MapProvider extends ChangeNotifier {
   Future<void> cancelAndClearRoute() async {
     // 1. Clear MapLibre Native Layers (Lines AND ETA Pills)
     if (controller != null) {
-      for (int i = 0; i < 5; i++) {
-        // Safely loop up to max possible routes
-        try {
-          await controller!.removeLayer('route-layer-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('alt-walk-layer-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('route-source-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('alt-source-$i');
-        } catch (_) {}
+      // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
+      try { await controller!.removeLayer('primary-casing'); } catch (_) {}
+      try { await controller!.removeLayer('primary-core'); } catch (_) {}
+      try { await controller!.removeLayer('primary-shine'); } catch (_) {}
+      try { await controller!.removeLayer('primary-walk-layer'); } catch (_) {}
+      try { await controller!.removeLayer('connectors-layer'); } catch (_) {}
 
-        // 🚨 CRITICAL: Clear the ETA tags we added
-        try {
-          await controller!.removeLayer('time-tag-layer-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('time-tag-source-$i');
-        } catch (_) {}
+      for (int i = 0; i < 5; i++) {
+        try { await controller!.removeLayer('route-layer-$i'); } catch (_) {}
+        try { await controller!.removeLayer('alt-walk-layer-$i'); } catch (_) {}
+        try { await controller!.removeLayer('time-tag-layer-$i'); } catch (_) {}
       }
 
-      try {
-        await controller!.removeLayer('primary-casing');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-core');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-shine');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-walk-layer');
-      } catch (_) {}
-      try {
-        await controller!.removeSource('primary-source');
-      } catch (_) {}
+      // 2. SECURE SOURCE CLEANUP (Only safe to remove after layers are dead)
+      try { await controller!.removeSource('primary-source'); } catch (_) {}
+      try { await controller!.removeSource('connectors-source'); } catch (_) {}
+
+      for (int i = 0; i < 5; i++) {
+        try { await controller!.removeSource('route-source-$i'); } catch (_) {}
+        try { await controller!.removeSource('alt-source-$i'); } catch (_) {}
+        try { await controller!.removeSource('time-tag-source-$i'); } catch (_) {}
+      }
 
       // Also clear destination pin circle if it exists
       await clearNativeDestinationPin();
@@ -875,6 +842,7 @@ class MapProvider extends ChangeNotifier {
     _drawnRoutesCount = 0;
     isRouteCalculated = false;
     _currentRouteResult = null;
+    _lastRouteData = null;
     targetDestination = null;
     targetLocation = null;
     isCinematicSearch = false;
@@ -1352,6 +1320,7 @@ class MapProvider extends ChangeNotifier {
 
       if (routeData != null && routeData.allRoutesCoordinates.isNotEmpty) {
         _lastRouteData = routeData;
+        _currentRouteResult = routeData;
         List<LatLng> routePoints = routeData.allRoutesCoordinates.first;
 
         if (routePoints.isNotEmpty) {
@@ -1786,12 +1755,15 @@ class MapProvider extends ChangeNotifier {
 
       if (route != null) {
         _lastRouteData = route;
+        _currentRouteResult = route; // 🚨 Ensure this is synced
 
         // 3. Draw the Route on the Map
         await drawNativeRoute(route.allRoutesCoordinates);
 
+        isRouteCalculated = true; // 🚨 Missing flag causing the card to hide
         // 🧭 State Machine: Route drawn successfully
         engine.setUIState(MapUIState.routeDrawn);
+        notifyListeners(); // 🚨 Missing trigger causing UI to not rebuild
 
         // 4. Smoothly animate camera to fit the entire route bounds
         final double minLat = math.min(
@@ -1853,6 +1825,7 @@ class MapProvider extends ChangeNotifier {
         targetDestination!,
         mode: currentNavMode,
       );
+      _currentRouteResult = _lastRouteData;
     }
 
     if (_lastRouteData == null) {
@@ -1897,6 +1870,7 @@ class MapProvider extends ChangeNotifier {
 
       if (route != null) {
         _lastRouteData = route;
+        _currentRouteResult = route;
         targetDestination = destination;
         await drawNativeRoute(route.allRoutesCoordinates);
 
