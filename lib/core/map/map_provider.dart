@@ -1240,7 +1240,7 @@ class MapProvider extends ChangeNotifier {
             try {
               final currentPlace = await PlaceEnrichmentService()
                   .reverseGeocode(pos.latitude, pos.longitude);
-              locService.setCurrentAddressName(currentPlace.address ?? currentPlace.name);
+              locService.setCurrentAddressName(currentPlace.address.isNotEmpty ? currentPlace.address : currentPlace.name);
             } catch (e) {
               debugPrint("Origin Reverse Geocode Failed: $e");
             }

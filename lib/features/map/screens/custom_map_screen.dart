@@ -992,6 +992,7 @@ class _CustomMapScreenState extends State<CustomMapScreen>
       onTap: () async {
         AppHaptics.lightImpact();
         await provider.setNavMode(context, mode);
+        if (!context.mounted) return;
         await provider.calculateAndDrawNativeRoute(context, mode);
       },
       child: AnimatedContainer(
