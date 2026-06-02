@@ -21,10 +21,7 @@ class PlaceService {
     }
 
     String urlStr = "https://api.olamaps.io/places/v1/autocomplete?input=${Uri.encodeComponent(query)}&api_key=$apiKey";
-    if (userLocation != null) {
-      // 🚀 Broadened Search: Add 50km radius around user location for better autocomplete
-      urlStr += "&location=${userLocation.latitude},${userLocation.longitude}&radius=50000";
-    }
+    
     final url = Uri.parse(urlStr);
     
     try {

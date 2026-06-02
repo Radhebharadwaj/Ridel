@@ -15,10 +15,10 @@ class ThemeService with WidgetsBindingObserver {
   }
 
   // 1. App Theme Mode (Dark/Light/System/AutoTime)
-  static final ValueNotifier<AppThemeMode> appThemeNotifier = ValueNotifier(AppThemeMode.autoTime);
+  static final ValueNotifier<AppThemeMode> appThemeNotifier = ValueNotifier(AppThemeMode.system);
   
   // Actually computed Flutter ThemeMode
-  static final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light); // updated dynamically in init()
+  static final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system); // updated dynamically in init()
 
   // 2. Font Style (Modern/Classic)
   static final ValueNotifier<String> fontNotifier = ValueNotifier('Modern');

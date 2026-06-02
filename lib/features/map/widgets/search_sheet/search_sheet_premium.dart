@@ -171,10 +171,10 @@ extension _PremiumDetailsExt on _MapSearchSheetState {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildGlassyTransportMode(context, icon: Icons.directions_walk_rounded, label: 'Walk', isActive: provider.currentNavMode == 'walking', onTap: () { AppHaptics.selectionClick(); provider.currentNavMode = 'walking'; provider.calculateAndDrawRoute(context); }),
-              _buildGlassyTransportMode(context, icon: Icons.two_wheeler_rounded, label: 'Bike', isActive: provider.currentNavMode == 'bicycling' || provider.currentNavMode == 'twowheeler', onTap: () { AppHaptics.selectionClick(); provider.currentNavMode = 'twowheeler'; provider.calculateAndDrawRoute(context); }),
-              _buildGlassyTransportMode(context, icon: CupertinoIcons.car_detailed, label: 'Car', isActive: provider.currentNavMode == 'driving', onTap: () { AppHaptics.selectionClick(); provider.currentNavMode = 'driving'; provider.calculateAndDrawRoute(context); }),
-              _buildGlassyTransportMode(context, icon: Icons.local_shipping_rounded, label: 'Heavy', isActive: provider.currentNavMode == 'heavy', onTap: () { AppHaptics.selectionClick(); provider.currentNavMode = 'heavy'; provider.calculateAndDrawRoute(context); }),
+              _buildGlassyTransportMode(context, icon: Icons.directions_walk_rounded, label: 'Walk', isActive: provider.currentNavMode == 'walking', onTap: () { AppHaptics.selectionClick(); provider.currentNavMode = 'walking'; provider.calculateAndDrawNativeRoute(context, provider.currentNavMode); }),
+              _buildGlassyTransportMode(context, icon: Icons.two_wheeler_rounded, label: 'Bike', isActive: provider.currentNavMode == 'bicycling' || provider.currentNavMode == 'twowheeler', onTap: () { AppHaptics.selectionClick(); provider.currentNavMode = 'twowheeler'; provider.calculateAndDrawNativeRoute(context, provider.currentNavMode); }),
+              _buildGlassyTransportMode(context, icon: CupertinoIcons.car_detailed, label: 'Car', isActive: provider.currentNavMode == 'driving', onTap: () { AppHaptics.selectionClick(); provider.currentNavMode = 'driving'; provider.calculateAndDrawNativeRoute(context, provider.currentNavMode); }),
+              _buildGlassyTransportMode(context, icon: Icons.local_shipping_rounded, label: 'Heavy', isActive: provider.currentNavMode == 'heavy', onTap: () { AppHaptics.selectionClick(); provider.currentNavMode = 'heavy'; provider.calculateAndDrawNativeRoute(context, provider.currentNavMode); }),
             ],
           ),
           

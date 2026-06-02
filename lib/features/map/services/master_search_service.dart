@@ -192,7 +192,7 @@ class MasterSearchService {
           'https://nominatim.openstreetmap.org/search?q=$query&format=json&addressdetails=1&limit=5';
       if (location != null) {
         url +=
-            '&viewbox=${location.longitude - 0.1},${location.latitude + 0.1},${location.longitude + 0.1},${location.latitude - 0.1}&bounded=1';
+            '&viewbox=${location.longitude - 0.1},${location.latitude + 0.1},${location.longitude + 0.1},${location.latitude - 0.1}';
       }
 
       final response = await _client.get(

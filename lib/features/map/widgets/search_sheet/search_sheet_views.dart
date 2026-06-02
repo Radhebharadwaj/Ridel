@@ -784,33 +784,93 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 1. Address & Copy Button Row
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.location_on_rounded, color: Colors.white54, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        placeSubtitle, // AGENT: Ensure this variable is defined and passed correctly!
-                        style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    GestureDetector(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: "$placeTitle, $placeSubtitle"));
-                        AppHaptics.selectionClick();
-                        // AGENT: Use the exact valid Toast method for this project
-                        ToastService.showSuccess(context, "Address Copied!"); 
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(8)),
-                        child: const Icon(Icons.copy_rounded, color: Colors.white, size: 18),
-                      ),
-                    ),
-                  ],
+                // 1. ORIGIN & DESTINATION ROWS
+                Builder(
+                  builder: (context) {
+                    final locService = Provider.of<GlobalLocationService>(context);
+                    final String originAddress = locService.currentAddressName ?? "Locating...";
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 🟢 CURRENT LOCATION (ORIGIN)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.my_location, color: Colors.blueAccent, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text("Current Location", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                  Text(
+                                    originAddress, 
+                                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            GestureDetector(
+                              onTap: () {
+                                if (originAddress.isNotEmpty && originAddress != "Locating...") {
+                                  Clipboard.setData(ClipboardData(text: originAddress));
+                                  AppHaptics.selectionClick();
+                                  ToastService.showSuccess(context, "Location Copied!"); 
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(8)),
+                                child: const Icon(Icons.copy_rounded, color: Colors.white, size: 18),
+                              ),
+                            ),
+                          ],
+                        ),
+                        
+                        const Padding(
+                          padding: EdgeInsets.only(left: 9.0, top: 4, bottom: 4),
+                          child: SizedBox(height: 12, child: VerticalDivider(color: Colors.grey, thickness: 1)),
+                        ),
+
+                        // 🔴 DESTINATION
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.location_on, color: Colors.redAccent, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text("Destination", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                  Text(
+                                    placeSubtitle.isNotEmpty ? placeSubtitle : placeTitle,
+                                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            GestureDetector(
+                              onTap: () {
+                                Clipboard.setData(ClipboardData(text: "$placeTitle, $placeSubtitle"));
+                                AppHaptics.selectionClick();
+                                ToastService.showSuccess(context, "Address Copied!"); 
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(8)),
+                                child: const Icon(Icons.copy_rounded, color: Colors.white, size: 18),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  }
                 ),
                 
                 // 2. Combined ETA & Distance Badge
@@ -819,25 +879,54 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                     padding: EdgeInsets.symmetric(vertical: 12), 
                     child: Divider(color: Colors.white24, height: 1)
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0A84FF).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF0A84FF).withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.schedule_rounded, color: Color(0xFF0A84FF), size: 18),
-                        const SizedBox(width: 6),
-                        // Beautiful ETA & Distance Typography
-                        Text(
-                          "${provider.currentRouteResult!.durationMins} min • ${provider.currentRouteResult!.distanceKm.toStringAsFixed(1)} km", 
-                          style: const TextStyle(color: Color(0xFF0A84FF), fontWeight: FontWeight.bold, fontSize: 14)
+                  Builder(
+                    builder: (context) {
+                      int totalMinutes = provider.currentRouteResult!.durationMins;
+                      int hours = totalMinutes ~/ 60;
+                      int minutes = totalMinutes % 60;
+                      String formattedDuration = hours > 0 ? "$hours hr $minutes min" : "$minutes min";
+                      
+                      DateTime arrivalTime = DateTime.now().add(Duration(minutes: totalMinutes));
+                      String formattedArrival = TimeOfDay.fromDateTime(arrivalTime).format(context);
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0A284A),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      ],
-                    ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.access_time, color: Color(0xFF0A84FF), size: 16),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "$formattedDuration • ${provider.currentRouteResult!.distanceKm.toStringAsFixed(1)} km",
+                                  style: const TextStyle(
+                                    color: Color(0xFF0A84FF),
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "Arrives at $formattedArrival",
+                              style: TextStyle(
+                                color: const Color(0xFF0A84FF).withValues(alpha: 0.7),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
                   ),
                   const SizedBox(height: 20),
                 ],

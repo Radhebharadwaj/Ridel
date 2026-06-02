@@ -198,7 +198,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         await mapProvider.flyToPlace(lat, lng);
         if (!mounted) return;
         mapProvider.setDestinationSelected(true);
-        await mapProvider.triggerDirectionsFlow(context);
+        await mapProvider.calculateAndDrawNativeRoute(context, mapProvider.currentNavMode);
         AppHaptics.success();
       } else {
         setState(() => _selectedActionType = type);
@@ -745,10 +745,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         }
         unawaited(_fetchExtraDetailsForPlace(tappedPlace));
 
-        final destLatLng = LatLng(tappedPlace.latitude, tappedPlace.longitude);
-        if (!mounted) return;
-        await Provider.of<MapProvider>(context, listen: false)
-            .autoDrawRouteTo(destLatLng, context);
       }
     }
   }
@@ -1002,7 +998,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         await provider.addNativeDestinationPin(backupCoords);
         if (wasRouteDrawn || wasNavigating) {
           if (mounted) {
-            await provider.calculateAndDrawRoute(context);
+            await provider.calculateAndDrawNativeRoute(context, provider.currentNavMode);
             if (wasNavigating) {
               await provider.start3DNavigation();
             }

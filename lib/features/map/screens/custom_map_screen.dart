@@ -472,8 +472,8 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                 mapProvider.targetDestination = latlng;
                 mapProvider.setDestinationSelected(true);
 
-                if (!context.mounted) return;
-                await mapProvider.autoDrawRouteTo(latlng, context);
+                // if (!context.mounted) return;
+                // await mapProvider.autoDrawRouteTo(latlng, context);
               },
               onMapLongClick: (point, latlng) async {
                 AppHaptics.heavyImpact();
@@ -641,11 +641,11 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                             child: provider.isDestinationSelected
                                 ? GestureDetector(
                                     key: const ValueKey('directions_btn'),
-                                    onTap: () async {
-                                      AppHaptics.heavyImpact();
-                                      await provider
-                                          .triggerDirectionsFlow(context);
-                                    },
+                                      onTap: () async {
+                                        AppHaptics.heavyImpact();
+                                        await provider
+                                            .calculateAndDrawNativeRoute(context, provider.currentNavMode);
+                                      },
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 20, vertical: 12),
@@ -989,9 +989,10 @@ class _CustomMapScreenState extends State<CustomMapScreen>
       BuildContext context, MapProvider provider, IconData icon, String mode) {
     final isSelected = provider.currentNavMode == mode;
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         AppHaptics.lightImpact();
-        provider.setNavMode(context, mode);
+        await provider.setNavMode(context, mode);
+        await provider.calculateAndDrawNativeRoute(context, mode);
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),

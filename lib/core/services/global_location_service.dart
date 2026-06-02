@@ -13,6 +13,10 @@ class GlobalLocationService extends ChangeNotifier {
   bool _isUsingIpFallback = false; // 🚀 NEW: Track if we are using IP location
   String _currentCity = "Locating..."; // 🚀 NEW: Global city name
   String _currentState = "";
+  
+  // 🚀 NEW: Address Caching for Origin
+  String? _currentAddressName;
+  Position? _lastGeocodedPosition;
 
   // LIVE TRACKING & MAP ENGINE STREAMS
   StreamSubscription<Position>? _positionStreamSubscription;
@@ -34,6 +38,12 @@ class GlobalLocationService extends ChangeNotifier {
       _isUsingIpFallback; // UI can show "Approximate Location"
   String get currentCity => _currentCity;
   String get currentState => _currentState;
+  String? get currentAddressName => _currentAddressName;
+  void setCurrentAddressName(String value) {
+    _currentAddressName = value;
+    notifyListeners();
+  }
+  Position? get lastGeocodedPosition => _lastGeocodedPosition;
   Stream<Position> get engineLocationStream => _engineStreamController.stream;
 
   // ==========================================
@@ -98,6 +108,50 @@ class GlobalLocationService extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint("Global Reverse Geocoding Failed: $e");
+    }
+  }
+
+  // ==========================================
+  // 🚀 EFFICIENT ADDRESS CACHING FOR ORIGIN
+  // ==========================================
+  Future<void> fetchCurrentAddressIfNeeded() async {
+    final Position? currentLoc = _currentPosition;
+    if (currentLoc == null) return;
+
+    // If we already have an address AND the user hasn't moved more than 50 meters, skip API call!
+    if (_currentAddressName != null && _lastGeocodedPosition != null) {
+      double distanceMoved = Geolocator.distanceBetween(
+        _lastGeocodedPosition!.latitude, _lastGeocodedPosition!.longitude,
+        currentLoc.latitude, currentLoc.longitude
+      );
+      if (distanceMoved < 50.0) {
+        return; // Use cached address
+      }
+    }
+
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(currentLoc.latitude, currentLoc.longitude)
+          .timeout(const Duration(seconds: 5));
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        // Construct a clean, human-readable address
+        _currentAddressName = [place.street, place.subLocality, place.locality]
+            .where((e) => e != null && e.isNotEmpty)
+            .join(', ');
+        
+        if (_currentAddressName == null || _currentAddressName!.isEmpty) {
+          _currentAddressName = _currentCity;
+        }
+
+        _lastGeocodedPosition = currentLoc;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Reverse Geocode for exact address failed: $e");
+      // 🚨 FALLBACK: Show exact coordinates if API fails
+      _currentAddressName = "${currentLoc.latitude.toStringAsFixed(5)}, ${currentLoc.longitude.toStringAsFixed(5)}";
+      _lastGeocodedPosition = currentLoc;
+      notifyListeners();
     }
   }
 

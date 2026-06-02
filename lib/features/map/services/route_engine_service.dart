@@ -14,6 +14,7 @@ class RouteResult {
   final Map<String, dynamic> geoJson;
   final double distanceKm;
   final int durationMins;
+  final List<double> allDurationSeconds;
   final List<Map<String, dynamic>> steps;
   final String firstInstruction;
   final DateTime fetchedAt;
@@ -28,6 +29,7 @@ class RouteResult {
     required this.geoJson,
     required this.distanceKm,
     required this.durationMins,
+    this.allDurationSeconds = const [],
     required this.steps,
     required this.firstInstruction,
     required this.fetchedAt,
@@ -41,6 +43,7 @@ class RouteResult {
         'geoJson': geoJson,
         'distanceKm': distanceKm,
         'durationMins': durationMins,
+        'allDurationSeconds': allDurationSeconds,
         'steps': steps,
         'firstInstruction': firstInstruction,
         'fetchedAt': fetchedAt.toIso8601String(),
@@ -57,6 +60,7 @@ class RouteResult {
       geoJson: json['geoJson'],
       distanceKm: json['distanceKm'],
       durationMins: json['durationMins'],
+      allDurationSeconds: json['allDurationSeconds'] != null ? List<double>.from(json['allDurationSeconds']) : [],
       steps: List<Map<String, dynamic>>.from(json['steps']),
       firstInstruction: json['firstInstruction'],
       fetchedAt: DateTime.parse(json['fetchedAt']),
@@ -125,8 +129,22 @@ class RouteEngineService {
 
   Future<RouteResult?> _fetchWithRetry(
       LatLng origin, LatLng destination, String mode, String cacheKey) async {
+    // 🚀 DYNAMIC API PROFILE MAPPING
+    String apiMode = 'driving';
+    if (mode == 'walk' || mode == 'walking' || mode == 'pedestrian') {
+      apiMode = 'walking';
+    } else if (mode == 'bike' || mode == 'twowheeler') {
+      apiMode = 'bike';
+    } else if (mode == 'heavy' || mode == 'auto') {
+      apiMode = 'auto'; // Ola's default fallback for heavy/auto
+    } else {
+      apiMode = 'driving';
+    }
+
     final String olaApiUrl =
-        '$_baseUrl?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=$mode&alternatives=true&steps=true&overview=full&api_key=$_apiKey';
+        '$_baseUrl?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=$apiMode&alternatives=true&steps=true&overview=full&api_key=$_apiKey';
+
+    debugPrint("🚀 OLA API EXACT URL: $olaApiUrl");
 
     final Uri url = Uri.parse(olaApiUrl);
 
@@ -154,6 +172,7 @@ class RouteEngineService {
               geoJson: primitiveData['geoJson'],
               distanceKm: primitiveData['distanceKm'],
               durationMins: primitiveData['durationMins'],
+              allDurationSeconds: List<double>.from(primitiveData['allDurationSeconds'] ?? [(primitiveData['durationMins'] * 60).toDouble()]),
               steps: primitiveData['steps'],
               firstInstruction: primitiveData['firstInstruction'],
               fetchedAt: DateTime.now(),
@@ -220,12 +239,17 @@ class RouteEngineService {
       if (primary == null) return null;
       
       List<List<List<double>>> allRoutes = [primary['coords']];
+      List<double> allDurationSeconds = [primary['durationSeconds']];
       for (int i = 1; i < data['routes'].length; i++) {
         final alt = _parseRouteObject(data['routes'][i]);
-        if (alt != null) allRoutes.add(alt['coords']);
+        if (alt != null) {
+          allRoutes.add(alt['coords']);
+          allDurationSeconds.add(alt['durationSeconds']);
+        }
       }
       
       primary['allRoutes'] = allRoutes;
+      primary['allDurationSeconds'] = allDurationSeconds;
       return primary;
     } catch (e) {
       debugPrint("Isolate Decoding Error: $e");
@@ -322,6 +346,7 @@ class RouteEngineService {
       'geoJson': geoJson,
       'distanceKm': leg['distance'] / 1000,
       'durationMins': (leg['duration'] / 60).ceil(),
+      'durationSeconds': (leg['duration'] as num).toDouble(),
       'steps': safeSteps,
       'firstInstruction': instruction,
       'gradientStops': gradientStops,

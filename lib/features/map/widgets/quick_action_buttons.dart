@@ -193,7 +193,7 @@ class QuickActionButtonsState extends State<QuickActionButtons>
 
   void _onDirectionsTap(MapProvider provider) {
     AppHaptics.heavyImpact();
-    provider.triggerDirectionsFlow(context);
+    provider.calculateAndDrawNativeRoute(context, provider.currentNavMode);
   }
 
   void _onStartNavTap(MapProvider provider) {
