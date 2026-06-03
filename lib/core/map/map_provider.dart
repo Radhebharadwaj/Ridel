@@ -563,16 +563,29 @@ class MapProvider extends ChangeNotifier {
 
     // 5. Adjust Camera to fit the PRIMARY route
     if (allRoutes.isNotEmpty) {
-      await controller!.animateCamera(
-        CameraUpdate.newLatLngBounds(
-          _calculateBounds(allRoutes.first),
-          bottom: 300, // Padding for your bottom sheets
-          left: 50,
-          right: 50,
-          top: 100,
-        ),
-        duration: const Duration(milliseconds: 800),
-      );
+      try {
+        await controller!.animateCamera(
+          CameraUpdate.newLatLngBounds(
+            _calculateBounds(allRoutes.first),
+            bottom: 120, // Reduced from 300/400
+            left: 50,
+            right: 50,
+            top: 100,
+          ),
+          duration: const Duration(milliseconds: 800),
+        );
+      } catch (e) {
+        debugPrint("⚠️ Bounds fit failed (screen too small), falling back to center focus: $e");
+        // Fallback to center point
+        final bounds = _calculateBounds(allRoutes.first);
+        final centerLat = (bounds.southwest.latitude + bounds.northeast.latitude) / 2;
+        final centerLng = (bounds.southwest.longitude + bounds.northeast.longitude) / 2;
+        await controller!.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(target: LatLng(centerLat, centerLng), zoom: 12.0)
+          )
+        );
+      }
     }
 
     // 6. DRAW THE "WALK TO ROAD" AND "ROAD TO DESTINATION" CONNECTORS
@@ -1411,19 +1424,30 @@ class MapProvider extends ChangeNotifier {
           if (label != null) _nearbyLabels.add(label);
         }
 
-        await controller?.animateCamera(
-          CameraUpdate.newLatLngBounds(
-            LatLngBounds(
-              southwest: LatLng(minLat - 0.005, minLng - 0.005),
-              northeast: LatLng(maxLat + 0.005, maxLng + 0.005),
+        try {
+          await controller?.animateCamera(
+            CameraUpdate.newLatLngBounds(
+              LatLngBounds(
+                southwest: LatLng(minLat - 0.005, minLng - 0.005),
+                northeast: LatLng(maxLat + 0.005, maxLng + 0.005),
+              ),
+              left: 50,
+              top: 100,
+              right: 50,
+              bottom: 120,
             ),
-            left: 50,
-            top: 100,
-            right: 50,
-            bottom: 250,
-          ),
-          duration: const Duration(milliseconds: 1500),
-        );
+            duration: const Duration(milliseconds: 1500),
+          );
+        } catch (e) {
+          debugPrint("⚠️ Bounds fit failed (screen too small), falling back to center focus: $e");
+          final centerLat = (minLat + maxLat) / 2;
+          final centerLng = (minLng + maxLng) / 2;
+          await controller?.animateCamera(
+            CameraUpdate.newCameraPosition(
+              CameraPosition(target: LatLng(centerLat, centerLng), zoom: 12.0)
+            )
+          );
+        }
       } else {
         debugPrint("No places found for $category");
       }
@@ -1521,19 +1545,30 @@ class MapProvider extends ChangeNotifier {
         double minLng = math.min(currentLoc.longitude, stationLoc.longitude);
         double maxLng = math.max(currentLoc.longitude, stationLoc.longitude);
 
-        await controller?.animateCamera(
-          CameraUpdate.newLatLngBounds(
-            LatLngBounds(
-              southwest: LatLng(minLat - 0.005, minLng - 0.005),
-              northeast: LatLng(maxLat + 0.005, maxLng + 0.005),
+        try {
+          await controller?.animateCamera(
+            CameraUpdate.newLatLngBounds(
+              LatLngBounds(
+                southwest: LatLng(minLat - 0.005, minLng - 0.005),
+                northeast: LatLng(maxLat + 0.005, maxLng + 0.005),
+              ),
+              left: 50,
+              top: 100,
+              right: 50,
+              bottom: 120,
             ),
-            left: 50,
-            top: 100,
-            right: 50,
-            bottom: 250,
-          ),
-          duration: const Duration(milliseconds: 1500),
-        );
+            duration: const Duration(milliseconds: 1500),
+          );
+        } catch (e) {
+          debugPrint("⚠️ Bounds fit failed (screen too small), falling back to center focus: $e");
+          final centerLat = (minLat + maxLat) / 2;
+          final centerLng = (minLng + maxLng) / 2;
+          await controller?.animateCamera(
+            CameraUpdate.newCameraPosition(
+              CameraPosition(target: LatLng(centerLat, centerLng), zoom: 12.0)
+            )
+          );
+        }
       } else {
         await _fallbackFlyTo(stationLoc);
       }
@@ -1783,19 +1818,30 @@ class MapProvider extends ChangeNotifier {
           targetDestination!.longitude,
         );
 
-        await controller!.animateCamera(
-          CameraUpdate.newLatLngBounds(
-            LatLngBounds(
-              southwest: LatLng(minLat, minLng),
-              northeast: LatLng(maxLat, maxLng),
+        try {
+          await controller!.animateCamera(
+            CameraUpdate.newLatLngBounds(
+              LatLngBounds(
+                southwest: LatLng(minLat, minLng),
+                northeast: LatLng(maxLat, maxLng),
+              ),
+              left: 50,
+              right: 50,
+              top: 100,
+              bottom: 120, // Reduced from 400 padding to account for the UI sheet
             ),
-            left: 50,
-            right: 50,
-            top: 100,
-            bottom: 400, // padding to account for the UI sheet
-          ),
-          duration: const Duration(milliseconds: 1200),
-        );
+            duration: const Duration(milliseconds: 1200),
+          );
+        } catch (e) {
+          debugPrint("⚠️ Bounds fit failed (screen too small), falling back to center focus: $e");
+          final centerLat = (minLat + maxLat) / 2;
+          final centerLng = (minLng + maxLng) / 2;
+          await controller!.animateCamera(
+            CameraUpdate.newCameraPosition(
+              CameraPosition(target: LatLng(centerLat, centerLng), zoom: 12.0)
+            )
+          );
+        }
       }
     } catch (e) {
       debugPrint("Routing Error: $e");

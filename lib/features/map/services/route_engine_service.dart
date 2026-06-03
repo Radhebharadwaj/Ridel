@@ -645,27 +645,42 @@ class RouteEngineService {
 
     List<String>? congestionList;
     try {
-      var advisory = route['travel_advisory'];
-      if (advisory == null && leg['travel_advisory'] != null) {
-        advisory = leg['travel_advisory'];
-      }
+      congestionList = [];
+      bool foundAnyTraffic = false;
+      
+      final legs = route['legs'] as List?;
+      if (legs != null && legs.isNotEmpty) {
+        final steps = legs[0]['steps'] as List?;
+        
+        if (steps != null && steps.isNotEmpty) {
+          // 🚨 X-RAY DEBUG: Print the exact keys and data Ola is sending for the first maneuver
+          debugPrint("🔍 X-RAY STEP JSON: ${steps[0].toString()}");
 
-      var congestionData;
-      // 🚨 FIX: Type-check to prevent "String is not a subtype of int" crash
-      if (advisory is List && advisory.isNotEmpty) {
-        congestionData = advisory[0]['congestion']; // If it's an array, grab first object
-      } else if (advisory is Map) {
-        congestionData = advisory['congestion']; // If it's an object, grab key
+          for (var step in steps) {
+            String segmentTraffic = "low"; // Default fallback
+            
+            // Dig into step-level travel advisory
+            if (step['travel_advisory'] != null && step['travel_advisory']['congestion'] != null) {
+              segmentTraffic = step['travel_advisory']['congestion'].toString().toLowerCase();
+              foundAnyTraffic = true;
+            }
+            
+            // Map this traffic value. (Since we decoded the high-res polyline, 
+            // we temporarily push this to a list. A full implementation would interpolate 
+            // this across the step's coordinate length).
+            congestionList.add(segmentTraffic);
+          }
+        }
       }
-
-      if (congestionData != null && congestionData is List) {
-        congestionList = congestionData.map((e) => e.toString().toLowerCase()).toList();
-        debugPrint("🟢 TRAFFIC DATA SECURED: ${congestionList.length} segments.");
+      
+      if (foundAnyTraffic) {
+        debugPrint("🟢 DEEP TRAFFIC SCAN: Found congestion data in steps! (${congestionList.length} segments)");
       } else {
-        debugPrint("🟡 NO CONGESTION DATA inside advisory.");
+        debugPrint("🟡 DEEP TRAFFIC SCAN: No congestion data found in any steps (Likely no traffic at this hour).");
+        congestionList = null; // Let the UI default to solid blue
       }
     } catch (e) {
-      debugPrint("💥 TRAFFIC EXTRACTION CRASH: $e");
+      debugPrint("💥 DEEP TRAFFIC SCAN CRASH: $e");
     }
 
     String encodedPolyline = "";
