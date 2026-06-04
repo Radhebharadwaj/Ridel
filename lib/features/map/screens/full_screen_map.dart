@@ -171,7 +171,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   },
                   onMapClick: (point, latLng) async {
                     FocusScope.of(context).unfocus();
-                    bool handled = await mapProvider.handleRouteClick(point, latLng);
+                    bool handled =
+                        await mapProvider.handleRouteClick(point, latLng);
                     if (!handled) {
                       mapProvider.clearTargetLocation();
                     }
@@ -191,6 +192,41 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       kIsWeb ? null : const Point(-100, -100),
                   onCameraTrackingDismissed: () =>
                       mapProvider.engine.onUserPannedMap(),
+
+                  // 🚀 NAYA BULLETPROOF CODE YAHAN SE PASTE KAR:
+                  onCameraIdle: () async {
+                    final ctrl = mapProvider.controller ?? _tempController;
+                    if (ctrl != null) {
+                      try {
+                        final bounds = await ctrl.getVisibleRegion();
+                        
+                        // 1. Pehle provider se location nikalne ki koshish karo
+                        LatLng? userLoc = mapProvider.currentLocation;
+                        
+                        // 2. Agar null hai, toh Web-Safe tareeqe se GPS fetch karo
+                        if (userLoc == null) {
+                          final pos = await Geolocator.getCurrentPosition(
+                            desiredAccuracy: LocationAccuracy.low,
+                            // Timeout zaroori hai taaki web par map atak na jaye
+                            timeLimit: const Duration(seconds: 2), 
+                          ).catchError((_) => null); // Error aaye toh ignore karo
+                          
+                          if (pos != null) {
+                            userLoc = LatLng(pos.latitude, pos.longitude);
+                            mapProvider.updateCurrentLocation(userLoc);
+                          }
+                        }
+
+                        // 3. Agar location mil gayi, toh Bounds Check karo!
+                        if (userLoc != null) {
+                          bool isVisible = bounds.contains(userLoc);
+                          mapProvider.setUserVisibility(isVisible);
+                        }
+                      } catch (e) {
+                        debugPrint("Bounds check error: $e");
+                      }
+                    }
+                  },
                 );
               },
             ),
@@ -383,7 +419,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                                 // STATE 3: START NAVIGATION
                                                 debugPrint(
                                                     "🚀 Start Navigation Tapped! Entering 3D Mode...");
-                                                await mapProvider.start3DNavigation();
+                                                await mapProvider
+                                                    .start3DNavigation();
                                               } else if (mapProvider
                                                       .targetDestination !=
                                                   null) {
@@ -616,26 +653,16 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         size: defaultSize,
       );
     } else {
-      // STATE 1: LOCATE ME (Faded and elegant)
-      final cameraState = provider.engine.camera?.state ?? MapCameraState.free;
-
-      IconData locateIcon;
-      Color locateColor;
-
-      if (cameraState == MapCameraState.free) {
-        locateIcon = Icons.my_location_rounded;
-        locateColor = iconColor;
-      } else if (cameraState == MapCameraState.follow) {
-        locateIcon = Icons.my_location_rounded;
-        locateColor = const Color(0xFF0A84FF).withValues(alpha: 0.9);
-      } else {
-        locateIcon = Icons.explore;
-        locateColor = const Color(0xFF0A84FF).withValues(alpha: 0.9);
-      }
+      // STATE 1: LOCATE ME (Smart Bounds Sync)
+      IconData locateIcon = Icons.my_location_rounded;
+      
+      Color locateColor = provider.isUserVisibleOnScreen 
+          ? iconColor 
+          : const Color(0xFF0A84FF).withValues(alpha: 0.9);
 
       return Icon(
         locateIcon,
-        key: ValueKey('icon_locate_${cameraState.name}'),
+        key: ValueKey('icon_locate_${provider.isUserVisibleOnScreen}'),
         color: locateColor,
         size: defaultSize,
       );

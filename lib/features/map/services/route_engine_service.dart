@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-
-import 'dart:math' as math;
 import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -521,7 +519,7 @@ class RouteEngineService {
             final congestionData = annotationObj['congestion'];
             if (congestionData != null) {
               congestionList = (congestionData as List).map((e) => e.toString().toLowerCase()).toList();
-              debugPrint("🟢 TRAFFIC DATA FOUND: ${congestionList!.length} segments extracted.");
+              debugPrint("🟢 TRAFFIC DATA FOUND: ${congestionList.length} segments extracted.");
             } else {
               debugPrint("🟡 TRAFFIC DATA MISSING: Annotation object found, but no 'congestion' array. Keys available: ${annotationObj.keys}");
             }
@@ -782,110 +780,6 @@ class RouteEngineService {
     };
   }
 
-  static List<List<double>> _decodePolylinePrimitives(String polyline) {
-    List<List<double>> coords = [];
-    int index = 0, len = polyline.length;
-    int lat = 0, lng = 0;
-
-    while (index < len) {
-      int b;
-      int result = 0, multiplier = 1;
-
-      do {
-        if (index >= len) break;
-        b = polyline.codeUnitAt(index++) - 63;
-        result += (b & 0x1f) * multiplier;
-        multiplier *= 32;
-      } while (b >= 0x20 && index < len);
-
-      int dlat = (result & 1) != 0 ? -((result ~/ 2) + 1) : (result ~/ 2);
-      lat += dlat;
-
-      result = 0;
-      multiplier = 1;
-
-      do {
-        if (index >= len) break;
-        b = polyline.codeUnitAt(index++) - 63;
-        result += (b & 0x1f) * multiplier;
-        multiplier *= 32;
-      } while (b >= 0x20 && index < len);
-
-      int dlng = (result & 1) != 0 ? -((result ~/ 2) + 1) : (result ~/ 2);
-      lng += dlng;
-
-      double finalLat = lat / 100000.0;
-      double finalLng = lng / 100000.0;
-
-      if (finalLat >= -90.0 &&
-          finalLat <= 90.0 &&
-          finalLng >= -180.0 &&
-          finalLng <= 180.0) {
-        coords.add([finalLat, finalLng]);
-      }
-    }
-    return coords;
-  }
-
-  // 🚀 FIX: Proper Iterative-style Douglas-Peucker (No Stack Overflow risk)
-  // 🚀 FIX: Corrected Math Formula for latitude/longitude
-  static List<List<double>> _simplifyPolyline(
-      List<List<double>> points, double tolerance) {
-    if (points.length < 3) return points;
-
-    List<int> markers = List.filled(points.length, 0);
-    markers[0] = 1;
-    markers[points.length - 1] = 1;
-
-    List<List<int>> stack = [];
-    stack.add([0, points.length - 1]);
-
-    while (stack.isNotEmpty) {
-      List<int> range = stack.removeLast();
-      int first = range[0];
-      int last = range[1];
-
-      double maxDist = 0;
-      int index = 0;
-
-      for (int i = first + 1; i < last; i++) {
-        double dist =
-            _perpendicularDistance(points[i], points[first], points[last]);
-        if (dist > maxDist) {
-          maxDist = dist;
-          index = i;
-        }
-      }
-
-      if (maxDist > tolerance) {
-        markers[index] = 1;
-        stack.add([first, index]);
-        stack.add([index, last]);
-      }
-    }
-
-    List<List<double>> simplified = [];
-    for (int i = 0; i < points.length; i++) {
-      if (markers[i] == 1) simplified.add(points[i]);
-    }
-    return simplified;
-  }
-
-  // 🚀 FIX: Correct mathematical calculation for Lat/Lng pairs
-  static double _perpendicularDistance(
-      List<double> pt, List<double> lineStart, List<double> lineEnd) {
-    double dx = lineEnd[1] - lineStart[1]; // Longitude diff
-    double dy = lineEnd[0] - lineStart[0]; // Latitude diff
-
-    if (dx == 0 && dy == 0) {
-      return math.sqrt(math.pow(pt[0] - lineStart[0], 2) +
-          math.pow(pt[1] - lineStart[1], 2));
-    }
-
-    double numerator =
-        (dx * (lineStart[0] - pt[0]) - dy * (lineStart[1] - pt[1])).abs();
-    return numerator / math.sqrt(dx * dx + dy * dy);
-  }
 }
 
 // Helper function to decode standard polyline strings

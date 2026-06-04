@@ -34,6 +34,25 @@ class MapProvider extends ChangeNotifier {
   Circle? _currentDroppedPin;
   Circle? _destinationCircle; // Use native Circle instead of Symbol
 
+  // 1. User ka current coordinate track karne ke liye
+  LatLng? currentLocation;
+  
+  void updateCurrentLocation(LatLng loc) {
+    currentLocation = loc;
+    // Yahan notifyListeners() mat lagana warna map lag karega
+  }
+
+  // 2. Screen par user hai ya nahi, uski state
+  bool _isUserVisibleOnScreen = true;
+  bool get isUserVisibleOnScreen => _isUserVisibleOnScreen;
+
+  void setUserVisibility(bool isVisible) {
+    if (_isUserVisibleOnScreen != isVisible) {
+      _isUserVisibleOnScreen = isVisible;
+      notifyListeners(); // Yeh UI ko update karega!
+    }
+  }
+
   // 1. ADD NATIVE VECTOR PIN
   Future<void> addNativeDestinationPin(LatLng location) async {
     if (controller == null) return;
@@ -319,29 +338,6 @@ class MapProvider extends ChangeNotifier {
     // Redraw the map with the new order (Index 0 is always drawn as Primary Blue)
     await drawNativeRoute(_currentRouteResult!.allRoutesCoordinates);
     notifyListeners();
-  }
-
-  List<LatLng> _smoothPolyline(List<LatLng> coords) {
-    if (coords.length < 3) return coords;
-    List<LatLng> smoothed = [coords.first];
-    for (int i = 0; i < coords.length - 1; i++) {
-      LatLng p0 = coords[i];
-      LatLng p1 = coords[i + 1];
-      smoothed.add(
-        LatLng(
-          0.75 * p0.latitude + 0.25 * p1.latitude,
-          0.75 * p0.longitude + 0.25 * p1.longitude,
-        ),
-      );
-      smoothed.add(
-        LatLng(
-          0.25 * p0.latitude + 0.75 * p1.latitude,
-          0.25 * p0.longitude + 0.75 * p1.longitude,
-        ),
-      );
-    }
-    smoothed.add(coords.last);
-    return smoothed;
   }
 
   Future<void> drawNativeRoute(List<List<LatLng>> allRoutes) async {
