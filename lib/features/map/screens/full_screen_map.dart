@@ -13,7 +13,6 @@ import 'package:ridel/core/map/map_style_helper.dart';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/toast_service.dart';
-import 'package:ridel/features/map/map_engine/controllers/map_camera_controller.dart';
 import 'package:ridel/features/map/widgets/search_sheet/map_search_sheet.dart';
 import 'package:ridel/features/map/widgets/map_theme_selector.dart';
 import 'package:ridel/features/map/widgets/weather_floating_widget.dart';
@@ -192,6 +191,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       kIsWeb ? null : const Point(-100, -100),
                   onCameraTrackingDismissed: () =>
                       mapProvider.engine.onUserPannedMap(),
+                  onUserLocationUpdated: (location) {
+                    final pos = location.position;
+                    mapProvider.updateCurrentLocation(pos);
+                    mapProvider.updateNavigationPuck(
+                      pos,
+                      location.heading?.trueHeading ?? location.bearing ?? 0.0,
+                    );
+                  },
 
                   // 🚀 NAYA BULLETPROOF CODE YAHAN SE PASTE KAR:
                   onCameraIdle: () async {
@@ -205,11 +212,17 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         
                         // 2. Agar null hai, toh Web-Safe tareeqe se GPS fetch karo
                         if (userLoc == null) {
-                          final pos = await Geolocator.getCurrentPosition(
-                            desiredAccuracy: LocationAccuracy.low,
-                            // Timeout zaroori hai taaki web par map atak na jaye
-                            timeLimit: const Duration(seconds: 2), 
-                          ).catchError((_) => null); // Error aaye toh ignore karo
+                          Position? pos;
+                          try {
+                            pos = await Geolocator.getCurrentPosition(
+                              locationSettings: const LocationSettings(
+                                accuracy: LocationAccuracy.low,
+                                timeLimit: Duration(seconds: 2),
+                              ),
+                            );
+                          } catch (_) {
+                            // Error aaye toh ignore karo
+                          }
                           
                           if (pos != null) {
                             userLoc = LatLng(pos.latitude, pos.longitude);

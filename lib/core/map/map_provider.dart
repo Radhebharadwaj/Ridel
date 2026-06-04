@@ -53,6 +53,52 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
+  // 🚀 NAVIGATION PUCK LOGIC
+  Symbol? _navigationPuckSymbol;
+
+  Future<void> showNavigationPuck(LatLng location, double bearing) async {
+    if (controller == null) return;
+    
+    _navigationPuckSymbol ??= await controller!.addSymbol(
+      SymbolOptions(
+        geometry: location,
+        iconImage: 'nav_puck',
+        iconSize: 1.0,
+        iconRotate: bearing,
+        iconAnchor: 'center',
+        zIndex: 9999, // Ensure high priority
+      ),
+    );
+  }
+
+  Future<void> updateNavigationPuck(LatLng location, double bearing) async {
+    // Only update if in navigating state
+    if (engine.mapUIState.value != MapUIState.navigating) return;
+
+    if (_navigationPuckSymbol == null) {
+      await showNavigationPuck(location, bearing);
+    } else {
+      try {
+        await controller?.updateSymbol(
+          _navigationPuckSymbol!,
+          SymbolOptions(
+            geometry: location,
+            iconRotate: bearing,
+          ),
+        );
+      } catch (_) {}
+    }
+  }
+
+  Future<void> hideNavigationPuck() async {
+    if (_navigationPuckSymbol != null && controller != null) {
+      try {
+        await controller!.removeSymbol(_navigationPuckSymbol!);
+      } catch (_) {}
+      _navigationPuckSymbol = null;
+    }
+  }
+
   // 1. ADD NATIVE VECTOR PIN
   Future<void> addNativeDestinationPin(LatLng location) async {
     if (controller == null) return;
@@ -218,45 +264,86 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
-  List<String> activeMetroLayerIds = [];
+  List<String> activeFocusLayerIds = [];
 
-  Future<void> _setTransitLayersOpacity(double opacity) async {
+  Future<void> _toggleFocusModeLayers(bool isFocusMode) async {
     if (controller == null) return;
 
-    // Dynamically track exact layer IDs if empty
-    if (activeMetroLayerIds.isEmpty) {
+    if (activeFocusLayerIds.isEmpty) {
       final allLayers = await controller!.getLayerIds();
-      activeMetroLayerIds = allLayers
+      activeFocusLayerIds = allLayers
           .map((e) => e.toString())
           .where((id) {
             final lowerId = id.toLowerCase();
-            bool isTransit = lowerId.contains('transit') || lowerId.contains('railway') || lowerId.contains('metro');
-            bool isNotSymbol = !lowerId.contains('poi') && !lowerId.contains('label') && !lowerId.contains('text') && !lowerId.contains('symbol');
-            return isTransit && isNotSymbol;
+            bool isFocusTarget = lowerId.contains('poi') || 
+                                 lowerId.contains('amenity') || 
+                                 lowerId.contains('shop') || 
+                                 lowerId.contains('transit'); 
+            
+            return isFocusTarget;
           })
           .toList();
-      debugPrint(
-        "🚇 Tracked Exact Metro/Transit Layer IDs: $activeMetroLayerIds",
-      );
+      debugPrint("🔍 Tracked Focus Mode Layers: ${activeFocusLayerIds.length}");
     }
 
-    if (activeMetroLayerIds.isEmpty) {
-      debugPrint("⚠️ Cannot fade metro: Layer IDs list is still empty!");
+    if (activeFocusLayerIds.isEmpty) {
+      debugPrint("⚠️ Cannot set Focus Mode: Layer IDs list is empty!");
       return;
     }
 
-    for (String layerId in activeMetroLayerIds) {
+    final String visibilityValue = isFocusMode ? 'none' : 'visible';
+
+    for (String layerId in activeFocusLayerIds) {
+      // 🚨 Safely apply visibility to all possible layer types since we don't know the exact type natively
       try {
-        // Use setLayerProperties for guaranteed results natively
-        await controller!.setLayerProperties(
-          layerId,
-          LineLayerProperties(lineOpacity: opacity),
-        );
-      } catch (e) {
-        debugPrint("⚠️ Failed to fade metro layer $layerId: $e");
-      }
+        await controller!.setLayerProperties(layerId, SymbolLayerProperties(visibility: visibilityValue));
+      } catch (_) {}
+      
+      try {
+        await controller!.setLayerProperties(layerId, LineLayerProperties(visibility: visibilityValue));
+      } catch (_) {}
+      
+      try {
+        await controller!.setLayerProperties(layerId, FillLayerProperties(visibility: visibilityValue));
+      } catch (_) {}
     }
-    debugPrint("🚇 Metro layers opacity set to $opacity");
+    
+    debugPrint("🔍 Focus Mode set to $isFocusMode for ${activeFocusLayerIds.length} background layers.");
+  }
+
+  // 🚨 DYNAMIC FUEL STATIONS TOGGLE
+  List<String> _cachedFuelLayerIds = [];
+
+  Future<void> _toggleFuelStationsVisibility(bool isVisible) async {
+    if (controller == null) return;
+
+    if (_cachedFuelLayerIds.isEmpty) {
+      final allLayers = await controller!.getLayerIds();
+      _cachedFuelLayerIds = allLayers
+          .map((e) => e.toString())
+          .where((id) {
+            final lowerId = id.toLowerCase();
+            return lowerId.contains('fuel') || lowerId.contains('gas') || lowerId.contains('petrol') || lowerId.contains('gas_station');
+          }).toList();
+    }
+
+    if (_cachedFuelLayerIds.isEmpty) return;
+
+    final String visibilityValue = isVisible ? 'visible' : 'none';
+
+    for (String layerId in _cachedFuelLayerIds) {
+      try {
+        await controller!.setLayerProperties(layerId, SymbolLayerProperties(visibility: visibilityValue));
+      } catch (_) {}
+      try {
+        await controller!.setLayerProperties(layerId, FillLayerProperties(visibility: visibilityValue));
+      } catch (_) {}
+      try {
+        await controller!.setLayerProperties(layerId, LineLayerProperties(visibility: visibilityValue));
+      } catch (_) {}
+    }
+    
+    debugPrint("⛽ Fuel Stations Visibility set to: $isVisible");
   }
 
   Future<bool> handleRouteClick(Point<double> point, LatLng coordinates) async {
@@ -346,8 +433,8 @@ class MapProvider extends ChangeNotifier {
     // 1. Clear previous route if it exists
     await clearNativeRoute(preserveState: true);
 
-    // 🚨 Activate Focus Mode (Dim transit lines to 15% opacity)
-    await _setTransitLayersOpacity(0.15);
+    // 🚨 Activate Focus Mode (Hide non-essential layers)
+    await _toggleFocusModeLayers(true);
 
     _drawnRoutesCount = allRoutes.length;
 
@@ -768,29 +855,34 @@ class MapProvider extends ChangeNotifier {
         _currentRouteResult = null;
         _lastRouteData = null;
 
-        // 🚨 Deactivate Focus Mode (Restore transit lines to 100% opacity)
-        await _setTransitLayersOpacity(1.0);
+        // 🚨 Deactivate Focus Mode & Hide Puck
+        await _toggleFocusModeLayers(false);
+        await hideNavigationPuck();
 
         isNavigating = false; // Reset navigation state
 
-        // 🚨 Revert the camera tracking and puck to normal
-        try {
-          // Reset rotation to North-Up
-          await controller!.animateCamera(
-            CameraUpdate.bearingTo(0.0),
-            duration: const Duration(milliseconds: 500),
-          );
-          await controller!.animateCamera(
-            CameraUpdate.tiltTo(0.0),
-            duration: const Duration(milliseconds: 500),
-          );
+        // 🚨 Cinematic Camera Reset
+        if (controller != null && currentLocation != null) {
+          try {
+            await controller!.animateCamera(
+              CameraUpdate.newCameraPosition(
+                CameraPosition(
+                  target: currentLocation!,
+                  zoom: 15.0, // Comfortable default zoom
+                  tilt: 0.0, // Strictly reset to flat 2D
+                  bearing: 0.0, // Strictly reset rotation
+                ),
+              ),
+              duration: const Duration(milliseconds: 1200), // Smooth 1.2s premium flight
+            );
 
-          // Reset modes
-          await controller!.updateMyLocationTrackingMode(
-            MyLocationTrackingMode.tracking,
-          );
-        } catch (e) {
-          debugPrint("⚠️ Native Tracking Reset Error: $e");
+            // Reset tracking mode after animation
+            await controller!.updateMyLocationTrackingMode(
+              MyLocationTrackingMode.tracking,
+            );
+          } catch (e) {
+            debugPrint("⚠️ Native Tracking Reset Error: $e");
+          }
         }
       }
 
@@ -836,9 +928,6 @@ class MapProvider extends ChangeNotifier {
         await controller!.removeSource('selected-destination-source');
       } catch (_) {}
 
-      // Deactivate Focus Mode (Restore transit lines to 100% opacity)
-      await _setTransitLayersOpacity(1.0);
-
       // Remove the manual dropped pin or search symbol layer
       await engine.layers?.removeSearchPin();
       if (_currentDroppedPin != null) {
@@ -862,6 +951,30 @@ class MapProvider extends ChangeNotifier {
 
     // 🧭 State Machine: Reset to idle
     engine.setUIState(MapUIState.idle);
+
+    // 🚀 Cinematic Camera Reset
+    if (controller != null && currentLocation != null) {
+      controller!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: currentLocation!,
+            zoom: 15.0, // Comfortable default zoom
+            tilt: 0.0, // Strictly reset to flat 2D
+            bearing: 0.0, // Strictly reset rotation
+          ),
+        ),
+        duration: const Duration(milliseconds: 1200), // Smooth 1.2s premium flight
+      );
+      
+      // Reset modes
+      controller!.updateMyLocationTrackingMode(
+        MyLocationTrackingMode.tracking,
+      ).catchError((_) {});
+    }
+
+    // 🌟 Explicitly Restore All Dimmed/Hidden Background Layers & Hide Puck
+    await _toggleFocusModeLayers(false);
+    await hideNavigationPuck();
 
     // 3. Notify the UI to rebuild (This brings the Search Bar back!)
     notifyListeners();
@@ -1107,6 +1220,12 @@ class MapProvider extends ChangeNotifier {
 
     // 🧭 Forward UI state machine changes to ChangeNotifier listeners
     engine.mapUIState.addListener(() {
+      final state = engine.mapUIState.value;
+      _toggleFuelStationsVisibility(state == MapUIState.navigating);
+      if (state == MapUIState.navigating && currentLocation != null) {
+        // Show initial puck before the first native location update fires
+        updateNavigationPuck(currentLocation!, 0.0);
+      }
       notifyListeners();
     });
 

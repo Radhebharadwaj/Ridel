@@ -141,4 +141,5 @@ flutter:
     - assets/images/upi.png
     - assets/images/metrocard.png
     - assets/images/splash.png
+    - assets/images/nav_puck.png
     - .env

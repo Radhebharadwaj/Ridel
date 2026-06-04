@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:ridel/core/services/global_location_service.dart';
@@ -134,6 +135,15 @@ class MapEngine {
     };
 
     try {
+      // 🚀 Load and Add Custom Navigation Puck Image
+      try {
+        final ByteData bytes = await rootBundle.load('assets/images/nav_puck.png');
+        final Uint8List puckBytes = bytes.buffer.asUint8List();
+        await controller.addImage('nav_puck', puckBytes);
+      } catch (e) {
+        debugPrint("⚠️ Failed to load nav_puck image: $e");
+      }
+
       await layers?.initLayerSystem();
 
       _initGPS();

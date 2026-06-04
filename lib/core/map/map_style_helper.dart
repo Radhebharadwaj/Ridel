@@ -24,8 +24,8 @@ class MapStyleHelper {
     final String styleName =
         useDark ? "default-dark-standard" : "default-light-standard";
 
-    // 🚀 CACHE KEY v307 (Force re-download with null-color sanitizer)
-    final String cacheKey = "ola_v307_$styleName";
+    // 🚀 CACHE KEY v310 (Fuel stations dynamic visibility support)
+    final String cacheKey = "ola_v310_$styleName";
 
     final prefs = await SharedPreferences.getInstance();
     final String? cachedStyle = prefs.getString(cacheKey);
@@ -104,23 +104,52 @@ class MapStyleHelper {
             return false;
           }
 
-          // 2. AGGRESSIVE POI CLEANUP
-          final List<String> hideKeywords = [
-            'poi', 'place', 'symbol', 'label', 'business', 'shop', 'food'
-          ];
-          final List<String> keepKeywords = [
-            'transit', 'metro', 'railway', 'station', 'road'
-          ];
+          // 2. PREMIUM PERMANENT DECLUTTERING
+          
+          // RULE B (Keep Roads & Places): Core geography and roads are sacred
+          bool isEssential = id.contains('road') || id.contains('street') || 
+                             id.contains('place') || id.contains('city') || 
+                             id.contains('state') || id.contains('country') || 
+                             id.contains('neighborhood');
 
-          bool shouldHide = hideKeywords.any((kw) =>
-              id.contains(kw) || sourceLayer.contains(kw) || type.contains(kw));
+          if (!isEssential) {
+            // EXEMPTION: Fuel stations remain in the JSON but are hidden by default
+            bool isFuel = id.contains('fuel') || id.contains('gas') || id.contains('petrol') || 
+                          id.contains('gas_station') || sourceLayer.contains('fuel') || 
+                          sourceLayer.contains('gas') || sourceLayer.contains('petrol');
+            
+            if (isFuel) {
+              if (!layer.containsKey('layout') || layer['layout'] is! Map) {
+                layer['layout'] = <String, dynamic>{};
+              }
+              layer['layout']['visibility'] = 'none';
+            } else {
+              // RULE A (Kill Commercial POIs): Remove all businesses, food, ATMs, etc.
+              bool isClutter = id.contains('poi') || id.contains('shop') || 
+                               id.contains('food') || id.contains('restaurant') || 
+                               id.contains('amenity') || id.contains('commercial') || 
+                               id.contains('atm') || id.contains('business') ||
+                               sourceLayer.contains('poi') || sourceLayer.contains('shop') || 
+                               sourceLayer.contains('food') || sourceLayer.contains('restaurant') || 
+                               sourceLayer.contains('amenity') || sourceLayer.contains('commercial') || 
+                               sourceLayer.contains('atm') || sourceLayer.contains('business');
+              
+              if (isClutter) {
+                return false; // Remove layer completely
+              }
+            }
+          }
 
-          if (shouldHide && type == 'symbol') {
-            bool isException = keepKeywords.any((kw) =>
-                id.contains(kw) || sourceLayer.contains(kw) || type.contains(kw));
-
-            if (!isException) {
-              return false; // Ye layer hide ho jayegi
+          // RULE C (Metro/Transit - Icons Only, No Text): Clean up transit stations
+          bool isTransit = id.contains('transit') || id.contains('station') || 
+                           id.contains('railway') || id.contains('subway') || 
+                           id.contains('metro');
+          
+          if (isTransit && type == 'symbol') {
+            if (layer.containsKey('layout') && layer['layout'] is Map) {
+              final Map<String, dynamic> layout = layer['layout'];
+              // Delete the text-field so only the icon renders
+              layout.remove('text-field');
             }
           }
 

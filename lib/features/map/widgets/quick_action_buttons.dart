@@ -203,7 +203,7 @@ class QuickActionButtonsState extends State<QuickActionButtons>
 
   void _onStopNavTap(MapProvider provider) {
     AppHaptics.heavyImpact();
-    provider.clearSearchSession(context);
+    provider.cancelAndClearRoute();
   }
 
   @override
@@ -320,13 +320,13 @@ class QuickActionButtonsState extends State<QuickActionButtons>
       MapUIState.routeDrawn => _ActionButtonConfig(
           icon: CupertinoIcons.play_fill,
           label: 'Start',
-          gradient: const [Color(0xFF34C759), Color(0xFF30D158)],
+          gradient: const [Color(0xFF007AFF), Color(0xFF0055FF)],
           onTap: () => _onStartNavTap(provider),
         ),
       MapUIState.navigating => _ActionButtonConfig(
-          icon: CupertinoIcons.stop_fill,
-          label: 'Stop',
-          gradient: const [Color(0xFFFF3B30), Color(0xFFFF6961)],
+          icon: CupertinoIcons.xmark,
+          label: 'End',
+          gradient: const [Color(0xFF2C2C2E), Color(0xFF1C1C1E)],
           onTap: () => _onStopNavTap(provider),
         ),
       MapUIState.idle => _ActionButtonConfig(
