@@ -1,8 +1,10 @@
 // lib/core/services/notification_service.dart
 
-import 'package:flutter/material.dart';
+
 import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:flutter/foundation.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart';
 
 enum NotificationType { system, important, promo, history }
 
@@ -66,24 +68,45 @@ class NotificationService {
       ValueNotifier<List<RidelNotification>>([]);
 
   Future<void> init() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'ridel_inbox_v4.db');
+    try {
+      if (kIsWeb) {
+        _db = await databaseFactoryFfiWeb.openDatabase(
+          'ridel_inbox_v4_web.db',
+          options: OpenDatabaseOptions(
+            version: 1,
+            onCreate: (db, version) async {
+              await db.execute('''
+                CREATE TABLE notifications (
+                  id TEXT PRIMARY KEY, title TEXT, message TEXT, type TEXT,
+                  timestamp TEXT, expiresAt TEXT, isRead INTEGER DEFAULT 0, isSaved INTEGER DEFAULT 0
+                )
+              ''');
+            },
+          ),
+        );
+      } else {
+        final dbPath = await getDatabasesPath();
+        final path = join(dbPath, 'ridel_inbox_v4.db');
 
-    _db = await openDatabase(
-      path,
-      version: 1,
-      onCreate: (db, version) async {
-        await db.execute('''
-          CREATE TABLE notifications (
-            id TEXT PRIMARY KEY, title TEXT, message TEXT, type TEXT,
-            timestamp TEXT, expiresAt TEXT, isRead INTEGER DEFAULT 0, isSaved INTEGER DEFAULT 0
-          )
-        ''');
-      },
-    );
+        _db = await openDatabase(
+          path,
+          version: 1,
+          onCreate: (db, version) async {
+            await db.execute('''
+              CREATE TABLE notifications (
+                id TEXT PRIMARY KEY, title TEXT, message TEXT, type TEXT,
+                timestamp TEXT, expiresAt TEXT, isRead INTEGER DEFAULT 0, isSaved INTEGER DEFAULT 0
+              )
+            ''');
+          },
+        );
+      }
 
-    await _autoCleanupExpired();
-    await loadNotifications();
+      await _autoCleanupExpired();
+      await loadNotifications();
+    } catch (e) {
+      debugPrint('🚨 Notification DB Load Error: $e');
+    }
   }
 
   Future<void> _autoCleanupExpired() async {

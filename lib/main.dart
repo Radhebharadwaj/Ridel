@@ -17,9 +17,8 @@ import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/features/auth/screens/splash_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 
 import 'core/map/map_provider.dart';
@@ -122,10 +121,7 @@ void main() {
       debugPrint("❌ Env Error: $e");
     }
 
-    // 2. Web Database Factory
-    if (kIsWeb) {
-      databaseFactory = databaseFactoryFfiWeb;
-    }
+    // 2. Web Database Factory (handled internally if needed)
 
     // 3. 🔥 FIREBASE INITIALIZATION (Dual Platform Support)
     try {

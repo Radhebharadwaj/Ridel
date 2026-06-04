@@ -4,7 +4,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:provider/provider.dart';
 import 'package:ridel/core/widgets/app_header.dart';
 import 'package:ridel/main.dart';
@@ -21,7 +20,7 @@ import '../core/widgets/notification_sheet.dart';
 import '../core/widgets/ridel_glass.dart';
 import '../core/widgets/ridel_sheet.dart';
 import '../features/commute/bus/widgets/bus_services_grid.dart';
-import '../features/commute/metro/map/metro_map_screen.dart';
+
 import '../features/commute/metro/widgets/metro_services_grid.dart';
 import '../features/commute/shared/screens/commute_screen.dart';
 import '../features/commute/shared/widgets/commute_search_card.dart';
@@ -159,9 +158,7 @@ class _MainLayoutState extends State<MainLayout> {
                                       color: isDark
                                           ? const Color(0xFF0B0E17)
                                           : Colors.white,
-                                      child: MetroMapScreen(
-                                          highlightedLineIds: const [],
-                                          isPanelOpen: isSearchOpen),
+                                      child: const SizedBox.shrink(),
                                     ),
                                   ),
                                 ),
@@ -575,10 +572,9 @@ class _WebNavigationRailState extends State<_WebNavigationRail> {
         builder: (context, constraints) {
           return Align(
             alignment: Alignment.bottomLeft,
-            child: PointerInterceptor(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeOutCubic,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 350),
+              curve: Curves.easeOutCubic,
                 height: _isHidden ? 48.0 : constraints.maxHeight,
                 width: _isHidden ? 48.0 : widget.currentWidth,
                 decoration: BoxDecoration(
@@ -656,7 +652,6 @@ class _WebNavigationRailState extends State<_WebNavigationRail> {
                         ],
                       ),
                     ),
-                  ),
                 ),
               ),
             ),

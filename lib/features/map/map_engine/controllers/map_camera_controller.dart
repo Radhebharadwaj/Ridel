@@ -24,6 +24,17 @@ class MapCameraController {
 
   Circle? _userLocationDot;
   Circle? _userLocationHalo;
+  double _blueDotOpacity = 1.0;
+
+  void setBlueDotOpacity(double opacity) {
+    _blueDotOpacity = opacity;
+    if (_userLocationDot != null && _userLocationHalo != null && _currentDotPos != null) {
+      try {
+        map.updateCircle(_userLocationHalo!, CircleOptions(circleOpacity: 0.25 * opacity));
+        map.updateCircle(_userLocationDot!, CircleOptions(circleOpacity: 1.0 * opacity, circleStrokeOpacity: 1.0 * opacity));
+      } catch (_) {}
+    }
+  }
 
   Ticker? _cameraTicker;
   Ticker? _blueDotTicker;
@@ -59,14 +70,14 @@ class MapCameraController {
     if (_blueDotTicker?.isActive ?? false) {
       _blueDotTicker?.stop();
     }
-    
+
     _latSim = null;
     _lngSim = null;
     _zoomSim = null;
     _tiltSim = null;
     _bearingSim = null;
     _elapsedTime = 0.0;
-    
+
     _dotLatSim = null;
     _dotLngSim = null;
     _dotElapsedTime = 0.0;
@@ -89,7 +100,8 @@ class MapCameraController {
     } catch (_) {}
   }
 
-  SpringSimulation _createSim(double start, double end, double velocity, {double stiffness = 45.0, double damping = 12.0}) {
+  SpringSimulation _createSim(double start, double end, double velocity,
+      {double stiffness = 45.0, double damping = 12.0}) {
     return SpringSimulation(
       SpringDescription(mass: 1.0, stiffness: stiffness, damping: damping),
       start,
@@ -108,8 +120,11 @@ class MapCameraController {
     final bearingSim = _bearingSim;
 
     // All 5 must be non-null to animate
-    if (latSim == null || lngSim == null || zoomSim == null ||
-        tiltSim == null || bearingSim == null) {
+    if (latSim == null ||
+        lngSim == null ||
+        zoomSim == null ||
+        tiltSim == null ||
+        bearingSim == null) {
       _cameraTicker?.stop();
       return;
     }
@@ -120,7 +135,7 @@ class MapCameraController {
     final lng = lngSim.x(_elapsedTime);
     final zoom = (zoomSim.x(_elapsedTime)).clamp(2.0, 22.0);
     final tilt = tiltSim.x(_elapsedTime);
-    
+
     double bearing = bearingSim.x(_elapsedTime);
     bearing = bearing % 360.0;
     if (bearing < 0) {
@@ -128,7 +143,8 @@ class MapCameraController {
     }
 
     final now = DateTime.now();
-    if (_lastCameraNativeUpdate == null || now.difference(_lastCameraNativeUpdate!).inMilliseconds >= 16) {
+    if (_lastCameraNativeUpdate == null ||
+        now.difference(_lastCameraNativeUpdate!).inMilliseconds >= 16) {
       _lastCameraNativeUpdate = now;
       map.moveCamera(CameraUpdate.newCameraPosition(CameraPosition(
         target: LatLng(lat, lng),
@@ -138,8 +154,8 @@ class MapCameraController {
       )));
     }
 
-    if (latSim.isDone(_elapsedTime) && 
-        lngSim.isDone(_elapsedTime) && 
+    if (latSim.isDone(_elapsedTime) &&
+        lngSim.isDone(_elapsedTime) &&
         zoomSim.isDone(_elapsedTime) &&
         bearingSim.isDone(_elapsedTime) &&
         tiltSim.isDone(_elapsedTime)) {
@@ -148,7 +164,11 @@ class MapCameraController {
   }
 
   void _onBlueDotTick(Duration elapsed) {
-    if (_dotLatSim == null || _userLocationDot == null || _userLocationHalo == null) return;
+    if (_dotLatSim == null ||
+        _userLocationDot == null ||
+        _userLocationHalo == null) {
+      return;
+    }
     _dotElapsedTime = elapsed.inMicroseconds / 1000000.0;
 
     final lat = _dotLatSim!.x(_dotElapsedTime);
@@ -156,15 +176,19 @@ class MapCameraController {
     _currentDotPos = LatLng(lat, lng);
 
     final now = DateTime.now();
-    if (_lastDotNativeUpdate == null || now.difference(_lastDotNativeUpdate!).inMilliseconds >= 16) {
+    if (_lastDotNativeUpdate == null ||
+        now.difference(_lastDotNativeUpdate!).inMilliseconds >= 16) {
       _lastDotNativeUpdate = now;
       try {
-        map.updateCircle(_userLocationHalo!, CircleOptions(geometry: _currentDotPos));
-        map.updateCircle(_userLocationDot!, CircleOptions(geometry: _currentDotPos));
+        map.updateCircle(
+            _userLocationHalo!, CircleOptions(geometry: _currentDotPos));
+        map.updateCircle(
+            _userLocationDot!, CircleOptions(geometry: _currentDotPos));
       } catch (_) {}
     }
 
-    if (_dotLatSim!.isDone(_dotElapsedTime) && _dotLngSim!.isDone(_dotElapsedTime)) {
+    if (_dotLatSim!.isDone(_dotElapsedTime) &&
+        _dotLngSim!.isDone(_dotElapsedTime)) {
       _blueDotTicker?.stop();
     }
   }
@@ -206,7 +230,7 @@ class MapCameraController {
       } else if (diff < -180.0) {
         diff += 360.0;
       }
-      
+
       _bearingSim = _createSim(currentBearing, currentBearing + diff, vBearing);
 
       if (_cameraTicker?.isActive == true) {
@@ -219,7 +243,8 @@ class MapCameraController {
     }
   }
 
-  double _haversineDistance(double lat1, double lon1, double lat2, double lon2) {
+  double _haversineDistance(
+      double lat1, double lon1, double lat2, double lon2) {
     const double R = 6371000.0; // meters
     final dLat = (lat2 - lat1) * (pi / 180);
     final dLon = (lon2 - lon1) * (pi / 180);
@@ -258,7 +283,8 @@ class MapCameraController {
         }
 
         if (!kIsWeb) {
-          map.updateMyLocationTrackingMode(MyLocationTrackingMode.trackingCompass);
+          map.updateMyLocationTrackingMode(
+              MyLocationTrackingMode.trackingCompass);
         }
 
         try {
@@ -283,9 +309,8 @@ class MapCameraController {
 
     bool shouldUpdatePos = true;
     if (_currentDotPos != null) {
-      final dist = _haversineDistance(
-          _currentDotPos!.latitude, _currentDotPos!.longitude, 
-          latLng.latitude, latLng.longitude);
+      final dist = _haversineDistance(_currentDotPos!.latitude,
+          _currentDotPos!.longitude, latLng.latitude, latLng.longitude);
       if (dist < 2.5) {
         shouldUpdatePos = false;
       }
@@ -304,11 +329,7 @@ class MapCameraController {
 
     // Smooth camera follow update
     await animateCameraCinematic(
-       center: targetCenter,
-       bearing: newPos.heading,
-       zoom: 17.8,
-       pitch: 60.0
-    );
+        center: targetCenter, bearing: newPos.heading, zoom: 17.8, pitch: 60.0);
   }
 
   void resetCompass() {
@@ -317,7 +338,7 @@ class MapCameraController {
       if (cam != null) {
         animateCameraCinematic(center: cam.target, bearing: 0.0);
       }
-      
+
       if (state == MapCameraState.heading) {
         state = MapCameraState.follow;
         if (!kIsWeb) {
@@ -337,7 +358,8 @@ class MapCameraController {
       }
 
       double southOffset = 0.0015;
-      LatLng adjustedTarget = LatLng(target.latitude - southOffset, target.longitude);
+      LatLng adjustedTarget =
+          LatLng(target.latitude - southOffset, target.longitude);
 
       await animateCameraCinematic(
           center: adjustedTarget, zoom: 17.5, pitch: 60.0, bearing: 0.0);
@@ -352,13 +374,15 @@ class MapCameraController {
       return;
     }
 
-    final userPos = LatLng(locService.currentPosition!.latitude, locService.currentPosition!.longitude);
+    final userPos = LatLng(locService.currentPosition!.latitude,
+        locService.currentPosition!.longitude);
     await _drawOrUpdateCustomBlueDot(userPos, ignoreThrottle: true);
 
     double targetTilt = is3DMode ? 45.0 : 0.0;
 
     if (state == MapCameraState.free || state == MapCameraState.heading) {
-      await animateCameraCinematic(center: userPos, zoom: 16.5, pitch: targetTilt, bearing: 0.0);
+      await animateCameraCinematic(
+          center: userPos, zoom: 16.5, pitch: targetTilt, bearing: 0.0);
       state = MapCameraState.follow;
       if (!kIsWeb) {
         map.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
@@ -367,12 +391,14 @@ class MapCameraController {
       await animateCameraCinematic(center: userPos, zoom: 17.5, pitch: 50.0);
       state = MapCameraState.heading;
       if (!kIsWeb) {
-        map.updateMyLocationTrackingMode(MyLocationTrackingMode.trackingCompass);
+        map.updateMyLocationTrackingMode(
+            MyLocationTrackingMode.trackingCompass);
       }
     }
   }
 
-  Future<void> _drawOrUpdateCustomBlueDot(LatLng pos, {bool ignoreThrottle = false}) async {
+  Future<void> _drawOrUpdateCustomBlueDot(LatLng pos,
+      {bool ignoreThrottle = false}) async {
     if (_userLocationDot == null || _userLocationHalo == null) {
       _currentDotPos = pos;
       try {
@@ -380,15 +406,17 @@ class MapCameraController {
           geometry: pos,
           circleRadius: 18.0,
           circleColor: "#007AFF",
-          circleOpacity: 0.25,
+          circleOpacity: 0.25 * _blueDotOpacity,
         ));
 
         _userLocationDot = await map.addCircle(CircleOptions(
           geometry: pos,
           circleRadius: 7.0,
           circleColor: "#007AFF",
+          circleOpacity: 1.0 * _blueDotOpacity,
           circleStrokeWidth: 2.5,
           circleStrokeColor: "#FFFFFF",
+          circleStrokeOpacity: 1.0 * _blueDotOpacity,
         ));
       } catch (e) {
         debugPrint("Failed to draw custom blue dot: $e");
@@ -397,25 +425,30 @@ class MapCameraController {
     }
 
     if (ignoreThrottle) {
-       _currentDotPos = pos;
-       try {
-         await map.updateCircle(_userLocationHalo!, CircleOptions(geometry: pos));
-         await map.updateCircle(_userLocationDot!, CircleOptions(geometry: pos));
-       } catch (_) {}
-       return;
+      _currentDotPos = pos;
+      try {
+        await map.updateCircle(
+            _userLocationHalo!, CircleOptions(geometry: pos));
+        await map.updateCircle(_userLocationDot!, CircleOptions(geometry: pos));
+      } catch (_) {}
+      return;
     }
 
     // Continuous Frame Interpolation for Blue Dot
-    final currentLat = _dotLatSim?.x(_dotElapsedTime) ?? _currentDotPos!.latitude;
-    final currentLng = _dotLngSim?.x(_dotElapsedTime) ?? _currentDotPos!.longitude;
+    final currentLat =
+        _dotLatSim?.x(_dotElapsedTime) ?? _currentDotPos!.latitude;
+    final currentLng =
+        _dotLngSim?.x(_dotElapsedTime) ?? _currentDotPos!.longitude;
     final vLat = _dotLatSim?.dx(_dotElapsedTime) ?? 0.0;
     final vLng = _dotLngSim?.dx(_dotElapsedTime) ?? 0.0;
 
     _dotElapsedTime = 0.0;
     _lastDotNativeUpdate = null;
 
-    _dotLatSim = _createSim(currentLat, pos.latitude, vLat, stiffness: 60.0, damping: 15.0);
-    _dotLngSim = _createSim(currentLng, pos.longitude, vLng, stiffness: 60.0, damping: 15.0);
+    _dotLatSim = _createSim(currentLat, pos.latitude, vLat,
+        stiffness: 60.0, damping: 15.0);
+    _dotLngSim = _createSim(currentLng, pos.longitude, vLng,
+        stiffness: 60.0, damping: 15.0);
 
     if (_blueDotTicker?.isActive == true) {
       _blueDotTicker?.stop();

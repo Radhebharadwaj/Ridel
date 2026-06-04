@@ -19,7 +19,6 @@ import 'package:ridel/features/map/models/place_model.dart';
 import 'package:ridel/features/map/services/place_api_services.dart';
 import 'package:ridel/core/widgets/ridel_glass.dart';
 
-
 class CustomMapScreen extends StatefulWidget {
   final bool isDark;
   final bool isMapTabActive;
@@ -66,8 +65,6 @@ class _CustomMapScreenState extends State<CustomMapScreen>
   bool _isWeatherVisible = true;
   Timer? _interactionDebounceTimer;
   Timer? _zoomScaleDebounceTimer;
-
-
 
   bool _wasInIndia = true;
   bool _hasMapBeenOpened = false;
@@ -150,10 +147,10 @@ class _CustomMapScreenState extends State<CustomMapScreen>
     if (provider.targetLocation != null) {
       final target = provider.targetLocation!;
       _engine.executeSearchFlight(target, place: provider.tappedPlaceFromMap);
-      
+
       provider.targetLocation = null;
       provider.isCinematicSearch = false;
-      
+
       provider.setTargetDestination(target);
       provider.setDestinationSelected(true);
       provider.engine.setUIState(MapUIState.placeSelected);
@@ -323,7 +320,8 @@ class _CustomMapScreenState extends State<CustomMapScreen>
     }
   }
 
-  void _showConfirmationDialog(BuildContext context, String type, LatLng coordinates) {
+  void _showConfirmationDialog(
+      BuildContext context, String type, LatLng coordinates) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
       context: context,
@@ -364,15 +362,22 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                       ),
                     ),
                     onPressed: () {
-                      final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                      final mapProvider =
+                          Provider.of<MapProvider>(context, listen: false);
                       // Save the place via SavedPlacesService
                       try {
-                        final savedPlacesService = Provider.of<SavedPlacesService>(context, listen: false);
-                        savedPlacesService.savePlace(context, type.toLowerCase(), coordinates.latitude, coordinates.longitude);
+                        final savedPlacesService =
+                            Provider.of<SavedPlacesService>(context,
+                                listen: false);
+                        savedPlacesService.savePlace(
+                            context,
+                            type.toLowerCase(),
+                            coordinates.latitude,
+                            coordinates.longitude);
                       } catch (e) {
-                         debugPrint("Failed to get SavedPlacesService");
+                        debugPrint("Failed to get SavedPlacesService");
                       }
-                      
+
                       mapProvider.setMapSelectionMode(null);
                       mapProvider.clearSearchSession(context);
                       Navigator.pop(ctx);
@@ -397,7 +402,7 @@ class _CustomMapScreenState extends State<CustomMapScreen>
     if (!_hasMapBeenOpened) {
       return Container(color: widget.isDark ? Colors.black : Colors.white);
     }
-    
+
     final isLightMode = Theme.of(context).brightness == Brightness.light;
 
     final bool isDesktop = MediaQuery.of(context).size.width >= 800;
@@ -452,8 +457,9 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                     Provider.of<MapProvider>(context, listen: false);
 
                 if (mapProvider.mapSelectionPlaceType != null) {
-                  mapProvider.setTargetDestination(latlng); 
-                  _showConfirmationDialog(context, mapProvider.mapSelectionPlaceType!, latlng);
+                  mapProvider.setTargetDestination(latlng);
+                  _showConfirmationDialog(
+                      context, mapProvider.mapSelectionPlaceType!, latlng);
                   return;
                 }
 
@@ -490,8 +496,8 @@ class _CustomMapScreenState extends State<CustomMapScreen>
 
                 PlaceModel? place;
                 try {
-                  place = await PlaceEnrichmentService().reverseGeocode(
-                      latlng.latitude, latlng.longitude);
+                  place = await PlaceEnrichmentService()
+                      .reverseGeocode(latlng.latitude, latlng.longitude);
                 } catch (e) {
                   debugPrint("Reverse Geocode skipped: $e");
                 }
@@ -546,8 +552,6 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                         _engine.mapController!.cameraPosition!.zoom);
               },
             ),
-
-
           if (_isFetchingStyle)
             Positioned.fill(
               child: Container(
@@ -641,11 +645,12 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                             child: provider.isDestinationSelected
                                 ? GestureDetector(
                                     key: const ValueKey('directions_btn'),
-                                      onTap: () async {
-                                        AppHaptics.heavyImpact();
-                                        await provider
-                                            .calculateAndDrawNativeRoute(context, provider.currentNavMode);
-                                      },
+                                    onTap: () async {
+                                      AppHaptics.heavyImpact();
+                                      await provider
+                                          .calculateAndDrawNativeRoute(
+                                              context, provider.currentNavMode);
+                                    },
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 20, vertical: 12),
@@ -687,26 +692,54 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                                   )
                                 : GestureDetector(
                                     key: const ValueKey('locate_btn'),
-                                    onTap: () => provider.engine.onLocateMeTapped(),
+                                    onTap: () =>
+                                        provider.engine.onLocateMeTapped(),
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(50),
                                       child: BackdropFilter(
-                                        filter: ui.ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
+                                        filter: ui.ImageFilter.blur(
+                                            sigmaX: 24.0, sigmaY: 24.0),
                                         child: Container(
                                           width: 56,
                                           height: 56,
                                           decoration: BoxDecoration(
-                                            color: isLightMode ? Colors.white.withValues(alpha: 0.65) : const Color(0xFF1E1E1E),
+                                            color: isLightMode
+                                                ? Colors.white
+                                                    .withValues(alpha: 0.65)
+                                                : const Color(0xFF1E1E1E),
                                             shape: BoxShape.circle,
-                                            border: isLightMode ? Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.0) : null,
-                                            boxShadow: isLightMode 
-                                                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(0, 4))]
-                                                : [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))],
+                                            border: isLightMode
+                                                ? Border.all(
+                                                    color: Colors.white
+                                                        .withValues(alpha: 0.8),
+                                                    width: 1.0)
+                                                : null,
+                                            boxShadow: isLightMode
+                                                ? [
+                                                    BoxShadow(
+                                                        color: Colors.black
+                                                            .withValues(
+                                                                alpha: 0.05),
+                                                        blurRadius: 16,
+                                                        offset:
+                                                            const Offset(0, 4))
+                                                  ]
+                                                : [
+                                                    BoxShadow(
+                                                        color: Colors.black
+                                                            .withValues(
+                                                                alpha: 0.3),
+                                                        blurRadius: 8,
+                                                        offset:
+                                                            const Offset(0, 4))
+                                                  ],
                                           ),
                                           child: Center(
                                             child: Icon(
                                                 CupertinoIcons.location_fill,
-                                                color: isLightMode ? Colors.black87 : Colors.white),
+                                                color: isLightMode
+                                                    ? Colors.black87
+                                                    : Colors.white),
                                           ),
                                         ),
                                       ),
@@ -779,19 +812,25 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                                   borderRadius: BorderRadius.circular(
                                       progress > 0.5 ? 24 : 100),
                                   boxShadow: isLightMode
-                                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(0, 4))]
+                                      ? [
+                                          BoxShadow(
+                                              color: Colors.black
+                                                  .withValues(alpha: 0.05),
+                                              blurRadius: 16,
+                                              offset: const Offset(0, 4))
+                                        ]
                                       : [
-                                    BoxShadow(
-                                        color:
-                                            Colors.black.withValues(alpha: 0.4),
-                                        blurRadius: 24,
-                                        offset: const Offset(0, 12)),
-                                    BoxShadow(
-                                        color:
-                                            Colors.black.withValues(alpha: 0.2),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 4)),
-                                  ],
+                                          BoxShadow(
+                                              color: Colors.black
+                                                  .withValues(alpha: 0.4),
+                                              blurRadius: 24,
+                                              offset: const Offset(0, 12)),
+                                          BoxShadow(
+                                              color: Colors.black
+                                                  .withValues(alpha: 0.2),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 4)),
+                                        ],
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(
@@ -801,17 +840,22 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                                         sigmaX: 25.0, sigmaY: 25.0),
                                     child: Container(
                                       decoration: BoxDecoration(
-                                        color: isLightMode 
-                                            ? Colors.white.withValues(alpha: 0.65) 
-                                            : const Color(0xFF0B0E17).withValues(alpha: 0.75),
+                                        color: isLightMode
+                                            ? Colors.white
+                                                .withValues(alpha: 0.65)
+                                            : const Color(0xFF0B0E17)
+                                                .withValues(alpha: 0.75),
                                         borderRadius: BorderRadius.circular(
                                             progress > 0.5 ? 24 : 100),
-                                        border: isLightMode 
-                                            ? Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.0) 
+                                        border: isLightMode
+                                            ? Border.all(
+                                                color: Colors.white
+                                                    .withValues(alpha: 0.8),
+                                                width: 1.0)
                                             : Border.all(
-                                            color: Colors.white
-                                                .withValues(alpha: 0.08),
-                                            width: 1.0),
+                                                color: Colors.white
+                                                    .withValues(alpha: 0.08),
+                                                width: 1.0),
                                       ),
                                       child: Stack(
                                         children: [
@@ -833,12 +877,17 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                                                     children: [
                                                       Padding(
                                                           padding:
-                                                              const EdgeInsets.only(
+                                                              const EdgeInsets
+                                                                  .only(
                                                                   left: 8),
                                                           child: Text(
                                                               "Map Themes",
                                                               style: TextStyle(
-                                                                  color: isLightMode ? Colors.black87 : Colors.white,
+                                                                  color: isLightMode
+                                                                      ? Colors
+                                                                          .black87
+                                                                      : Colors
+                                                                          .white,
                                                                   fontSize: 18,
                                                                   fontWeight:
                                                                       FontWeight
@@ -874,7 +923,9 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                                                   child: Icon(
                                                       CupertinoIcons
                                                           .square_stack_3d_up,
-                                                      color: isLightMode ? Colors.black87 : Colors.white,
+                                                      color: isLightMode
+                                                          ? Colors.black87
+                                                          : Colors.white,
                                                       size: 22),
                                                 ),
                                               ),
@@ -1025,22 +1076,29 @@ class PremiumMapSkeleton extends StatefulWidget {
   State<PremiumMapSkeleton> createState() => _PremiumMapSkeletonState();
 }
 
-class _PremiumMapSkeletonState extends State<PremiumMapSkeleton> with SingleTickerProviderStateMixin {
+class _PremiumMapSkeletonState extends State<PremiumMapSkeleton>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat();
+    _controller = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1500))
+      ..repeat();
   }
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
+
   @override
   Widget build(BuildContext context) {
-    final baseColor = widget.isDark ? const Color(0xFF1E1E1E) : const Color(0xFFE0E0E0);
-    final highlightColor = widget.isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5);
+    final baseColor =
+        widget.isDark ? const Color(0xFF1E1E1E) : const Color(0xFFE0E0E0);
+    final highlightColor =
+        widget.isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5);
     final bgColor = widget.isDark ? const Color(0xFF05070B) : Colors.white;
 
     return Container(
@@ -1056,7 +1114,8 @@ class _PremiumMapSkeletonState extends State<PremiumMapSkeleton> with SingleTick
                 stops: const [0.1, 0.5, 0.9],
                 begin: const Alignment(-1.0, -0.3),
                 end: const Alignment(1.0, 0.3),
-                transform: SlidingGradientTransform(slidePercent: _controller.value),
+                transform:
+                    SlidingGradientTransform(slidePercent: _controller.value),
               ).createShader(bounds);
             },
             child: child,
@@ -1068,18 +1127,21 @@ class _PremiumMapSkeletonState extends State<PremiumMapSkeleton> with SingleTick
             Positioned(top: 100, left: 20, child: _buildFakeBlock(120, 150)),
             Positioned(top: 120, right: 40, child: _buildFakeBlock(180, 80)),
             Positioned(top: 300, left: -20, child: _buildFakeBlock(250, 200)),
-            Positioned(bottom: 200, right: 20, child: _buildFakeBlock(150, 250)),
+            Positioned(
+                bottom: 200, right: 20, child: _buildFakeBlock(150, 250)),
             Positioned(bottom: 50, left: 50, child: _buildFakeBlock(200, 100)),
           ],
         ),
       ),
     );
   }
+
   Widget _buildFakeBlock(double width, double height) {
     return Container(
       width: width,
       height: height,
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+          color: Colors.white, borderRadius: BorderRadius.circular(16)),
     );
   }
 }
@@ -1089,6 +1151,7 @@ class SlidingGradientTransform extends GradientTransform {
   const SlidingGradientTransform({required this.slidePercent});
   @override
   Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
-    return Matrix4.translationValues(bounds.width * (slidePercent * 2 - 1), 0.0, 0.0);
+    return Matrix4.translationValues(
+        bounds.width * (slidePercent * 2 - 1), 0.0, 0.0);
   }
 }

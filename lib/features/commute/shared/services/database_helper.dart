@@ -11,6 +11,7 @@ import 'package:ridel/core/config/app_config.dart';
 // 🚀 THE ENCRYPTION FIX: SQLCipher wapas Zinda kar diya Mobile ke liye!
 // (Note: Jab Web par testing karni ho, tabhi ise comment karke normal sqflite lagana)
 import 'package:sqflite_sqlcipher/sqflite.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DatabaseHelper {
@@ -39,7 +40,7 @@ class DatabaseHelper {
 
   // 🚀 NAYA FUNCTION: Background me DB load karo, UI ko API par chalne do
   Future<void> initBackgroundSync() async {
-    if (kIsWeb || _isLocalDbReady || _isDbDownloading) return;
+    if (_isLocalDbReady || _isDbDownloading) return;
     _isDbDownloading = true;
     try {
       debugPrint(
@@ -173,7 +174,6 @@ class DatabaseHelper {
   }
 
   Future<Database> get database async {
-    if (kIsWeb) throw UnsupportedError('Mobile Database called on Web!');
     if (_database != null) return _database!;
     _database = await _initDatabaseForCity(currentCity);
     _isLocalDbReady = true;
@@ -181,8 +181,14 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabaseForCity(String city) async {
-    final dbFileName = '${city}_locked.db';
-    final documentsDirectory = await getApplicationDocumentsDirectory();
+    try {
+      if (kIsWeb) {
+        final dbFileName = '${city}_web.db';
+        return await databaseFactoryFfiWeb.openDatabase(dbFileName);
+      }
+
+      final dbFileName = '${city}_locked.db';
+      final documentsDirectory = await getApplicationDocumentsDirectory();
     final path = join(documentsDirectory.path, dbFileName);
     final file = File(path);
 
@@ -240,6 +246,10 @@ class DatabaseHelper {
         await file.delete();
       }
       rethrow; // API mode par fallback karne ke liye
+    }
+    } catch (e) {
+      debugPrint('🚨 Fatal Database Initialization Error: $e');
+      rethrow;
     }
   }
 

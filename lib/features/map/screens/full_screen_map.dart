@@ -182,7 +182,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   initialCameraPosition: const CameraPosition(
                       target: LatLng(28.6139, 77.2090), zoom: 12.0),
                   compassEnabled: false,
-                  myLocationEnabled: true,
+                  myLocationEnabled: mapProvider.showNativeBlueDot,
                   myLocationTrackingMode: kIsWeb
                       ? MyLocationTrackingMode.tracking
                       : MyLocationTrackingMode.trackingCompass,
@@ -206,10 +206,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                     if (ctrl != null) {
                       try {
                         final bounds = await ctrl.getVisibleRegion();
-                        
+
                         // 1. Pehle provider se location nikalne ki koshish karo
                         LatLng? userLoc = mapProvider.currentLocation;
-                        
+
                         // 2. Agar null hai, toh Web-Safe tareeqe se GPS fetch karo
                         if (userLoc == null) {
                           Position? pos;
@@ -223,7 +223,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           } catch (_) {
                             // Error aaye toh ignore karo
                           }
-                          
+
                           if (pos != null) {
                             userLoc = LatLng(pos.latitude, pos.longitude);
                             mapProvider.updateCurrentLocation(userLoc);
@@ -668,9 +668,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     } else {
       // STATE 1: LOCATE ME (Smart Bounds Sync)
       IconData locateIcon = Icons.my_location_rounded;
-      
-      Color locateColor = provider.isUserVisibleOnScreen 
-          ? iconColor 
+
+      Color locateColor = provider.isUserVisibleOnScreen
+          ? iconColor
           : const Color(0xFF0A84FF).withValues(alpha: 0.9);
 
       return Icon(

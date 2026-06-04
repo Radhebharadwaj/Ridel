@@ -65,17 +65,11 @@ dependencies:
   http: ^1.6.0
   url_launcher: ^6.2.1
   flutter_polyline_points: ^2.0.0
-  pointer_interceptor: ^0.10.1+2
   path_drawing: ^1.0.1
   flutter_svg: ^2.2.3
+  pointer_interceptor: any
 
-  flutter_map: ^6.1.0  
-  latlong2: ^0.9.0
-  flutter_map_cancellable_tile_provider: ^2.0.0
-
-  video_player: ^2.8.2
   flutter_local_notifications: ^21.0.0
-  sqflite: ^2.4.2
   flutter_dotenv: ^6.0.0
   timezone: ^0.11.0
   flutter_timezone: ^5.0.2
@@ -83,7 +77,6 @@ dependencies:
   google_sign_in: ^7.2.0
   sign_in_with_apple: ^7.0.1
   image: ^4.8.0
-  minio: ^3.5.8
   flutter_turnstile: ^1.2.0
   cached_network_image: ^3.4.1
 
@@ -142,4 +135,5 @@ flutter:
     - assets/images/metrocard.png
     - assets/images/splash.png
     - assets/images/nav_puck.png
+    - assets/images/custom_pin.png
     - .env

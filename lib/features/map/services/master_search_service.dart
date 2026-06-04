@@ -89,7 +89,8 @@ class MasterSearchService {
     // Attempt 2: Premium Autocomplete (Ola Maps)
     try {
       debugPrint("🔄 MasterSearch: Trying Premium Autocomplete...");
-      final premiumResults = await PlaceService().searchPremiumPlaces(query, userLocation: location);
+      final premiumResults = await PlaceService()
+          .searchPremiumPlaces(query, userLocation: location);
       if (premiumResults.isNotEmpty) return premiumResults;
     } catch (_) {}
 
@@ -204,7 +205,8 @@ class MasterSearchService {
       debugPrint("🔍 DEBUG API BODY: ${response.body}");
 
       if (response.statusCode != 200) {
-        debugPrint("🛑 DEBUG API FATAL: API returned error code ${response.statusCode}");
+        debugPrint(
+            "🛑 DEBUG API FATAL: API returned error code ${response.statusCode}");
         return [];
       }
 

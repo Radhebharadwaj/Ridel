@@ -173,12 +173,12 @@ class MapNavigationController {
     // ─────────────────────────────────────────────────────────────────────
     // 🎯 STEP 3: Cross-Track Distance → Off-Route Detection
     // ─────────────────────────────────────────────────────────────────────
-    if (_snapResult.crossTrackDistance > RoutingService.offRouteThresholdMeters) {
+    if (_snapResult.crossTrackDistance >
+        RoutingService.offRouteThresholdMeters) {
       _consecutiveOffRouteTicks++;
       if (_consecutiveOffRouteTicks >= _offRouteTickThreshold) {
         isOffRoute.value = true;
-        await _handleOffRoute(
-            LatLng(userPos.latitude, userPos.longitude));
+        await _handleOffRoute(LatLng(userPos.latitude, userPos.longitude));
       }
     } else {
       _consecutiveOffRouteTicks = 0;
@@ -189,8 +189,7 @@ class MapNavigationController {
     // 🎯 STEP 4: Window Advance — Slide forward if needed
     // ─────────────────────────────────────────────────────────────────────
     if (_snapResult.shouldAdvanceWindow) {
-      _windowStart = (_windowStart + 1)
-          .clamp(0, polyline.length - 2);
+      _windowStart = (_windowStart + 1).clamp(0, polyline.length - 2);
     }
 
     // ─────────────────────────────────────────────────────────────────────

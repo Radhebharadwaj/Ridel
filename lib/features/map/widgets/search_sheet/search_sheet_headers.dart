@@ -29,7 +29,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
               Colors.white.withValues(alpha: 0.06),
             ],
           ),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
+          border:
+              Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.35),
@@ -386,7 +387,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                     AppHaptics.heavyImpact();
                     Provider.of<MapProvider>(context, listen: false)
                         .startActiveNavigation(context);
-                    
+
                     if (_sheetController.isAttached) {
                       _sheetController.animateTo(
                         _safeMinSize,
@@ -418,10 +419,12 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
     final btnIconColor = isDark ? Colors.white : Colors.black;
     final mattePillBase = isDark ? const Color(0xFF1E2129) : Colors.white;
 
-
     String subtitleText = 'Place • ${_selectedPlace!.address}';
-    if (_selectedPlace!.name == 'Dropped Pin' || _selectedPlace!.address.isEmpty || _selectedPlace!.address.contains('Lat:')) {
-      subtitleText = 'Lat: ${_selectedPlace!.latitude.toStringAsFixed(4)}, Lng: ${_selectedPlace!.longitude.toStringAsFixed(4)}';
+    if (_selectedPlace!.name == 'Dropped Pin' ||
+        _selectedPlace!.address.isEmpty ||
+        _selectedPlace!.address.contains('Lat:')) {
+      subtitleText =
+          'Lat: ${_selectedPlace!.latitude.toStringAsFixed(4)}, Lng: ${_selectedPlace!.longitude.toStringAsFixed(4)}';
     }
 
     return SizedBox(
@@ -443,7 +446,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                 onTap: () async {
                   final shareLink =
                       'https://maps.apple/p/~${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
-                  
+
                   await Clipboard.setData(ClipboardData(text: shareLink));
 
                   // 🚀 FIX: Removed Ugly White Snackbar
@@ -459,7 +462,12 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                     return const LinearGradient(
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
-                      colors: [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
+                      colors: [
+                        Colors.transparent,
+                        Colors.black,
+                        Colors.black,
+                        Colors.transparent
+                      ],
                       stops: [0.0, 0.08, 0.92, 1.0],
                     ).createShader(bounds);
                   },
@@ -507,7 +515,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                 iconColor: btnIconColor,
                 bgColor: mattePillBase,
                 onTap: () {
-                  final provider = Provider.of<MapProvider>(context, listen: false);
+                  final provider =
+                      Provider.of<MapProvider>(context, listen: false);
                   _handleCancelRoute(context, provider);
                 },
               ),
@@ -532,7 +541,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
     final dynamicHeight = lerpDouble(46.0, 54.0, progress) ?? 46.0;
     // Original closed state was 100.0, new open is 20.0
     final dynamicRadius = lerpDouble(100.0, 20.0, progress) ?? 100.0;
-    
+
     // Original closed top padding was statically 6.0, new open pushes down to 18.0
     final topPadding = lerpDouble(6.0, 18.0, progress) ?? 6.0;
     // Bottom padding was always 10.0 in the original code
@@ -544,7 +553,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
       child: Padding(
         // Use the new dynamic top padding here
         padding: EdgeInsets.only(
-            top: topPadding, 
+            top: topPadding,
             bottom: bottomPadding,
             left: horizontalPadding,
             right: horizontalPadding),
@@ -618,13 +627,19 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                           final query = value.trim();
                           if (query.isEmpty) return;
 
-                          List<PlaceModel> suggestions = List.from(_searchResults);
-                          
+                          List<PlaceModel> suggestions =
+                              List.from(_searchResults);
+
                           if (suggestions.isEmpty) {
-                            final globalLoc = Provider.of<GlobalLocationService>(context, listen: false);
+                            final globalLoc =
+                                Provider.of<GlobalLocationService>(context,
+                                    listen: false);
                             final pos = globalLoc.currentPosition;
-                            final latLng = pos != null ? LatLng(pos.latitude, pos.longitude) : null;
-                            suggestions = await MasterSearchService().searchPlaces(query, userLocation: latLng);
+                            final latLng = pos != null
+                                ? LatLng(pos.latitude, pos.longitude)
+                                : null;
+                            suggestions = await MasterSearchService()
+                                .searchPlaces(query, userLocation: latLng);
                           }
 
                           if (!mounted) return;
@@ -634,7 +649,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                             AppHaptics.selectionClick();
                             await _selectPlaceFromList(topSuggestion);
                           } else {
-                            ToastService.showInfo(context, "No places found for '$query'");
+                            ToastService.showInfo(
+                                context, "No places found for '$query'");
                           }
                         },
                       ),

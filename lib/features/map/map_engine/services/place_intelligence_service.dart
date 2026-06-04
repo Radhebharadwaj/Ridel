@@ -213,7 +213,8 @@ class PlaceIntelligenceService {
 
   Future<void> _persistToDisk(String key, _CacheEntry entry) async {
     try {
-      final jsonStr = await _runMaybeInIsolate(() => json.encode(entry.toJson()));
+      final jsonStr =
+          await _runMaybeInIsolate(() => json.encode(entry.toJson()));
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('place_cache_$key', jsonStr);
     } catch (e) {

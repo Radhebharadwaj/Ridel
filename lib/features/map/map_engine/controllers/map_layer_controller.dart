@@ -21,7 +21,8 @@ class MapLayerController {
 
   static const String _pinSourceId = "apple-premium-pin-source";
 
-  static String _safeColorString(String? color, [String fallback = '#000000']) =>
+  static String _safeColorString(String? color,
+          [String fallback = '#000000']) =>
       (color?.isNotEmpty == true ? color! : fallback);
 
   static double _safeSize(double? value, double fallback) =>
@@ -208,68 +209,27 @@ class MapLayerController {
 
   Future<void> _drawPremiumRedPin(LatLng target, PlaceModel? place) async {
     if (_map == null) return;
-    Color pinColor = const Color(0xFFFF3B30);
-
-    if (place != null &&
-        place.theme.color.toARGB32() != 0xFFFF5252 &&
-        place.theme.color.toARGB32() != 0 &&
-        place.theme.color.toARGB32() != 0xFFFFFFFF) {
-      pinColor = place.theme.color;
-    }
-
-    String hexColor =
-        '#${pinColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
-
+    
     try {
       final geoJson = _buildPointGeoJson({
-            'lat': target.latitude,
-            'lng': target.longitude,
-          });
+        'lat': target.latitude,
+        'lng': target.longitude,
+      });
 
       if (_map == null) return;
       await _map!.addGeoJsonSource(_pinSourceId, geoJson);
 
-      await _map!.addCircleLayer(
-          _pinSourceId,
-          _redGlowLayerId,
-          CircleLayerProperties(
-              circleColor: _safeColorString(hexColor, '#FF3B30'),
-              circleOpacity: 0.2,
-              circleRadius: _safeSize(18.0, 8.0),
-              circlePitchAlignment: "map",
-              circleStrokeWidth: 0));
-
-      await _map!.addCircleLayer(
-          _pinSourceId,
-          _redStaticAuraLayerId,
-          CircleLayerProperties(
-              circleColor: _safeColorString(hexColor, '#FF3B30'),
-              circleOpacity: 0.15,
-              circleRadius: _safeSize(14.0, 6.0),
-              circlePitchAlignment: "map",
-              circleStrokeWidth: 0));
-
-      await _map!.addCircleLayer(
-          _pinSourceId,
-          _redBorderLayerId,
-          const CircleLayerProperties(
-              circleColor: "#FFFFFF",
-              circleOpacity: 1.0,
-              circleRadius: 10.0,
-              circlePitchAlignment: "map",
-              circleStrokeWidth: 0));
-
-      await _map!.addCircleLayer(
-          _pinSourceId,
-          _redCoreLayerId,
-          CircleLayerProperties(
-              circleColor: _safeColorString(hexColor, '#FF3B30'),
-              circleOpacity: 1.0,
-              circleRadius: _safeSize(7.5, 4.0),
-              circlePitchAlignment: "map",
-              circleStrokeWidth: 0));
+      await _map!.addSymbolLayer(
+        _pinSourceId,
+        "custom-pin-layer",
+        const SymbolLayerProperties(
+          iconImage: 'custom_pin',
+          iconAnchor: 'bottom',
+          iconSize: 0.35,
+        ),
+      );
     } catch (e) {
-      debugPrint("⚠️ Red Pulse Drawing Failed: $e");
+      debugPrint("⚠️ Pin Drawing Failed: $e");
     }
   }
 
@@ -278,9 +238,9 @@ class MapLayerController {
     String hexColor = "#0A84FF";
     try {
       final geoJson = _buildPointGeoJson({
-            'lat': target.latitude,
-            'lng': target.longitude,
-          });
+        'lat': target.latitude,
+        'lng': target.longitude,
+      });
 
       if (_map == null) return;
       await _map!.addGeoJsonSource(_pinSourceId, geoJson);
@@ -401,10 +361,13 @@ class MapLayerController {
       await _map!.removeLayer(_blueCoreLayerId);
       await _map!.removeLayer(_blueBorderLayerId);
       await _map!.removeLayer(_blueGlowLayerId);
+      
+      await _map!.removeLayer("custom-pin-layer");
       await _map!.removeLayer(_redCoreLayerId);
       await _map!.removeLayer(_redBorderLayerId);
       await _map!.removeLayer(_redStaticAuraLayerId);
       await _map!.removeLayer(_redGlowLayerId);
+      
       await _map!.removeSource(_pinSourceId);
     } catch (_) {}
 

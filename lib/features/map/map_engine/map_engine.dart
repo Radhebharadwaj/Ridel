@@ -135,13 +135,19 @@ class MapEngine {
     };
 
     try {
-      // 🚀 Load and Add Custom Navigation Puck Image
+      // 🚀 Load and Add Custom Navigation Puck and Pin Images
       try {
-        final ByteData bytes = await rootBundle.load('assets/images/nav_puck.png');
-        final Uint8List puckBytes = bytes.buffer.asUint8List();
+        final ByteData puckBytesData =
+            await rootBundle.load('assets/images/nav_puck.png');
+        final Uint8List puckBytes = puckBytesData.buffer.asUint8List();
         await controller.addImage('nav_puck', puckBytes);
+
+        final ByteData pinBytesData =
+            await rootBundle.load('assets/images/custom_pin.png');
+        final Uint8List pinBytes = pinBytesData.buffer.asUint8List();
+        await controller.addImage('custom_pin', pinBytes);
       } catch (e) {
-        debugPrint("⚠️ Failed to load nav_puck image: $e");
+        debugPrint("⚠️ Failed to load custom images: $e");
       }
 
       await layers?.initLayerSystem();
@@ -227,7 +233,8 @@ class MapEngine {
   ///
   /// [route] — The RouteResult from RouteEngineService.
   /// [destination] — The final destination LatLng (needed for rerouting).
-  Future<void> startActiveNavigation(RouteResult route, LatLng destination) async {
+  Future<void> startActiveNavigation(
+      RouteResult route, LatLng destination) async {
     _navigationDestination = destination;
 
     // 1. Draw the route polyline on the map

@@ -14,7 +14,7 @@ import 'package:ridel/core/services/notification_service.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/core/widgets/ridel_glass.dart';
 import 'package:ridel/features/commute/bus/services/bus_service.dart';
-import 'package:ridel/features/commute/metro/map/metro_map_screen.dart';
+
 import 'package:ridel/features/commute/metro/services/metro_service.dart';
 import 'package:ridel/features/commute/shared/models/route_models.dart';
 import 'package:ridel/features/commute/shared/widgets/journey_timeline_card.dart';
@@ -559,10 +559,13 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(24.0),
                       child: widget.isMetro
-                          ? MetroMapScreen(
-                              activeRoute: _currentRouteData,
-                              activeStationIndex: _activeStationIndex,
-                              isPanelOpen: _isPanelOpen,
+                          ? Container(
+                              color: isDark
+                                  ? const Color(0xFF0B0E17)
+                                  : Colors.white,
+                              child: Center(
+                                  child: Text("Ola Maps Metro Route Here",
+                                      style: TextStyle(color: isDark ? Colors.white24 : Colors.black26))),
                             )
                           : Container(
                               color: isDark

@@ -57,7 +57,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                   Colors.white.withValues(alpha: 0.06),
                 ],
               ),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
+              border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.18), width: 1),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.35),
@@ -84,7 +85,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     );
   }
 
-  Widget _buildUnifiedExploreView(bool isDark, double progress, {bool isExpandedList = false}) {
+  Widget _buildUnifiedExploreView(bool isDark, double progress,
+      {bool isExpandedList = false}) {
     final provider = Provider.of<MapProvider>(context);
     final iconColor = isDark ? Colors.white70 : Colors.black87;
     final isFocused = _searchFocus.hasFocus;
@@ -92,8 +94,10 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     final isSelected = _selectedPlace != null;
 
     final showTransportModes = isSelected;
-    final showQuickActions = !isSelected && (!isFocused && !provider.isEditingHistory) && isEmpty;
-    final showRecentSearches = !isSelected && (isFocused || provider.isEditingHistory) && isEmpty;
+    final showQuickActions =
+        !isSelected && (!isFocused && !provider.isEditingHistory) && isEmpty;
+    final showRecentSearches =
+        !isSelected && (isFocused || provider.isEditingHistory) && isEmpty;
 
     final isExpanded = progress > (_safeMinSize + 0.05);
     final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
@@ -122,7 +126,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 350),
-                switchInCurve: Curves.easeOutCubic, // 🚀 FIX: Premium snap without spring
+                switchInCurve:
+                    Curves.easeOutCubic, // 🚀 FIX: Premium snap without spring
                 switchOutCurve: Curves.easeIn,
                 transitionBuilder: (Widget child, Animation<double> animation) {
                   return FadeTransition(
@@ -179,10 +184,13 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                     children: [
                       // Premium Header Row
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 4),
                         child: Row(
                           children: [
-                            Icon(CupertinoIcons.clock, color: iconColor, size: 24), // matched icon size
+                            Icon(CupertinoIcons.clock,
+                                color: iconColor,
+                                size: 24), // matched icon size
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -207,48 +215,71 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                         GestureDetector(
                                           behavior: HitTestBehavior.opaque,
                                           onTap: () {
-                                            FocusScope.of(context).requestFocus(_searchFocus); // PREVENT SHEET COLLAPSE
-                                            provider.deleteAllHistory(); 
+                                            FocusScope.of(context).requestFocus(
+                                                _searchFocus); // PREVENT SHEET COLLAPSE
+                                            provider.deleteAllHistory();
                                           },
                                           child: const Padding(
-                                            padding: EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                                            child: Text("Delete All", style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.w500)),
+                                            padding: EdgeInsets.symmetric(
+                                                horizontal: 12.0,
+                                                vertical: 8.0),
+                                            child: Text("Delete All",
+                                                style: TextStyle(
+                                                    color: Colors.redAccent,
+                                                    fontSize: 14,
+                                                    fontWeight:
+                                                        FontWeight.w500)),
                                           ),
                                         ),
                                         // 2. DONE BUTTON
                                         GestureDetector(
                                           behavior: HitTestBehavior.opaque,
                                           onTap: () {
-                                            FocusScope.of(context).requestFocus(_searchFocus); // PREVENT SHEET COLLAPSE
-                                            provider.deleteSelectedHistory(); 
+                                            FocusScope.of(context).requestFocus(
+                                                _searchFocus); // PREVENT SHEET COLLAPSE
+                                            provider.deleteSelectedHistory();
                                           },
                                           child: const Padding(
-                                            padding: EdgeInsets.only(left: 8.0, top: 8.0, bottom: 8.0),
-                                            child: Text("Done", style: TextStyle(color: Colors.blueAccent, fontSize: 16, fontWeight: FontWeight.bold)),
+                                            padding: EdgeInsets.only(
+                                                left: 8.0,
+                                                top: 8.0,
+                                                bottom: 8.0),
+                                            child: Text("Done",
+                                                style: TextStyle(
+                                                    color: Colors.blueAccent,
+                                                    fontSize: 16,
+                                                    fontWeight:
+                                                        FontWeight.bold)),
                                           ),
                                         ),
                                       ],
                                     )
-                                  : ExcludeFocus( // 🛡️ PREVENTS BUTTON FROM STEALING FOCUS
+                                  : ExcludeFocus(
+                                      // 🛡️ PREVENTS BUTTON FROM STEALING FOCUS
                                       child: Listener(
                                         behavior: HitTestBehavior.opaque,
                                         onPointerDown: (_) {
                                           AppHaptics.selectionClick();
-                                          
+
                                           // 1. Capture current focus (the search bar)
-                                          FocusNode? currentFocus = FocusManager.instance.primaryFocus;
-                                          
+                                          FocusNode? currentFocus = FocusManager
+                                              .instance.primaryFocus;
+
                                           // 2. Change state to Edit Mode
                                           provider.setIsEditingHistory(true);
-                                          
+
                                           // 3. Forcefully keep the focus alive so the sheet DOES NOT collapse!
                                           currentFocus?.requestFocus();
                                         },
                                         child: const Padding(
-                                          padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 16.0, vertical: 8.0),
                                           child: Text(
                                             "Delete",
-                                            style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600, fontSize: 16),
+                                            style: TextStyle(
+                                                color: Colors.redAccent,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 16),
                                           ),
                                         ),
                                       ),
@@ -256,24 +287,42 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                           ],
                         ),
                       ),
-                      Divider(height: 1, color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black12),
+                      Divider(
+                          height: 1,
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : Colors.black12),
                       provider.recentSearches.isEmpty
                           ? Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 32.0),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 32.0),
                               child: Center(
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.travel_explore, color: isDark ? Colors.white24 : Colors.black26, size: 48),
+                                    Icon(Icons.travel_explore,
+                                        color: isDark
+                                            ? Colors.white24
+                                            : Colors.black26,
+                                        size: 48),
                                     const SizedBox(height: 12),
                                     Text(
                                       "No recent searches",
-                                      style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 15, fontWeight: FontWeight.w500),
+                                      style: TextStyle(
+                                          color: isDark
+                                              ? Colors.white54
+                                              : Colors.black54,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w500),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       "Your search history will appear here.",
-                                      style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 13),
+                                      style: TextStyle(
+                                          color: isDark
+                                              ? Colors.white38
+                                              : Colors.black38,
+                                          fontSize: 13),
                                     ),
                                   ],
                                 ),
@@ -287,374 +336,441 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                   physics: const ClampingScrollPhysics(),
                                   itemCount: provider.recentSearches.length,
                                   itemBuilder: (context, index) {
-                            final place = provider.recentSearches[index];
-                            final isLast = index == provider.recentSearches.length - 1;
-                            
-                            // Fetch provider safely BEFORE the gesture callback using the stable build context
-                            final safeProvider = Provider.of<MapProvider>(context, listen: false);
+                                    final place =
+                                        provider.recentSearches[index];
+                                    final isLast = index ==
+                                        provider.recentSearches.length - 1;
 
-                            return Dismissible(
-                              key: Key('recent_${index}_${place.name}'),
-                              direction: DismissDirection.endToStart,
-                              background: Container(
-                                alignment: Alignment.centerRight,
-                                padding: const EdgeInsets.only(right: 20),
-                                color: Colors.redAccent,
-                                child: const Icon(
-                                  CupertinoIcons.delete,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              onDismissed: (_) {
-                                AppHaptics.mediumImpact();
-                                safeProvider.deleteSingleHistory(place);
-                              },
-                              child: Column(
-                                children: [
-                                  Listener(
-                                    behavior: HitTestBehavior.opaque,
-                                    // Trigger INSTANTLY on touch, before any keyboard unfocus events can destroy the widget
-                                    onPointerDown: (event) async {
-                                      // --- NEW INTERCEPTOR FOR EDIT MODE ---
-                                      if (safeProvider.isEditingHistory) {
-                                        safeProvider.toggleDeletionSelection(place.placeId);
-                                        return; // STOP execution here, do not fly camera!
-                                      }
-                                      // --- END INTERCEPTOR ---
-                                      
-                                      debugPrint("💥 RAW POINTER DOWN REGISTERED ON: ${place.name}");
-                                      AppHaptics.selectionClick();
-                                      
-                                      try {
-                                        // 1. Lock State FIRST using the pre-fetched safe provider
-                                        safeProvider.setDestinationSelected(true);
-                                        safeProvider.engine.setUIState(MapUIState.placeSelected);
-                                        
-                                        // Safely animate sheet to Pill View size
-                                        if (_sheetController.isAttached) {
-                                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                                            if (_sheetController.isAttached) {
-                                              _sheetController.animateTo(
-                                                _safeMinSize,
-                                                duration: const Duration(milliseconds: 300),
-                                                curve: Curves.easeOutCubic,
-                                              );
-                                            }
-                                          });
-                                        }
-                                        
-                                        // 2. NOW unfocus the keyboard
-                                        FocusManager.instance.primaryFocus?.unfocus();
-                                        
-                                        // 3. Process Coordinates
-                                        double lat = place.latitude;
-                                        double lng = place.longitude;
-                                        
-                                        if (lat == 0.0 || lng == 0.0) {
-                                          if (place.placeId.isNotEmpty) {
-                                            try {
-                                              final exactCoords = await PlaceService.getPlaceDetails(place.placeId);
-                                              if (exactCoords != null) {
-                                                lat = exactCoords.latitude;
-                                                lng = exactCoords.longitude;
-                                              }
-                                            } catch (_) {}
-                                          }
-                                        }
-                                        
-                                        // 4. Fly Camera
-                                        if (lat != 0.0 && lng != 0.0) {
-                                          safeProvider.setTargetDestination(LatLng(lat, lng));
-                                          rebuildState(() => _selectedPlace = place);
-                                          if (_sheetController.isAttached) {
-                                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                                              if (_sheetController.isAttached) {
-                                                _sheetController.animateTo(
-                                                  _safeMinSize,
-                                                  duration: const Duration(milliseconds: 300),
-                                                  curve: Curves.easeOutCubic,
-                                                );
-                                              }
-                                            });
-                                          }
-                                          // Drop the native Red Circle at the selected place coordinates
-                                          if (lat != 0.0 && lng != 0.0) {
-                                            safeProvider.addNativeDestinationPin(LatLng(lat, lng));
-                                          }
-                                          await safeProvider.flyToPlace(lat, lng);
-                                        } else {
-                                          safeProvider.engine.setUIState(MapUIState.idle);
-                                        }
-                                      } catch (e) {
-                                        debugPrint("🔥 CRASH CAUGHT: $e");
-                                      }
-                                    },
-                                      child: ListTile(
-                                        contentPadding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
+                                    // Fetch provider safely BEFORE the gesture callback using the stable build context
+                                    final safeProvider =
+                                        Provider.of<MapProvider>(context,
+                                            listen: false);
+
+                                    return Dismissible(
+                                      key: Key('recent_${index}_${place.name}'),
+                                      direction: DismissDirection.endToStart,
+                                      background: Container(
+                                        alignment: Alignment.centerRight,
+                                        padding:
+                                            const EdgeInsets.only(right: 20),
+                                        color: Colors.redAccent,
+                                        child: const Icon(
+                                          CupertinoIcons.delete,
+                                          color: Colors.white,
                                         ),
-                                        leading: Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                isDark ? Colors.white12 : Colors.black12,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            CupertinoIcons.clock,
-                                            color: Colors.grey,
-                                            size: 18,
-                                          ),
-                                        ),
-                                        title: Text(
-                                          place.name,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: isDark ? Colors.white : Colors.black,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                        subtitle: Text(
-                                          place.address,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color:
-                                                isDark ? Colors.white54 : Colors.black54,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                        trailing: safeProvider.isEditingHistory
-                                            ? IgnorePointer(
-                                                child: Checkbox(
-                                                  shape: const CircleBorder(), // 🔴 THIS MAKES IT CIRCULAR
-                                                  value: provider.selectedForDeletion.contains(place.placeId),
-                                                  activeColor: Colors.redAccent,
-                                                  onChanged: (bool? selected) {},
-                                                ),
-                                              )
-                                            : null,
                                       ),
-                                    ),
-                                  if (!isLast)
-                                    Divider(
-                                      height: 1,
-                                      color: isDark
-                                          ? Colors.white.withValues(alpha: 0.08)
-                                          : Colors.black12,
-                                      indent: 60,
-                                    ),
-                                ],
-                              ),
-                            );
-                          },
-                        );
-                        return isExpandedList
-                            ? Expanded(child: listView)
-                            : ConstrainedBox(
-                                constraints: const BoxConstraints(maxHeight: 320),
-                                child: listView,
-                              );
-                      },
-                    ),
-                  ],
+                                      onDismissed: (_) {
+                                        AppHaptics.mediumImpact();
+                                        safeProvider.deleteSingleHistory(place);
+                                      },
+                                      child: Column(
+                                        children: [
+                                          Listener(
+                                            behavior: HitTestBehavior.opaque,
+                                            // Trigger INSTANTLY on touch, before any keyboard unfocus events can destroy the widget
+                                            onPointerDown: (event) async {
+                                              // --- NEW INTERCEPTOR FOR EDIT MODE ---
+                                              if (safeProvider
+                                                  .isEditingHistory) {
+                                                safeProvider
+                                                    .toggleDeletionSelection(
+                                                        place.placeId);
+                                                return; // STOP execution here, do not fly camera!
+                                              }
+                                              // --- END INTERCEPTOR ---
+
+                                              debugPrint(
+                                                  "💥 RAW POINTER DOWN REGISTERED ON: ${place.name}");
+                                              AppHaptics.selectionClick();
+
+                                              try {
+                                                // 1. Lock State FIRST using the pre-fetched safe provider
+                                                safeProvider
+                                                    .setDestinationSelected(
+                                                        true);
+                                                safeProvider.engine.setUIState(
+                                                    MapUIState.placeSelected);
+
+                                                // Safely animate sheet to Pill View size
+                                                if (_sheetController
+                                                    .isAttached) {
+                                                  WidgetsBinding.instance
+                                                      .addPostFrameCallback(
+                                                          (_) {
+                                                    if (_sheetController
+                                                        .isAttached) {
+                                                      _sheetController
+                                                          .animateTo(
+                                                        _safeMinSize,
+                                                        duration:
+                                                            const Duration(
+                                                                milliseconds:
+                                                                    300),
+                                                        curve:
+                                                            Curves.easeOutCubic,
+                                                      );
+                                                    }
+                                                  });
+                                                }
+
+                                                // 2. NOW unfocus the keyboard
+                                                FocusManager
+                                                    .instance.primaryFocus
+                                                    ?.unfocus();
+
+                                                // 3. Process Coordinates
+                                                double lat = place.latitude;
+                                                double lng = place.longitude;
+
+                                                if (lat == 0.0 || lng == 0.0) {
+                                                  if (place
+                                                      .placeId.isNotEmpty) {
+                                                    try {
+                                                      final exactCoords =
+                                                          await PlaceService
+                                                              .getPlaceDetails(
+                                                                  place
+                                                                      .placeId);
+                                                      if (exactCoords != null) {
+                                                        lat = exactCoords
+                                                            .latitude;
+                                                        lng = exactCoords
+                                                            .longitude;
+                                                      }
+                                                    } catch (_) {}
+                                                  }
+                                                }
+
+                                                // 4. Fly Camera
+                                                if (lat != 0.0 && lng != 0.0) {
+                                                  safeProvider
+                                                      .setTargetDestination(
+                                                          LatLng(lat, lng));
+                                                  rebuildState(() =>
+                                                      _selectedPlace = place);
+                                                  if (_sheetController
+                                                      .isAttached) {
+                                                    WidgetsBinding.instance
+                                                        .addPostFrameCallback(
+                                                            (_) {
+                                                      if (_sheetController
+                                                          .isAttached) {
+                                                        _sheetController
+                                                            .animateTo(
+                                                          _safeMinSize,
+                                                          duration:
+                                                              const Duration(
+                                                                  milliseconds:
+                                                                      300),
+                                                          curve: Curves
+                                                              .easeOutCubic,
+                                                        );
+                                                      }
+                                                    });
+                                                  }
+                                                  // Drop the native Red Circle at the selected place coordinates
+                                                  if (lat != 0.0 &&
+                                                      lng != 0.0) {
+                                                    safeProvider
+                                                        .addNativeDestinationPin(
+                                                            LatLng(lat, lng));
+                                                  }
+                                                  await safeProvider.flyToPlace(
+                                                      lat, lng);
+                                                } else {
+                                                  safeProvider.engine
+                                                      .setUIState(
+                                                          MapUIState.idle);
+                                                }
+                                              } catch (e) {
+                                                debugPrint(
+                                                    "🔥 CRASH CAUGHT: $e");
+                                              }
+                                            },
+                                            child: ListTile(
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 16,
+                                              ),
+                                              leading: Container(
+                                                padding:
+                                                    const EdgeInsets.all(8),
+                                                decoration: BoxDecoration(
+                                                  color: isDark
+                                                      ? Colors.white12
+                                                      : Colors.black12,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  CupertinoIcons.clock,
+                                                  color: Colors.grey,
+                                                  size: 18,
+                                                ),
+                                              ),
+                                              title: Text(
+                                                place.name,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  color: isDark
+                                                      ? Colors.white
+                                                      : Colors.black,
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 16,
+                                                ),
+                                              ),
+                                              subtitle: Text(
+                                                place.address,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  color: isDark
+                                                      ? Colors.white54
+                                                      : Colors.black54,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                              trailing: safeProvider
+                                                      .isEditingHistory
+                                                  ? IgnorePointer(
+                                                      child: Checkbox(
+                                                        shape:
+                                                            const CircleBorder(), // 🔴 THIS MAKES IT CIRCULAR
+                                                        value: provider
+                                                            .selectedForDeletion
+                                                            .contains(
+                                                                place.placeId),
+                                                        activeColor:
+                                                            Colors.redAccent,
+                                                        onChanged:
+                                                            (bool? selected) {},
+                                                      ),
+                                                    )
+                                                  : null,
+                                            ),
+                                          ),
+                                          if (!isLast)
+                                            Divider(
+                                              height: 1,
+                                              color: isDark
+                                                  ? Colors.white
+                                                      .withValues(alpha: 0.08)
+                                                  : Colors.black12,
+                                              indent: 60,
+                                            ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                );
+                                return isExpandedList
+                                    ? Expanded(child: listView)
+                                    : ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                            maxHeight: 320),
+                                        child: listView,
+                                      );
+                              },
+                            ),
+                    ],
                   ),
                 ),
               ),
             ),
-          if (showRecentSearches && !isSelected)
-            const SizedBox(height: 16),
+          if (showRecentSearches && !isSelected) const SizedBox(height: 16),
           if (!isSelected && !isFocused && isEmpty)
             Material(
               color: isDark
                   ? Colors.white.withValues(alpha: 0.05)
                   : Colors.black.withValues(alpha: 0.03),
               borderRadius: BorderRadius.circular(24),
-            clipBehavior: Clip.antiAlias,
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.08)
-                      : Colors.black.withValues(alpha: 0.05),
+              clipBehavior: Clip.antiAlias,
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.05),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Theme(
+                      data: Theme.of(context).copyWith(
+                        dividerColor: Colors.transparent,
+                        unselectedWidgetColor: iconColor,
+                      ),
+                      child: ExpansionTile(
+                        controller: _nearbyTileCtrl,
+                        collapsedShape: const Border(),
+                        shape: const Border(),
+                        tilePadding: const EdgeInsets.symmetric(
+                            vertical: 4, horizontal: 16),
+                        onExpansionChanged: (expanded) {
+                          AppHaptics.lightImpact();
+                          rebuildState(() {});
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            Future.delayed(const Duration(milliseconds: 50),
+                                () {
+                              if (_sheetController.isAttached) {
+                                unawaited(
+                                  _sheetController.animateTo(
+                                    expanded ? _safeMaxSize : _safeMidSize,
+                                    duration: const Duration(milliseconds: 400),
+                                    curve: Curves.fastLinearToSlowEaseIn,
+                                  ),
+                                );
+                              }
+                            });
+                          });
+                        },
+                        leading: const Icon(Icons.directions_transit_rounded,
+                            color: Color(0xFF00E5FF)),
+                        title: Text(
+                          'Transit Quick Actions',
+                          style: TextStyle(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.9)
+                                : Colors.black87,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 16,
+                          ),
+                        ),
+                        iconColor: iconColor,
+                        collapsedIconColor: iconColor,
+                        children: [
+                          _buildNearbyTile(
+                            Icons.directions_subway_filled_rounded,
+                            const [Color(0xFF5AC8FA), Color(0xFF007AFF)],
+                            'Metro Stations',
+                            isDark,
+                            false,
+                          ),
+                          _buildNearbyTile(
+                            Icons.directions_bus_filled_rounded,
+                            const [Color(0xFF65D57B), Color(0xFF34C759)],
+                            'Bus Stops',
+                            isDark,
+                            false,
+                          ),
+                          _buildNearbyTile(
+                            Icons.train_rounded,
+                            const [Color(0xFF4CABFF), Color(0xFF0A84FF)],
+                            'Railway Stations',
+                            isDark,
+                            true,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (showQuickActions)
+                      Column(
+                        children: [
+                          Divider(
+                            height: 1,
+                            thickness: 0.5,
+                            indent: 52,
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.08),
+                          ),
+                          RidelBounceButton(
+                            onTap: () async {
+                              AppHaptics.lightImpact();
+                              final locService =
+                                  Provider.of<GlobalLocationService>(context,
+                                      listen: false);
+                              if (locService.currentPosition == null) {
+                                await locService.forceRefreshLocation();
+                              }
+                              final pos = locService.currentPosition;
+                              if (pos != null) {
+                                await MapShareService.shareCurrentLocation(
+                                    LatLng(pos.latitude, pos.longitude));
+                              } else {
+                                _showPremiumNotification(
+                                    'Could not get current location.',
+                                    isError: true);
+                              }
+                            },
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              leading: const Icon(CupertinoIcons.share,
+                                  color: Color(0xFF00E5FF), size: 22),
+                              title: Text(
+                                'Share My Location',
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.9)
+                                      : Colors.black87,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              trailing: Icon(
+                                Icons.chevron_right_rounded,
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.3)
+                                    : Colors.black.withValues(alpha: 0.3),
+                              ),
+                            ),
+                          ),
+                          Divider(
+                            height: 1,
+                            thickness: 0.5,
+                            indent: 52,
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.08),
+                          ),
+                          buildHiddenExtra(
+                            RidelBounceButton(
+                              onTap: () async {
+                                AppHaptics.success();
+                                unawaited(
+                                  Provider.of<MapProvider>(
+                                    context,
+                                    listen: false,
+                                  ).markCurrentPosition(context),
+                                );
+                                // 🚀 FIX: Removed ugly SnackBar, using NotificationService
+                                _showPremiumNotification(
+                                  'Your current location has been pinned on the map.',
+                                );
+                              },
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                leading: const Icon(CupertinoIcons.pin,
+                                    color: Color(0xFF00E5FF), size: 22),
+                                title: Text(
+                                  'Mark My Location',
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.9)
+                                        : Colors.black87,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                trailing: Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.3)
+                                      : Colors.black.withValues(alpha: 0.3),
+                                ),
+                              ),
+                            ),
+                          ), // closes buildHiddenExtra(
+                        ],
+                      ), // closes Column(children:
+                  ],
                 ),
               ),
-              child: Column(
-                children: [
-                  Theme(
-                    data: Theme.of(context).copyWith(
-                      dividerColor: Colors.transparent,
-                      unselectedWidgetColor: iconColor,
-                    ),
-                    child: ExpansionTile(
-                      controller: _nearbyTileCtrl,
-                      collapsedShape: const Border(),
-                      shape: const Border(),
-                      tilePadding: const EdgeInsets.symmetric(
-                          vertical: 4, horizontal: 16),
-                      onExpansionChanged: (expanded) {
-                        AppHaptics.lightImpact();
-                        rebuildState(() {});
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          Future.delayed(const Duration(milliseconds: 50), () {
-                            if (_sheetController.isAttached) {
-                              unawaited(
-                                _sheetController.animateTo(
-                                  expanded ? _safeMaxSize : _safeMidSize,
-                                  duration: const Duration(milliseconds: 400),
-                                  curve: Curves.fastLinearToSlowEaseIn,
-                                ),
-                              );
-                            }
-                          });
-                        });
-                      },
-                      leading: const Icon(Icons.directions_transit_rounded,
-                          color: Color(0xFF00E5FF)),
-                      title: Text(
-                        'Transit Quick Actions',
-                        style: TextStyle(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.9)
-                              : Colors.black87,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 16,
-                        ),
-                      ),
-                      iconColor: iconColor,
-                      collapsedIconColor: iconColor,
-                      children: [
-                        _buildNearbyTile(
-                          Icons.directions_subway_filled_rounded,
-                          const [Color(0xFF5AC8FA), Color(0xFF007AFF)],
-                          'Metro Stations',
-                          isDark,
-                          false,
-                        ),
-                        _buildNearbyTile(
-                          Icons.directions_bus_filled_rounded,
-                          const [Color(0xFF65D57B), Color(0xFF34C759)],
-                          'Bus Stops',
-                          isDark,
-                          false,
-                        ),
-                        _buildNearbyTile(
-                          Icons.train_rounded,
-                          const [Color(0xFF4CABFF), Color(0xFF0A84FF)],
-                          'Railway Stations',
-                          isDark,
-                          true,
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (showQuickActions)
-                    Column(
-                              children: [
-                                Divider(
-                                  height: 1,
-                                  thickness: 0.5,
-                                  indent: 52,
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.08)
-                                      : Colors.black.withValues(alpha: 0.08),
-                                ),
-                                RidelBounceButton(
-                                  onTap: () async {
-                                    AppHaptics.lightImpact();
-                                    final locService = Provider.of<GlobalLocationService>(context, listen: false);
-                                    if (locService.currentPosition == null) {
-                                      await locService.forceRefreshLocation();
-                                    }
-                                    final pos = locService.currentPosition;
-                                    if (pos != null) {
-                                      await MapShareService.shareCurrentLocation(
-                                          LatLng(pos.latitude, pos.longitude));
-                                    } else {
-                                      _showPremiumNotification('Could not get current location.', isError: true);
-                                    }
-                                  },
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                    ),
-                                    leading: const Icon(CupertinoIcons.share,
-                                        color: Color(0xFF00E5FF), size: 22),
-                                    title: Text(
-                                      'Share My Location',
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white.withValues(alpha: 0.9)
-                                            : Colors.black87,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    trailing: Icon(
-                                      Icons.chevron_right_rounded,
-                                      color: isDark
-                                          ? Colors.white.withValues(alpha: 0.3)
-                                          : Colors.black.withValues(alpha: 0.3),
-                                    ),
-                                  ),
-                                ),
-                                Divider(
-                                  height: 1,
-                                  thickness: 0.5,
-                                  indent: 52,
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.08)
-                                      : Colors.black.withValues(alpha: 0.08),
-                                ),
-                                buildHiddenExtra(
-                                  RidelBounceButton(
-                                    onTap: () async {
-                                      AppHaptics.success();
-                                      unawaited(
-                                        Provider.of<MapProvider>(
-                                          context,
-                                          listen: false,
-                                        ).markCurrentPosition(context),
-                                      );
-                                      // 🚀 FIX: Removed ugly SnackBar, using NotificationService
-                                      _showPremiumNotification(
-                                        'Your current location has been pinned on the map.',
-                                      );
-                                    },
-                                    child: ListTile(
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                      ),
-                                      leading: const Icon(CupertinoIcons.pin,
-                                          color: Color(0xFF00E5FF), size: 22),
-                                      title: Text(
-                                        'Mark My Location',
-                                        style: TextStyle(
-                                          color: isDark
-                                              ? Colors.white.withValues(alpha: 0.9)
-                                              : Colors.black87,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      trailing: Icon(
-                                        Icons.chevron_right_rounded,
-                                        color: isDark
-                                            ? Colors.white.withValues(alpha: 0.3)
-                                            : Colors.black.withValues(alpha: 0.3),
-                                      ),
-                                    ),
-                                  ),
-                                ),  // closes buildHiddenExtra(
-                              ],
-                            ),  // closes Column(children:
-                ],
-              ),
             ),
-          ),
         ],
       ),
     );
@@ -723,7 +839,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                 onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'walking';
-                  await provider.calculateAndDrawNativeRoute(context, 'walking');
+                  await provider.calculateAndDrawNativeRoute(
+                      context, 'walking');
                   rebuildState(() {});
                 },
               ),
@@ -736,7 +853,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                 onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'twowheeler';
-                  await provider.calculateAndDrawNativeRoute(context, 'twowheeler');
+                  await provider.calculateAndDrawNativeRoute(
+                      context, 'twowheeler');
                   rebuildState(() {});
                 },
               ),
@@ -749,7 +867,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                 onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'driving';
-                  await provider.calculateAndDrawNativeRoute(context, 'driving');
+                  await provider.calculateAndDrawNativeRoute(
+                      context, 'driving');
                   rebuildState(() {});
                 },
               ),
@@ -768,15 +887,16 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
               ),
             ],
           ),
-          
-          const SizedBox(height: 24), 
+
+          const SizedBox(height: 24),
 
           // 🚨 INJECTED DETAILS CARD (Bulletproof Version)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF2C2C2E), // Solid dark grey to GUARANTEE visibility (no transparency bugs)
+              color: const Color(
+                  0xFF2C2C2E), // Solid dark grey to GUARANTEE visibility (no transparency bugs)
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.white24, width: 1),
             ),
@@ -785,149 +905,179 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
               mainAxisSize: MainAxisSize.min,
               children: [
                 // 1. ORIGIN & DESTINATION ROWS
-                Builder(
-                  builder: (context) {
-                    final locService = Provider.of<GlobalLocationService>(context);
-                    final String originAddress = locService.currentAddressName ?? "Locating...";
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 🟢 CURRENT LOCATION (ORIGIN)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(Icons.my_location, color: Colors.blueAccent, size: 20),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text("Current Location", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                  Text(
-                                    originAddress, 
-                                    style: const TextStyle(color: Colors.white, fontSize: 14),
-                                    maxLines: 2, overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            GestureDetector(
-                              onTap: () {
-                                if (originAddress.isNotEmpty && originAddress != "Locating...") {
-                                  Clipboard.setData(ClipboardData(text: originAddress));
-                                  AppHaptics.selectionClick();
-                                  ToastService.showSuccess(context, "Location Copied!"); 
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(8)),
-                                child: const Icon(Icons.copy_rounded, color: Colors.white, size: 18),
-                              ),
-                            ),
-                          ],
-                        ),
-                        
-                        const Padding(
-                          padding: EdgeInsets.only(left: 9.0, top: 4, bottom: 4),
-                          child: SizedBox(height: 12, child: VerticalDivider(color: Colors.grey, thickness: 1)),
-                        ),
-
-                        // 🔴 DESTINATION
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(Icons.location_on, color: Colors.redAccent, size: 20),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text("Destination", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                  Text(
-                                    placeSubtitle.isNotEmpty ? placeSubtitle : placeTitle,
-                                    style: const TextStyle(color: Colors.white, fontSize: 14),
-                                    maxLines: 2, overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            GestureDetector(
-                              onTap: () {
-                                Clipboard.setData(ClipboardData(text: "$placeTitle, $placeSubtitle"));
-                                AppHaptics.selectionClick();
-                                ToastService.showSuccess(context, "Address Copied!"); 
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(8)),
-                                child: const Icon(Icons.copy_rounded, color: Colors.white, size: 18),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    );
-                  }
-                ),
-                
-                // 2. Combined ETA & Distance Badge
-                if (provider.currentRouteResult != null) ...[
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12), 
-                    child: Divider(color: Colors.white24, height: 1)
-                  ),
-                  Builder(
-                    builder: (context) {
-                      int totalMinutes = provider.currentRouteResult!.durationMins;
-                      int hours = totalMinutes ~/ 60;
-                      int minutes = totalMinutes % 60;
-                      String formattedDuration = hours > 0 ? "$hours hr $minutes min" : "$minutes min";
-                      
-                      DateTime arrivalTime = DateTime.now().add(Duration(minutes: totalMinutes));
-                      String formattedArrival = TimeOfDay.fromDateTime(arrivalTime).format(context);
-
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0A284A),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
+                Builder(builder: (context) {
+                  final locService =
+                      Provider.of<GlobalLocationService>(context);
+                  final String originAddress =
+                      locService.currentAddressName ?? "Locating...";
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 🟢 CURRENT LOCATION (ORIGIN)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.my_location,
+                              color: Colors.blueAccent, size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.access_time, color: Color(0xFF0A84FF), size: 16),
-                                const SizedBox(width: 8),
+                                const Text("Current Location",
+                                    style: TextStyle(
+                                        color: Colors.grey, fontSize: 12)),
                                 Text(
-                                  "$formattedDuration • ${provider.currentRouteResult!.distanceKm.toStringAsFixed(1)} km",
+                                  originAddress,
                                   style: const TextStyle(
-                                    color: Color(0xFF0A84FF),
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                      color: Colors.white, fontSize: 14),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              "Arrives at $formattedArrival",
-                              style: TextStyle(
-                                color: const Color(0xFF0A84FF).withValues(alpha: 0.7),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                              ),
+                          ),
+                          const SizedBox(width: 10),
+                          GestureDetector(
+                            onTap: () {
+                              if (originAddress.isNotEmpty &&
+                                  originAddress != "Locating...") {
+                                Clipboard.setData(
+                                    ClipboardData(text: originAddress));
+                                AppHaptics.selectionClick();
+                                ToastService.showSuccess(
+                                    context, "Location Copied!");
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                  color: Colors.white12,
+                                  borderRadius: BorderRadius.circular(8)),
+                              child: const Icon(Icons.copy_rounded,
+                                  color: Colors.white, size: 18),
                             ),
-                          ],
-                        ),
-                      );
-                    }
-                  ),
+                          ),
+                        ],
+                      ),
+
+                      const Padding(
+                        padding: EdgeInsets.only(left: 9.0, top: 4, bottom: 4),
+                        child: SizedBox(
+                            height: 12,
+                            child: VerticalDivider(
+                                color: Colors.grey, thickness: 1)),
+                      ),
+
+                      // 🔴 DESTINATION
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.location_on,
+                              color: Colors.redAccent, size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text("Destination",
+                                    style: TextStyle(
+                                        color: Colors.grey, fontSize: 12)),
+                                Text(
+                                  placeSubtitle.isNotEmpty
+                                      ? placeSubtitle
+                                      : placeTitle,
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 14),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          GestureDetector(
+                            onTap: () {
+                              Clipboard.setData(ClipboardData(
+                                  text: "$placeTitle, $placeSubtitle"));
+                              AppHaptics.selectionClick();
+                              ToastService.showSuccess(
+                                  context, "Address Copied!");
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                  color: Colors.white12,
+                                  borderRadius: BorderRadius.circular(8)),
+                              child: const Icon(Icons.copy_rounded,
+                                  color: Colors.white, size: 18),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                }),
+
+                // 2. Combined ETA & Distance Badge
+                if (provider.currentRouteResult != null) ...[
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Divider(color: Colors.white24, height: 1)),
+                  Builder(builder: (context) {
+                    int totalMinutes =
+                        provider.currentRouteResult!.durationMins;
+                    int hours = totalMinutes ~/ 60;
+                    int minutes = totalMinutes % 60;
+                    String formattedDuration =
+                        hours > 0 ? "$hours hr $minutes min" : "$minutes min";
+
+                    DateTime arrivalTime =
+                        DateTime.now().add(Duration(minutes: totalMinutes));
+                    String formattedArrival =
+                        TimeOfDay.fromDateTime(arrivalTime).format(context);
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0A284A),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.access_time,
+                                  color: Color(0xFF0A84FF), size: 16),
+                              const SizedBox(width: 8),
+                              Text(
+                                "$formattedDuration • ${provider.currentRouteResult!.distanceKm.toStringAsFixed(1)} km",
+                                style: const TextStyle(
+                                  color: Color(0xFF0A84FF),
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "Arrives at $formattedArrival",
+                            style: TextStyle(
+                              color: const Color(0xFF0A84FF)
+                                  .withValues(alpha: 0.7),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
                   const SizedBox(height: 20),
                 ],
               ],
@@ -1008,12 +1158,15 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
   Widget _buildSearchResultsView(bool isDark, {bool isExpanded = false}) {
     final query = _searchCtrl.text.trim().toLowerCase();
     final provider = Provider.of<MapProvider>(context, listen: false);
-    final localMatches = provider.recentSearches.where((place) => place.name.toLowerCase().contains(query)).toList();
+    final localMatches = provider.recentSearches
+        .where((place) => place.name.toLowerCase().contains(query))
+        .toList();
 
     // Combine local matches with API results, avoiding duplicates by name
     final combinedResults = [
       ...localMatches,
-      ..._searchResults.where((apiPlace) => !localMatches.any((local) => local.name == apiPlace.name))
+      ..._searchResults.where((apiPlace) =>
+          !localMatches.any((local) => local.name == apiPlace.name))
     ];
 
     if (_isSearching && combinedResults.isEmpty) {
@@ -1105,71 +1258,70 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
         padding: EdgeInsets.zero,
         shrinkWrap: !isExpanded,
         physics: const ClampingScrollPhysics(),
-          children: combinedResults.asMap().entries.map((entry) {
-            final index = entry.key;
-            final place = entry.value;
-            final isLast = index == combinedResults.length - 1;
-            
-            
+        children: combinedResults.asMap().entries.map((entry) {
+          final index = entry.key;
+          final place = entry.value;
+          final isLast = index == combinedResults.length - 1;
 
-            return Column(
-              children: [
-                Listener(
-                  behavior: HitTestBehavior.opaque,
-                  // Trigger INSTANTLY on touch, before any keyboard unfocus events can destroy the widget
-                  onPointerDown: (event) async {
-                    debugPrint("💥 RAW POINTER DOWN REGISTERED ON: ${place.name}");
-                    AppHaptics.selectionClick();
-                    await _selectPlaceFromList(place);
-                  },
-                  child: ListTile(
-                    contentPadding:
-                        const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.white12 : Colors.black12,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.location_solid,
-                        color: Colors.grey,
-                        size: 18,
-                      ),
+          return Column(
+            children: [
+              Listener(
+                behavior: HitTestBehavior.opaque,
+                // Trigger INSTANTLY on touch, before any keyboard unfocus events can destroy the widget
+                onPointerDown: (event) async {
+                  debugPrint(
+                      "💥 RAW POINTER DOWN REGISTERED ON: ${place.name}");
+                  AppHaptics.selectionClick();
+                  await _selectPlaceFromList(place);
+                },
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white12 : Colors.black12,
+                      shape: BoxShape.circle,
                     ),
-                    title: Text(
-                      place.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isDark ? Colors.white : Colors.black,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
+                    child: const Icon(
+                      CupertinoIcons.location_solid,
+                      color: Colors.grey,
+                      size: 18,
                     ),
-                    subtitle: Text(
-                      place.address,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isDark ? Colors.white60 : Colors.black54,
-                        fontSize: 13,
-                      ),
+                  ),
+                  title: Text(
+                    place.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isDark ? Colors.white : Colors.black,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                  subtitle: Text(
+                    place.address,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isDark ? Colors.white60 : Colors.black54,
+                      fontSize: 13,
                     ),
                   ),
                 ),
-                if (!isLast)
-                  Divider(
-                    height: 1,
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black12,
-                    indent: 60,
-                  ),
-              ],
-            );
-          }).toList(),
-        ),
+              ),
+              if (!isLast)
+                Divider(
+                  height: 1,
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black12,
+                  indent: 60,
+                ),
+            ],
+          );
+        }).toList(),
+      ),
     );
 
     Widget content = Padding(
@@ -1180,11 +1332,13 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     return isExpanded ? Expanded(child: content) : content;
   }
 
-  Widget _buildSheetContent(bool isDark, double progress, {bool isExpanded = false}) {
+  Widget _buildSheetContent(bool isDark, double progress,
+      {bool isExpanded = false}) {
     if (_searchCtrl.text.isNotEmpty && _selectedPlace == null) {
       return _buildSearchResultsView(isDark, isExpanded: isExpanded);
     }
-    return _buildUnifiedExploreView(isDark, progress, isExpandedList: isExpanded);
+    return _buildUnifiedExploreView(isDark, progress,
+        isExpandedList: isExpanded);
   }
 
   Widget _buildNearbyTile(

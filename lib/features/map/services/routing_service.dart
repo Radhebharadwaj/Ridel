@@ -191,8 +191,9 @@ class RoutingService {
     // ── Window Advance Logic ──
     // If the user is near the end of the best segment AND the best segment
     // is near the end of the current window, slide forward.
-    result.shouldAdvanceWindow =
-        bestT > windowAdvanceThreshold && bestIdx >= wEnd - 2 && wEnd <= maxSegmentIndex;
+    result.shouldAdvanceWindow = bestT > windowAdvanceThreshold &&
+        bestIdx >= wEnd - 2 &&
+        wEnd <= maxSegmentIndex;
 
     return result;
   }
@@ -202,8 +203,7 @@ class RoutingService {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /// Haversine great-circle distance between two points (meters).
-  static double haversine(
-      double lat1, double lng1, double lat2, double lng2) {
+  static double haversine(double lat1, double lng1, double lat2, double lng2) {
     final double dLat = (lat2 - lat1) * _deg2rad;
     final double dLng = (lng2 - lng1) * _deg2rad;
 
@@ -217,14 +217,14 @@ class RoutingService {
   }
 
   /// Initial bearing from point 1 to point 2 (degrees, 0–360).
-  static double bearing(
-      double lat1, double lng1, double lat2, double lng2) {
+  static double bearing(double lat1, double lng1, double lat2, double lng2) {
     final double phi1 = lat1 * _deg2rad;
     final double phi2 = lat2 * _deg2rad;
     final double deltaLambda = (lng2 - lng1) * _deg2rad;
 
     final double y = sin(deltaLambda) * cos(phi2);
-    final double x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(deltaLambda);
+    final double x =
+        cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(deltaLambda);
 
     return (atan2(y, x) * _rad2deg + 360.0) % 360.0;
   }
@@ -307,8 +307,7 @@ class RoutingService {
   ///
   /// [stepBoundaries] is a sorted list where `stepBoundaries[i]` is the
   /// polyline index where step `i` begins. Built once at navigation start.
-  static int segmentToStepIndex(
-      int segmentIndex, List<int> stepBoundaries) {
+  static int segmentToStepIndex(int segmentIndex, List<int> stepBoundaries) {
     // Binary search for the step that contains this segment index
     int lo = 0;
     int hi = stepBoundaries.length - 1;

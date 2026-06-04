@@ -3,7 +3,6 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:provider/provider.dart';
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/core/services/global_location_service.dart';
@@ -266,8 +265,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
 
     // 🚀 NEW: Handled Error & Loading States smoothly
     if (_isLoading || _hasError || _weather == null) {
-      return PointerInterceptor(
-        child: RidelBounceButton(
+      return RidelBounceButton(
           onTap: _hasError ? _handleTap : null, // Tap to retry
           scaleFactor: 0.95,
           child: Container(
@@ -322,8 +320,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
             ),
             ),
           ),
-        ),
-      );
+        );
     }
 
     final isNight = DateTime.now().hour > 18 || DateTime.now().hour < 6;
@@ -332,8 +329,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     double targetHeight = _dragHeight ?? _getCurrentTargetHeight();
     double currentRadius = _currentState == WeatherState.compact ? 24 : 35;
 
-    return PointerInterceptor(
-      child: TapRegion(
+    return TapRegion(
         onTapOutside: (_) {
           if (_currentState != WeatherState.compact) {
             if (mounted) {
@@ -437,8 +433,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildCompactView(bool isNight, bool isLightMode) {
