@@ -863,26 +863,26 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     try {
       if (label == "UV Index") {
         double uv = double.tryParse(value) ?? 0;
-        if (uv <= 2) severityColor = Colors.blue;
-        else if (uv <= 5) severityColor = Colors.yellow;
-        else if (uv <= 7) severityColor = Colors.orange;
-        else severityColor = Colors.red;
+        if (uv <= 2) { severityColor = Colors.blue; }
+        else if (uv <= 5) { severityColor = Colors.yellow; }
+        else if (uv <= 7) { severityColor = Colors.orange; }
+        else { severityColor = Colors.red; }
       } else if (label == "Wind") {
         double wind = double.tryParse(value.replaceAll(' km/h', '')) ?? 0;
-        if (wind < 15) severityColor = Colors.blue;
-        else if (wind <= 30) severityColor = Colors.yellow;
-        else if (wind <= 50) severityColor = Colors.orange;
-        else severityColor = Colors.red;
+        if (wind < 15) { severityColor = Colors.blue; }
+        else if (wind <= 30) { severityColor = Colors.yellow; }
+        else if (wind <= 50) { severityColor = Colors.orange; }
+        else { severityColor = Colors.red; }
       } else if (label == "Humidity") {
         double hum = double.tryParse(value.replaceAll('%', '')) ?? 0;
-        if (hum >= 30 && hum <= 50) severityColor = Colors.blue;
-        else if (hum > 50 && hum <= 70) severityColor = Colors.yellow;
-        else severityColor = Colors.orange;
+        if (hum >= 30 && hum <= 50) { severityColor = Colors.blue; }
+        else if (hum > 50 && hum <= 70) { severityColor = Colors.yellow; }
+        else { severityColor = Colors.orange; }
       } else if (label == "Feels Like") {
         double feels = double.tryParse(value.replaceAll('°', '')) ?? 0;
-        if (feels > 45 || feels < 5) severityColor = Colors.red;
-        else if (feels > 35 || feels < 10) severityColor = Colors.orange;
-        else severityColor = Colors.blue;
+        if (feels > 45 || feels < 5) { severityColor = Colors.red; }
+        else if (feels > 35 || feels < 10) { severityColor = Colors.orange; }
+        else { severityColor = Colors.blue; }
       }
     } catch (e) {
       severityColor = Colors.blue;
