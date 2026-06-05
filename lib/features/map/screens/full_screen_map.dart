@@ -210,33 +210,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         // 1. Pehle provider se location nikalne ki koshish karo
                         LatLng? userLoc = mapProvider.currentLocation;
 
-                        // 2. Agar null hai, toh Web-Safe tareeqe se GPS fetch karo
-                        if (userLoc == null) {
-                          Position? pos;
-                          try {
-                            pos = await Geolocator.getCurrentPosition(
-                              locationSettings: const LocationSettings(
-                                accuracy: LocationAccuracy.low,
-                                timeLimit: Duration(seconds: 2),
-                              ),
-                            );
-                          } catch (_) {
-                            // Error aaye toh ignore karo
-                          }
-
-                          if (pos != null) {
-                            userLoc = LatLng(pos.latitude, pos.longitude);
-                            mapProvider.updateCurrentLocation(userLoc);
-                          }
-                        }
-
                         // 3. Agar location mil gayi, toh Bounds Check karo!
                         if (userLoc != null) {
                           bool isVisible = bounds.contains(userLoc);
                           mapProvider.setUserVisibility(isVisible);
                         }
-                      } catch (e) {
-                        debugPrint("Bounds check error: $e");
+                      } catch (_) {
+                        // Suppressed error
                       }
                     }
                   },

@@ -9,6 +9,7 @@ import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/services/weather_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/features/map/services/weather_cache_service.dart';
+import 'package:ridel/features/profile/services/profile_repository.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
 
 enum WeatherState { compact, expanded, full }
@@ -56,14 +57,12 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
   }
 
   final WeatherCacheService _weatherCache = WeatherCacheService();
-  String _currentCityName = "Locating...";
-  String _currentStateName = "";
-
+  
   double? _dragHeight;
   final double _compactHeight = 68;
   final double _compactWidth = 82;
   final double _expandedHeight = 265;
-  final double _fullHeight = 440;
+  final double _fullHeight = 550;
 
   @override
   void didChangeDependencies() {
@@ -89,8 +88,14 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
         lat = locService.currentPosition!.latitude;
         lng = locService.currentPosition!.longitude;
       } else {
-        lat = 28.6139; // Fallback Delhi
-        lng = 77.2090;
+        // Location completely unavailable; UI stays in "Locating..." loading state
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+            _isLoading = false;
+          });
+        }
+        return;
       }
     }
 
@@ -117,15 +122,6 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     try {
       final locService = Provider.of<GlobalLocationService>(context, listen: false);
       String fullName = locService.currentCity;
-      String stateName = locService.currentState;
-
-      if (mounted) {
-        setState(() {
-          _currentCityName = fullName;
-          _currentStateName = stateName;
-        });
-      }
-
       final data = await _weatherCache.getSmartWeather(lat, lng, fullName);
 
       if (mounted) {
@@ -252,6 +248,10 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     final mapProvider = context.watch<MapProvider>();
     if (mapProvider.currentZoomLevel < 11.0) return const SizedBox.shrink();
 
+    final locService = context.watch<GlobalLocationService>();
+    String displayCity = locService.currentCity.isEmpty ? "Locating..." : locService.currentCity;
+    String displayState = locService.currentState;
+
     final isLightMode = Theme.of(context).brightness == Brightness.light;
     final glassColor = isLightMode 
         ? Colors.white.withValues(alpha: 0.65)
@@ -306,11 +306,14 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                               children: [
                                 Icon(Icons.refresh_rounded,
                                     color: isLightMode ? Colors.black54 : Colors.white54, size: 24),
-                                Text("Retry",
-                                    style: GoogleFonts.inter(
-                                        color: isLightMode ? Colors.black54 : Colors.white54,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600)),
+                                Text(
+                                  displayCity == "Locating..." ? "Location\nRequired" : "Fetch Failed",
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.inter(
+                                      color: isLightMode ? Colors.black54 : Colors.white54,
+                                      fontSize: 10,
+                                      height: 1.1,
+                                      fontWeight: FontWeight.w600)),
                               ],
                             )
                           : CupertinoActivityIndicator(
@@ -406,7 +409,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                                   child: SizedBox(
                                       width: maxWidth,
                                       height: _fullHeight,
-                                      child: _buildExpandedAndFullView(isNight, isLightMode)),
+                                      child: _buildExpandedAndFullView(isNight, isLightMode, displayCity, displayState)),
                                 ),
                               ),
                             AnimatedOpacity(
@@ -482,7 +485,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     );
   }
 
-  Widget _buildExpandedAndFullView(bool isNight, bool isLightMode) {
+  Widget _buildExpandedAndFullView(bool isNight, bool isLightMode, String displayCity, String displayState) {
     int high = _weather!.tempMax.toInt();
     int low = _weather!.tempMin.toInt();
     String aqiStatus = _getAqiDescription(_weather!.aqi);
@@ -493,17 +496,12 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
         ? Colors.black.withValues(alpha: 0.08) 
         : Colors.white.withValues(alpha: 0.15);
 
-    return ScrollConfiguration(
-      behavior: _NoScrollbarBehavior(),
-      child: SingleChildScrollView(
-        physics: const NeverScrollableScrollPhysics(),
-        child: Padding(
-          padding:
-              const EdgeInsets.only(top: 24, left: 20, right: 20, bottom: 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+    return Padding(
+      padding: const EdgeInsets.only(top: 24, left: 20, right: 20, bottom: 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -523,20 +521,26 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Text(_currentCityName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.inter(
-                                          color: primaryText,
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: 0.5,
-                                          height: 1.1)),
-                                  if (_currentStateName.isNotEmpty)
+                                  ValueListenableBuilder<String>(
+                                    valueListenable: ProfileRepository.userCity,
+                                    builder: (context, cityValue, child) {
+                                      String displayCityValue = cityValue.isNotEmpty ? cityValue[0].toUpperCase() + cityValue.substring(1) : cityValue;
+                                      return Text(displayCityValue,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.inter(
+                                              color: primaryText,
+                                              fontSize: 24,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 0.5,
+                                              height: 1.1));
+                                    },
+                                  ),
+                                  if (displayState.isNotEmpty)
                                     Padding(
                                         padding: const EdgeInsets.only(
                                             top: 2, bottom: 4),
-                                        child: Text(_currentStateName,
+                                        child: Text(displayState,
                                             maxLines: 1,
                                             style: GoogleFonts.inter(
                                                 color: secondaryText,
@@ -639,6 +643,16 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                 ],
               ),
               const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildDetailItem(Icons.water_drop_outlined, "Humidity", "${_weather!.humidity}%", secondaryText, primaryText),
+                  _buildDetailItem(Icons.air_outlined, "Wind", "${_weather!.windSpeed.toStringAsFixed(1)} km/h", secondaryText, primaryText),
+                  _buildDetailItem(Icons.thermostat_outlined, "Feels Like", "${_weather!.feelsLike.toInt()}°", secondaryText, primaryText),
+                  _buildDetailItem(Icons.wb_sunny_outlined, "UV Index", _weather!.uvIndex.toStringAsFixed(1), secondaryText, primaryText),
+                ],
+              ),
+              const SizedBox(height: 18),
               Divider(color: dividerColor, height: 1),
               const SizedBox(height: 16),
               ShaderMask(
@@ -676,19 +690,18 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
               const SizedBox(height: 10),
               Divider(color: dividerColor, height: 1),
               const SizedBox(height: 16),
-              ShaderMask(
-                shaderCallback: (Rect bounds) {
-                  return const LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.white, Colors.white, Colors.transparent],
-                      stops: [0.0, 0.65, 1.0]).createShader(bounds);
-                },
-                blendMode: BlendMode.dstIn,
-                child: ScrollConfiguration(
-                  behavior: _NoScrollbarBehavior(),
-                  child: SizedBox(
-                    height: 160,
+              Expanded(
+                child: ShaderMask(
+                  shaderCallback: (Rect bounds) {
+                    return const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.white, Colors.white, Colors.transparent],
+                        stops: [0.0, 0.65, 1.0]).createShader(bounds);
+                  },
+                  blendMode: BlendMode.dstIn,
+                  child: ScrollConfiguration(
+                    behavior: _NoScrollbarBehavior(),
                     child: ListView(
                       padding: EdgeInsets.zero,
                       physics: const BouncingScrollPhysics(),
@@ -699,8 +712,6 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
               ),
             ],
           ),
-        ),
-      ),
     );
   }
 
@@ -841,6 +852,63 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                       fontWeight: FontWeight.w500)),
             ],
           )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailItem(IconData icon, String label, String value, Color secondaryText, Color primaryText) {
+    Color severityColor = Colors.blue; // Default Normal/Good
+
+    try {
+      if (label == "UV Index") {
+        double uv = double.tryParse(value) ?? 0;
+        if (uv <= 2) severityColor = Colors.blue;
+        else if (uv <= 5) severityColor = Colors.yellow;
+        else if (uv <= 7) severityColor = Colors.orange;
+        else severityColor = Colors.red;
+      } else if (label == "Wind") {
+        double wind = double.tryParse(value.replaceAll(' km/h', '')) ?? 0;
+        if (wind < 15) severityColor = Colors.blue;
+        else if (wind <= 30) severityColor = Colors.yellow;
+        else if (wind <= 50) severityColor = Colors.orange;
+        else severityColor = Colors.red;
+      } else if (label == "Humidity") {
+        double hum = double.tryParse(value.replaceAll('%', '')) ?? 0;
+        if (hum >= 30 && hum <= 50) severityColor = Colors.blue;
+        else if (hum > 50 && hum <= 70) severityColor = Colors.yellow;
+        else severityColor = Colors.orange;
+      } else if (label == "Feels Like") {
+        double feels = double.tryParse(value.replaceAll('°', '')) ?? 0;
+        if (feels > 45 || feels < 5) severityColor = Colors.red;
+        else if (feels > 35 || feels < 10) severityColor = Colors.orange;
+        else severityColor = Colors.blue;
+      }
+    } catch (e) {
+      severityColor = Colors.blue;
+    }
+
+    return Container(
+      width: 75,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.transparent,
+            severityColor.withValues(alpha: 0.15),
+          ],
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: secondaryText, size: 20),
+          const SizedBox(height: 4),
+          Text(value, style: GoogleFonts.inter(color: primaryText, fontSize: 13, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 2),
+          Text(label, style: GoogleFonts.inter(color: secondaryText, fontSize: 11, fontWeight: FontWeight.w500)),
         ],
       ),
     );

@@ -32,7 +32,6 @@ class MapProvider extends ChangeNotifier {
   Circle? _currentMarker;
   Circle? _originMarker;
 
-  Symbol? _destinationSymbol;
   AnimationController? _pinAnimController;
 
   // 1. User ka current coordinate track karne ke liye
@@ -55,71 +54,72 @@ class MapProvider extends ChangeNotifier {
   }
 
   // 🚀 NAVIGATION PUCK LOGIC
-  Symbol? _navigationPuckSymbol;
-  bool get showNativeBlueDot => engine.mapUIState.value != MapUIState.navigating;
-  double get customPuckOpacity => (engine.mapUIState.value == MapUIState.navigating) ? 1.0 : 0.0;
+  LatLng _lastPuckLocation = const LatLng(0, 0);
+  double _lastPuckBearing = 0.0;
+
+  bool get showNativeBlueDot => engine.mapUIState.value == MapUIState.idle || engine.mapUIState.value == MapUIState.placeSelected;
+  double get customPuckOpacity => (engine.mapUIState.value == MapUIState.navigating || engine.mapUIState.value == MapUIState.routeDrawn) ? 1.0 : 0.0;
+
+  Future<void> _updatePuckGeoJson(LatLng location, double bearing, double opacity) async {
+    if (controller == null) return;
+    try {
+      final bool isVisible = opacity > 0.0;
+      await controller!.setGeoJsonSource('nav_puck_source', {
+        "type": "FeatureCollection",
+        "features": isVisible ? [{
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [location.longitude, location.latitude]
+          },
+          "properties": {
+            "bearing": bearing
+          }
+        }] : []
+      });
+      _lastPuckLocation = location;
+      _lastPuckBearing = bearing;
+    } catch (_) {}
+  }
 
   Future<void> updatePuckVisibility() async {
-    if (_navigationPuckSymbol != null && controller != null) {
-      try {
-        await controller!.updateSymbol(
-          _navigationPuckSymbol!,
-          SymbolOptions(iconOpacity: customPuckOpacity),
-        );
-      } catch (_) {}
-    }
+    await _updatePuckGeoJson(_lastPuckLocation, _lastPuckBearing, customPuckOpacity);
     engine.camera?.setBlueDotOpacity(showNativeBlueDot ? 1.0 : 0.0);
     notifyListeners();
   }
 
   Future<void> showNavigationPuck(LatLng location, double bearing) async {
-    if (controller == null) return;
-
-    _navigationPuckSymbol ??= await controller!.addSymbol(
-      SymbolOptions(
-        geometry: location,
-        iconImage: 'nav_puck',
-        iconSize: 0.35,
-        iconRotate: bearing,
-        iconOpacity: customPuckOpacity,
-        iconAnchor: 'center',
-        zIndex: 9999, // Ensure high priority
-      ),
-    );
+    await _updatePuckGeoJson(location, bearing, customPuckOpacity);
   }
 
   Future<void> updateNavigationPuck(LatLng location, double bearing) async {
-    // Only update if in navigating state
-    if (engine.mapUIState.value != MapUIState.navigating) {
-      if (_navigationPuckSymbol != null) {
-         await updatePuckVisibility(); // Ensure opacity is forced to 0.0
-      }
+    // Only update if in a state where the puck should be visible
+    if (customPuckOpacity == 0.0) {
+      await updatePuckVisibility(); // Ensure it hides gracefully
       return;
     }
+    
+    // 1. ALWAYS update Puck Position & Rotation if visible (Route Overview & Navigating)
+    await _updatePuckGeoJson(location, bearing, customPuckOpacity);
 
-    if (_navigationPuckSymbol == null) {
-      await showNavigationPuck(location, bearing);
-    } else {
-      try {
-        await controller?.updateSymbol(
-          _navigationPuckSymbol!,
-          SymbolOptions(
-            geometry: location,
-            iconRotate: bearing,
-            iconOpacity: customPuckOpacity,
-          ),
-        );
-      } catch (_) {}
+    // 2. Animate Camera to Follow User & Rotate Map ONLY if actively navigating
+    if (engine.mapUIState.value == MapUIState.navigating && controller != null) {
+      controller!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: location,
+            bearing: bearing, // THIS ROTATES THE MAP WITH THE USER
+            tilt: 50.0,       // Keep the 3D perspective
+            zoom: 17.5,       // Zoomed in for navigation
+          )
+        ),
+        duration: const Duration(seconds: 1), // Smooth 1-second animation between GPS ticks
+      );
     }
   }
 
   Future<void> hideNavigationPuck() async {
-    if (_navigationPuckSymbol != null && controller != null) {
-      try {
-        await controller!.removeSymbol(_navigationPuckSymbol!);
-      } catch (_) {}
-      _navigationPuckSymbol = null;
-    }
+    await _updatePuckGeoJson(_lastPuckLocation, _lastPuckBearing, 0.0);
   }
 
   // 1. ADD NATIVE VECTOR PIN
@@ -133,43 +133,33 @@ class MapProvider extends ChangeNotifier {
     // 🚨 2. STRICT CLEANUP: Remove the old pin
     await clearNativeDestinationPin();
 
-    // 3. Drop the new custom pin symbol
+    // 3. Drop the new custom pin using SymbolLayer
     try {
-      _destinationSymbol = await controller!.addSymbol(
-        SymbolOptions(
-          geometry: location,
+      await controller!.addGeoJsonSource('destination_pin_source', {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [location.longitude, location.latitude]
+            }
+          }
+        ]
+      });
+
+      await controller!.addSymbolLayer(
+        'destination_pin_source',
+        'destination_pin_layer',
+        const SymbolLayerProperties(
           iconImage: 'custom_pin',
+          iconPitchAlignment: 'viewport',
           iconAnchor: 'bottom',
-          iconSize: 0.55,
+          iconSize: 0.65,
+          iconAllowOverlap: true,
+          iconIgnorePlacement: true,
         ),
       );
-
-      // Start bounce animation
-      if (_pinAnimController == null && engine.camera?.vsync != null) {
-        _pinAnimController = AnimationController(
-          vsync: engine.camera!.vsync,
-          duration: const Duration(milliseconds: 600),
-        );
-
-        final CurvedAnimation curve = CurvedAnimation(
-          parent: _pinAnimController!,
-          curve: Curves.easeInOut,
-        );
-
-        _pinAnimController!.addListener(() {
-          if (_destinationSymbol != null && controller != null) {
-            double yOffset = curve.value * -12.0;
-            try {
-              controller!.updateSymbol(
-                _destinationSymbol!,
-                SymbolOptions(iconOffset: Offset(0, yOffset)),
-              );
-            } catch (_) {}
-          }
-        });
-      }
-
-      _pinAnimController?.repeat(reverse: true);
 
       targetDestination = location; // Update the internal coordinate tracker
       debugPrint("🗺️ CUSTOM PIN DROPPED at $location");
@@ -181,10 +171,13 @@ class MapProvider extends ChangeNotifier {
 
   // 2. CLEAR NATIVE PIN
   Future<void> clearNativeDestinationPin() async {
-    _pinAnimController?.stop();
-    if (controller != null && _destinationSymbol != null) {
-      await controller!.removeSymbol(_destinationSymbol!);
-      _destinationSymbol = null;
+    if (controller != null) {
+      try {
+        await controller!.removeLayer('destination_pin_layer');
+      } catch (_) {}
+      try {
+        await controller!.removeSource('destination_pin_source');
+      } catch (_) {}
       notifyListeners();
     }
   }
@@ -216,7 +209,11 @@ class MapProvider extends ChangeNotifier {
     if (origin == null) {
       // 2. FALLBACK: Fetch fresh GPS location to guarantee Ola API gets an origin!
       try {
-        final pos = await Geolocator.getCurrentPosition();
+        final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ),
+        );
         origin = LatLng(pos.latitude, pos.longitude);
       } catch (e) {
         debugPrint("🚨 GPS ERROR: Cannot calculate route without origin. $e");
@@ -290,26 +287,33 @@ class MapProvider extends ChangeNotifier {
     await updatePuckVisibility();
     notifyListeners();
 
-    // 1. Get current user location
+    // 1. Get current user location with robust fallback
     final pos = engine.locService?.currentPosition;
-    if (pos == null) return;
-    final LatLng currentLocation = LatLng(pos.latitude, pos.longitude);
-
-    if (_navigationPuckSymbol == null) {
-      await showNavigationPuck(currentLocation, pos.heading);
+    
+    LatLng? targetLoc;
+    if (pos != null) {
+      targetLoc = LatLng(pos.latitude, pos.longitude);
+    } else if (currentLocation != null) {
+      targetLoc = currentLocation;
+    } else if (_currentRouteResult != null && _currentRouteResult!.coordinates.isNotEmpty) {
+      targetLoc = _currentRouteResult!.coordinates.first;
     }
 
-    // 2. Animate Camera to 3D Perspective (Tilt/Pitch)
-    await controller!.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: currentLocation,
-          zoom: 17.0, // Deep zoom for navigation
-          tilt: 45.0, // 3D Pitch angle
+    if (targetLoc != null) {
+      await showNavigationPuck(targetLoc, pos?.heading ?? 0.0);
+
+      // 2. Animate Camera to 3D Perspective (Tilt/Pitch)
+      await controller!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: targetLoc,
+            zoom: 17.0, // Deep zoom for navigation
+            tilt: 45.0, // 3D Pitch angle
+          ),
         ),
-      ),
-      duration: const Duration(milliseconds: 1200),
-    );
+        duration: const Duration(milliseconds: 1200),
+      );
+    }
 
     // 3. THE MAGIC: Lock camera to compass and change puck to Directional Triangle
     try {
@@ -317,8 +321,8 @@ class MapProvider extends ChangeNotifier {
       await controller!.updateMyLocationTrackingMode(
         MyLocationTrackingMode.trackingCompass,
       );
-    } catch (e) {
-      debugPrint("⚠️ Native Tracking Mode Error: $e");
+    } catch (_) {
+      // Suppress error
     }
   }
 
@@ -346,28 +350,18 @@ class MapProvider extends ChangeNotifier {
       return;
     }
 
-    final String visibilityValue = isFocusMode ? 'none' : 'visible';
+    // 🚨 Safe MapLibre Web Filter: Set a filter that matches nothing to hide the layer
+    // This avoids using setLayerProperties which destroys iconImages on the WebGL bridge.
+    final dynamic filter = isFocusMode ? ['==', 'id', 'nothing'] : null;
 
     for (String layerId in activeFocusLayerIds) {
-      // 🚨 Safely apply visibility to all possible layer types since we don't know the exact type natively
       try {
-        await controller!.setLayerProperties(
-            layerId, SymbolLayerProperties(visibility: visibilityValue));
-      } catch (_) {}
-
-      try {
-        await controller!.setLayerProperties(
-            layerId, LineLayerProperties(visibility: visibilityValue));
-      } catch (_) {}
-
-      try {
-        await controller!.setLayerProperties(
-            layerId, FillLayerProperties(visibility: visibilityValue));
+        await controller!.setFilter(layerId, filter);
       } catch (_) {}
     }
 
     debugPrint(
-        "🔍 Focus Mode set to $isFocusMode for ${activeFocusLayerIds.length} background layers.");
+        "🔍 Focus Mode set to $isFocusMode using non-destructive filters for ${activeFocusLayerIds.length} layers.");
   }
 
   // 🚨 DYNAMIC FUEL STATIONS TOGGLE
@@ -569,6 +563,7 @@ class MapProvider extends ChangeNotifier {
               lineJoin: "round",
               lineDasharray: [0.01, 2.5],
             ),
+            belowLayerId: 'nav_puck_layer',
           );
         } else {
           await controller!.addGeoJsonSource('route-source-$i', geoJson);
@@ -582,6 +577,7 @@ class MapProvider extends ChangeNotifier {
               lineJoin: "round",
               lineOpacity: 0.6,
             ),
+            belowLayerId: 'nav_puck_layer',
           );
         }
       } catch (e) {
@@ -656,6 +652,7 @@ class MapProvider extends ChangeNotifier {
               lineJoin: "round",
               lineDasharray: [0.01, 2.0], // Safe values for circular dots
             ),
+            belowLayerId: 'nav_puck_layer',
           );
         } else {
           await controller!.addGeoJsonSource('route-source-0', geoJson);
@@ -670,6 +667,7 @@ class MapProvider extends ChangeNotifier {
               lineCap: "round",
               lineJoin: "round",
             ),
+            belowLayerId: 'nav_puck_layer',
           );
 
           // 2. MIDDLE: Core (Solid Neon Blue or Traffic Colors)
@@ -690,6 +688,7 @@ class MapProvider extends ChangeNotifier {
               lineCap: "round",
               lineJoin: "round",
             ),
+            belowLayerId: 'nav_puck_layer',
           );
 
           // 3. TOP: Shine (Ultra-thin 1px Sky Blue reflection perfectly blending)
@@ -705,10 +704,71 @@ class MapProvider extends ChangeNotifier {
               lineBlur:
                   1.0, // Adds a tiny glow effect to blend the edges seamlessly into the core
             ),
+            belowLayerId: 'nav_puck_layer',
           );
         }
       } catch (e) {
         debugPrint("🗺️ PRIMARY ROUTE DRAW ERROR: $e");
+      }
+    }
+
+    // 4. FIX Z-INDEX RENDER SEQUENCE
+    // Ensure destination pin and nav puck render strictly on top
+    if (targetDestination != null) {
+      await clearNativeDestinationPin();
+      
+      // Enforce rendering sequence for WebGL
+      await Future.delayed(const Duration(milliseconds: 150));
+      
+      try {
+        // Step 2: Add/Update Destination Pin Layer
+        await controller!.addGeoJsonSource('destination_pin_source', {
+          "type": "FeatureCollection",
+          "features": [
+            {
+              "type": "Feature",
+              "geometry": {
+                "type": "Point",
+                "coordinates": [targetDestination!.longitude, targetDestination!.latitude]
+              }
+            }
+          ]
+        });
+
+        await controller!.addSymbolLayer(
+          'destination_pin_source',
+          'destination_pin_layer',
+          const SymbolLayerProperties(
+            iconImage: 'custom_pin',
+            iconPitchAlignment: 'viewport',
+            iconAnchor: 'bottom',
+            iconSize: 0.65,
+            iconAllowOverlap: true,
+            iconIgnorePlacement: true,
+          ),
+        );
+
+        // Step 3: Bring Nav Puck to Front
+        try {
+          await controller!.removeLayer('nav_puck_layer');
+        } catch (_) {}
+
+        await controller!.addSymbolLayer(
+          'nav_puck_source',
+          'nav_puck_layer',
+          const SymbolLayerProperties(
+            iconImage: 'nav_puck',
+            iconPitchAlignment: 'map',
+            iconRotationAlignment: 'map',
+            iconAllowOverlap: true,
+            iconIgnorePlacement: true,
+            iconSize: 0.4,
+            iconOpacity: 1.0,
+            iconRotate: ['get', 'bearing'],
+          ),
+        );
+      } catch (e) {
+        debugPrint("🗺️ Failed to enforce render sequence: $e");
       }
     }
 
@@ -1348,9 +1408,9 @@ class MapProvider extends ChangeNotifier {
     engine.mapUIState.addListener(() {
       final state = engine.mapUIState.value;
       _toggleFuelStationsVisibility(state == MapUIState.navigating);
-      if (state == MapUIState.navigating && currentLocation != null) {
+      if ((state == MapUIState.navigating || state == MapUIState.routeDrawn) && currentLocation != null) {
         // Show initial puck before the first native location update fires
-        updateNavigationPuck(currentLocation!, 0.0);
+        updateNavigationPuck(currentLocation!, engine.locService?.currentPosition?.heading ?? 0.0);
       }
       notifyListeners();
     });

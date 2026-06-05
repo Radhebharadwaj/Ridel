@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http; // 🚀 NEW: For IP Fallback
 import 'package:geocoding/geocoding.dart';
+import 'package:ridel/features/profile/services/profile_repository.dart';
 
 class GlobalLocationService extends ChangeNotifier {
   // --- STATE VARIABLES ---
@@ -49,7 +50,7 @@ class GlobalLocationService extends ChangeNotifier {
   // ==========================================
   // 1. APP STARTUP (PRODUCTION HARDENED GPS)
   // ==========================================
-  Future<void> initializeEcoLocation() async {
+  Future<void> initializeEcoLocation({bool isManualTrigger = false}) async {
     _isLocationServiceEnabled = await Geolocator.isLocationServiceEnabled();
 
     // 🚀 FIX: Agar GPS band hai, toh IP mat use karo. User ko GPS on karne bolo.
@@ -57,11 +58,14 @@ class GlobalLocationService extends ChangeNotifier {
       if (kIsWeb) {
         await _fetchLocationFromIP(); // Web par chalega
       } else {
-        // Mobile par hardware GPS force karo
-        await Geolocator.openLocationSettings();
+        if (isManualTrigger) {
+          await Geolocator.openLocationSettings();
+        }
         _isUsingIpFallback = false;
+        _currentCity = "City";
+        ProfileRepository.userCity.value = "City";
         notifyListeners();
-        return; // Abhi return kar do, user on karke wapas aayega
+        return;
       }
     }
 
@@ -72,7 +76,19 @@ class GlobalLocationService extends ChangeNotifier {
 
     // 🚀 FIX: Agar user ne permanently deny kar diya, toh app settings kholo
     if (_permission == LocationPermission.deniedForever) {
-      if (!kIsWeb) await Geolocator.openAppSettings();
+      if (isManualTrigger && !kIsWeb) {
+        await Geolocator.openAppSettings();
+      }
+      _currentCity = "City";
+      ProfileRepository.userCity.value = "City";
+      notifyListeners();
+      return;
+    }
+
+    if (_permission == LocationPermission.denied) {
+      _currentCity = "City";
+      ProfileRepository.userCity.value = "City";
+      notifyListeners();
       return;
     }
 
@@ -105,6 +121,7 @@ class GlobalLocationService extends ChangeNotifier {
                  : place.administrativeArea?.isNotEmpty == true ? place.administrativeArea! 
                  : "Delhi";
         _currentState = place.administrativeArea ?? "";
+        ProfileRepository.userCity.value = _currentCity; // 🚀 Update Header globally
       }
     } catch (e) {
       debugPrint("Global Reverse Geocoding Failed: $e");

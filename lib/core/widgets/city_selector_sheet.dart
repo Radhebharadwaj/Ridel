@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
@@ -110,11 +111,25 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
     final previousCityState = ProfileRepository.userCity.value; 
     ProfileRepository.userCity.value = 'Locating...';
 
+    // 🚀 Actively check permissions first
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (!mounted) return;
+
+    if (permission == LocationPermission.deniedForever) {
+      ProfileRepository.userCity.value = previousCityState;
+      if (mounted) {
+        ToastService.showError(context, 'Location access needed to auto-detect your region. Please enable it in Settings.');
+      }
+      // 🚀 GlobalLocationService will handle opening settings now
+    }
+
     final locationService = Provider.of<GlobalLocationService>(context, listen: false);
     
-    if (!locationService.hasValidLocation) {
-      await locationService.initializeEcoLocation();
-    }
+    // Always trigger location fetch so it can handle settings popup and IP fallback
+    await locationService.initializeEcoLocation(isManualTrigger: true);
 
     final position = locationService.currentPosition;
 

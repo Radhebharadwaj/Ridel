@@ -142,6 +142,31 @@ class MapEngine {
         final Uint8List puckBytes = puckBytesData.buffer.asUint8List();
         await controller.addImage('nav_puck', puckBytes);
 
+        // 🚀 Init GeoJsonSource and SymbolLayer for 3D Puck
+        try {
+          await controller.addGeoJsonSource('nav_puck_source', {
+            "type": "FeatureCollection",
+            "features": []
+          });
+          
+          await controller.addSymbolLayer(
+            'nav_puck_source',
+            'nav_puck_layer',
+            const SymbolLayerProperties(
+              iconImage: 'nav_puck',
+              iconPitchAlignment: 'map',
+              iconRotationAlignment: 'map',
+              iconAllowOverlap: true,
+              iconIgnorePlacement: true,
+              iconSize: 0.4,
+              iconOpacity: 1.0,
+              iconRotate: ['get', 'bearing'],
+            ),
+          );
+        } catch (e) {
+          debugPrint("⚠️ Failed to init nav_puck layer: $e");
+        }
+
         final ByteData pinBytesData =
             await rootBundle.load('assets/images/custom_pin.png');
         final Uint8List pinBytes = pinBytesData.buffer.asUint8List();

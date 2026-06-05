@@ -132,7 +132,11 @@ class _StationSelectorSheetState extends State<StationSelectorSheet> {
 
       if (permission == LocationPermission.whileInUse ||
           permission == LocationPermission.always) {
-        final position = await Geolocator.getCurrentPosition();
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ),
+        );
         final allStops = await DatabaseHelper().getStationsByMode(1);
 
         final nearby = allStops.where((s) {

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:isolate';
-import 'package:http/http.dart' as http;
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ridel/core/services/weather_service.dart';
@@ -26,12 +25,6 @@ class WeatherCacheService {
   static final WeatherCacheService _instance = WeatherCacheService._internal();
   factory WeatherCacheService() => _instance;
   WeatherCacheService._internal();
-
-  static const String _baseUrl = 'https://pixra.pages.dev/api';
-  static const String _secretKey = 'RIDEL_SUPER_SECRET_CRON_KEY_2026';
-
-  static final http.Client _apiClient = http.Client();
-  static const Duration _timeout = Duration(seconds: 4);
 
   // ── L1 In‑Memory Cache ──
   final Map<String, _WeatherCacheEntry> _ramCache = {};
@@ -101,140 +94,107 @@ class WeatherCacheService {
     }
   }
 
+  double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+    const double p = 0.017453292519943295; // Math.PI / 180
+    final double a = 0.5 - math.cos((lat2 - lat1) * p) / 2 + 
+        math.cos(lat1 * p) * math.cos(lat2 * p) * 
+        (1 - math.cos((lon2 - lon1) * p)) / 2;
+    return 12742 * math.asin(math.sqrt(a)); // distance in km
+  }
+
   /// ── Core Fetching Logic ──
   Future<WeatherModel?> _fetchAndCache(
       String gridId, String cityName, double lat, double lng) async {
     try {
-      final response = await _apiClient.get(
-        Uri.parse('$_baseUrl/weather/get-weather?grid_id=$gridId'),
-        headers: {
-          'Authorization': 'Bearer $_secretKey',
-          'Content-Type': 'application/json',
-        },
-      ).timeout(_timeout);
+      // 1. DATABASE GEO-QUERY (Cache Check) & TTL Validation
+      final threeHoursAgo = DateTime.now().toUtc().subtract(const Duration(hours: 3)).toIso8601String();
+      
+      // Calculate a bounding box for ~4km radius to aggressively filter the DB query
+      const double radiusKm = 4.0;
+      const double latDelta = radiusKm / 111.0;
+      final double lngDelta = radiusKm / (111.0 * math.cos(lat * math.pi / 180.0));
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> jsonResponse = json.decode(response.body);
-        if (jsonResponse['success'] == true && jsonResponse['data'] != null) {
-          final dbData = jsonResponse['data'] as Map<String, dynamic>;
+      final double minLat = lat - latDelta;
+      final double maxLat = lat + latDelta;
+      final double minLng = lng - lngDelta;
+      final double maxLng = lng + lngDelta;
 
-          DateTime lastUpdated = DateTime.now();
-          if (dbData['last_updated'] != null) {
-            String timeStr = dbData['last_updated'].toString();
-            if (!timeStr.endsWith('Z') && !timeStr.contains('+')) {
-              timeStr += 'Z';
-            }
-            try {
-              lastUpdated = DateTime.parse(timeStr).toLocal();
-            } catch (_) {
-              lastUpdated = DateTime.now().subtract(const Duration(hours: 2));
-            }
-          }
+      final recentRecords = await Supabase.instance.client
+          .from('weather_cache')
+          .select()
+          .gte('updated_at', threeHoursAgo)
+          .gte('lat', minLat)
+          .lte('lat', maxLat)
+          .gte('lng', minLng)
+          .lte('lng', maxLng);
 
-          if (DateTime.now().difference(lastUpdated).inMinutes < 60) {
-            // 🚀 ISOLATE PARSING
-            final hourlyJsonString =
-                dbData['hourly_forecast']?.toString() ?? '';
-            final highLowString = dbData['high_low']?.toString() ?? '';
-            final dailyJsonString = dbData['daily_forecast']?.toString() ?? '';
+      Map<String, dynamic>? closestRecord;
+      double minDistance = 3.0; // 3km radius
 
-            final parsedData = await Isolate.run(() =>
-                _parseHourlyAndHighLowSync(hourlyJsonString, highLowString, dailyJsonString));
-
-            final weather = WeatherModel(
-              temp: (dbData['current_temp'] as num?)?.toDouble() ?? 0.0,
-              weatherCode:
-                  int.tryParse(dbData['condition']?.toString() ?? '0') ?? 0,
-              aqi: int.tryParse(dbData['aqi']?.toString() ?? '50') ?? 50,
-              tempMax: parsedData.tMax,
-              tempMin: parsedData.tMin,
-              hourly: parsedData.hourly,
-              daily: parsedData.daily,
-              humidity: 0,
-              windSpeed: 0.0,
-              feelsLike: 0.0,
-            );
-
-            if (parsedData.daily.isNotEmpty) {
-              _saveToRAMAndDisk(gridId, weather);
-              return weather;
-            } else {
-              debugPrint("❌ CLOUDFLARE HAS NO DAILY DATA. Forcing Live API...");
-            }
-          }
+      for (var record in recentRecords) {
+        double rLat = record['lat'] is num ? (record['lat'] as num).toDouble() : double.tryParse(record['lat'].toString()) ?? 0.0;
+        double rLng = record['lng'] is num ? (record['lng'] as num).toDouble() : double.tryParse(record['lng'].toString()) ?? 0.0;
+        
+        double dist = _calculateDistance(lat, lng, rLat, rLng);
+        if (dist <= 3.0 && dist < minDistance) {
+          minDistance = dist;
+          closestRecord = record;
         }
       }
 
-      // Cloudflare missed or expired -> Live API
-      debugPrint(
-          "❌ CACHE MISS / EXPIRED. Fetching Fresh Weather from Live API...");
-      final freshWeather = await WeatherService.getWeather(lat, lng);
+      if (closestRecord != null) {
+        debugPrint("⚡ WEATHER DB CACHE HIT (Distance: ${minDistance.toStringAsFixed(2)}km)");
+        final weatherDataStr = closestRecord['weather_data'];
+        final Map<String, dynamic> weatherData = weatherDataStr is String ? json.decode(weatherDataStr) : weatherDataStr;
+        
+        final hourlyRaw = weatherData['hourly'] as List<dynamic>? ?? [];
+        final dailyRaw = weatherData['daily'] as List<dynamic>? ?? [];
+        
+        final cachedWeather = WeatherModel(
+          temp: (weatherData['temp'] as num?)?.toDouble() ?? 0.0,
+          weatherCode: (weatherData['weatherCode'] as num?)?.toInt() ?? 0,
+          aqi: (weatherData['aqi'] as num?)?.toInt() ?? 50,
+          tempMax: (weatherData['tempMax'] as num?)?.toDouble() ?? 0.0,
+          tempMin: (weatherData['tempMin'] as num?)?.toDouble() ?? 0.0,
+          hourly: hourlyRaw.map((h) => HourlyWeather(h['time']?.toString() ?? '', (h['temp'] as num?)?.toDouble() ?? 0.0, (h['code'] as num?)?.toInt() ?? 0)).toList(),
+          daily: dailyRaw.map((d) => DailyWeather(d['time']?.toString() ?? '', (d['maxTemp'] as num?)?.toDouble() ?? 0.0, (d['minTemp'] as num?)?.toDouble() ?? 0.0, (d['code'] as num?)?.toInt() ?? 0)).toList(),
+          humidity: (weatherData['humidity'] as num?)?.toInt() ?? 0,
+          windSpeed: (weatherData['wind_speed'] as num?)?.toDouble() ?? 0.0,
+          feelsLike: (weatherData['feels_like'] as num?)?.toDouble() ?? 0.0,
+          uvIndex: (weatherData['uv_index'] as num?)?.toDouble() ?? 0.0,
+        );
 
-      if (freshWeather != null) {
-        _saveToRAMAndDisk(gridId, freshWeather);
-        _pushToCloudflareD1(
-            gridId, cityName, freshWeather); // Async Background Save
-        return freshWeather;
+        if (cachedWeather.windSpeed == 0.0 && cachedWeather.feelsLike == 0.0 && cachedWeather.uvIndex == 0.0) {
+          debugPrint("⚠️ DB CACHE HAS ZERO-DATA. Bypassing and fetching fresh data.");
+        } else {
+          _saveToRAMAndDisk(gridId, cachedWeather);
+          return cachedWeather;
+        }
       }
     } catch (e) {
-      debugPrint("⚠️ Cloudflare Error (Handled): $e");
-      // Fallback Live API on Exception
-      final fallbackWeather = await WeatherService.getWeather(lat, lng);
-      if (fallbackWeather != null) _saveToRAMAndDisk(gridId, fallbackWeather);
-      return fallbackWeather;
+      debugPrint("⚠️ Supabase DB Error (Handled): $e");
     }
-    return null;
+
+    // 2. CLIENT-SIDE API FETCH
+    debugPrint("❌ DB CACHE MISS / EXPIRED. Fetching Fresh Weather from Live API...");
+    final freshWeather = await WeatherService.getWeather(lat, lng);
+
+    if (freshWeather != null) {
+      _saveToRAMAndDisk(gridId, freshWeather);
+      
+      // 3. DATABASE SYNC (Cache Update) Background execution
+      _pushToDatabase(lat, lng, freshWeather);
+      
+      return freshWeather;
+    }
+
+    // Fallback Live API on Exception
+    final fallbackWeather = await WeatherService.getWeather(lat, lng);
+    if (fallbackWeather != null) _saveToRAMAndDisk(gridId, fallbackWeather);
+    return fallbackWeather;
   }
 
-  // ── Isolate helper ──
-  static _ParsedWeather _parseHourlyAndHighLowSync(
-      String hourlyJson, String highLowStr, String dailyJson) {
-    List<HourlyWeather> hourlyList = [];
-    if (hourlyJson.isNotEmpty) {
-      try {
-        final List<dynamic> raw = json.decode(hourlyJson);
-        hourlyList = raw
-            .map((item) => HourlyWeather(
-                  item['time']?.toString() ?? '',
-                  (item['temp'] as num?)?.toDouble() ?? 0.0,
-                  (item['code'] as num?)?.toInt() ?? 0,
-                ))
-            .toList();
-      } catch (_) {}
-    }
 
-    List<DailyWeather> dailyList = [];
-    if (dailyJson.isNotEmpty) {
-      try {
-        final List<dynamic> rawDaily = json.decode(dailyJson);
-        dailyList = rawDaily.map((item) {
-          try {
-            return DailyWeather(
-              item['time']?.toString() ?? '',
-              (item['maxTemp'] as num?)?.toDouble() ?? 0.0,
-              (item['minTemp'] as num?)?.toDouble() ?? 0.0,
-              (item['code'] as num?)?.toInt() ?? 0,
-            );
-          } catch (err) {
-            debugPrint("Error parsing individual forecast day: $err");
-            return null;
-          }
-        }).whereType<DailyWeather>().toList();
-      } catch (e) {
-        debugPrint("Error parsing daily JSON: $e");
-      }
-    }
-
-    double tMax = 0.0, tMin = 0.0;
-    if (highLowStr.isNotEmpty) {
-      final parts = highLowStr.split(',');
-      if (parts.length == 2) {
-        tMax = double.tryParse(parts[0]) ?? 0.0;
-        tMin = double.tryParse(parts[1]) ?? 0.0;
-      }
-    }
-    return _ParsedWeather(hourly: hourlyList, daily: dailyList, tMax: tMax, tMin: tMin);
-  }
 
   // ── Unified Storage Logic ──
   void _saveToRAMAndDisk(String gridId, WeatherModel weather) {
@@ -254,6 +214,10 @@ class WeatherCacheService {
         'aqi': weather.aqi,
         'tempMax': weather.tempMax,
         'tempMin': weather.tempMin,
+        'humidity': weather.humidity,
+        'wind_speed': weather.windSpeed,
+        'feels_like': weather.feelsLike,
+        'uv_index': weather.uvIndex,
         'hourly': weather.hourly
             .map((h) => {'time': h.time, 'temp': h.temp, 'code': h.code})
             .toList(),
@@ -287,9 +251,10 @@ class WeatherCacheService {
           daily: dailyRaw
               .map((d) => DailyWeather(d['time'], d['maxTemp'], d['minTemp'], d['code']))
               .toList(),
-          humidity: 0,
-          windSpeed: 0.0,
-          feelsLike: 0.0,
+          humidity: data['humidity'] ?? 0,
+          windSpeed: data['wind_speed'] ?? 0.0,
+          feelsLike: data['feels_like'] ?? 0.0,
+          uvIndex: data['uv_index'] ?? 0.0,
         );
       }
     } catch (_) {}
@@ -308,42 +273,37 @@ class WeatherCacheService {
     }
   }
 
-  // ── Background save to Cloudflare ──
-  Future<void> _pushToCloudflareD1(
-      String gridId, String cityName, WeatherModel weather) async {
-    final user = Supabase.instance.client.auth.currentUser;
-    final token = Supabase.instance.client.auth.currentSession?.accessToken;
-    if (user?.id == null || token == null) return;
-
+  // ── Background save to Database ──
+  Future<void> _pushToDatabase(double lat, double lng, WeatherModel weather) async {
     try {
-      final hourlyJson = json.encode(weather.hourly
-          .map((h) => {'time': h.time, 'temp': h.temp, 'code': h.code})
-          .toList());
-      final dailyJson = json.encode(weather.daily
-          .map((d) => {'time': d.time, 'maxTemp': d.maxTemp, 'minTemp': d.minTemp, 'code': d.code})
-          .toList());
-      final body = {
-        'grid_id': gridId,
-        'city_name': cityName,
-        'current_temp': weather.temp,
-        'condition': weather.weatherCode.toString(),
-        'aqi': weather.aqi.toString(),
-        'high_low': '${weather.tempMax},${weather.tempMin}',
-        'hourly_forecast': hourlyJson,
-        'daily_forecast': dailyJson,
+      final weatherJson = {
+        'temp': weather.temp,
+        'weatherCode': weather.weatherCode,
+        'aqi': weather.aqi,
+        'tempMax': weather.tempMax,
+        'tempMin': weather.tempMin,
+        'humidity': weather.humidity,
+        'wind_speed': weather.windSpeed,
+        'feels_like': weather.feelsLike,
+        'uv_index': weather.uvIndex,
+        'hourly': weather.hourly.map((h) => {'time': h.time, 'temp': h.temp, 'code': h.code}).toList(),
+        'daily': weather.daily.map((d) => {'time': d.time, 'maxTemp': d.maxTemp, 'minTemp': d.minTemp, 'code': d.code}).toList(),
       };
 
-      await _apiClient
-          .post(
-            Uri.parse('$_baseUrl/cron/update-weather'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token'
-            },
-            body: json.encode(body),
-          )
-          .timeout(const Duration(seconds: 3));
-    } catch (_) {}
+      await Supabase.instance.client.from('weather_cache').insert({
+        'lat': lat,
+        'lng': lng,
+        'weather_data': weatherJson,
+        'humidity': weather.humidity,
+        'wind_speed': weather.windSpeed,
+        'feels_like': weather.feelsLike,
+        'uv_index': weather.uvIndex,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      });
+      debugPrint("✅ Saved new weather to Supabase weather_cache.");
+    } catch (e) {
+      debugPrint("⚠️ Failed to sync weather to Supabase: $e");
+    }
   }
 
   void dispose() {
@@ -352,11 +312,4 @@ class WeatherCacheService {
   }
 }
 
-class _ParsedWeather {
-  final List<HourlyWeather> hourly;
-  final List<DailyWeather> daily;
-  final double tMax;
-  final double tMin;
-  _ParsedWeather(
-      {required this.hourly, required this.daily, required this.tMax, required this.tMin});
-}
+

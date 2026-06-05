@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:collection';
+import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -294,6 +295,7 @@ class RouteEngineService {
         }).timeout(const Duration(seconds: 5));
 
         if (response.statusCode == 200 || response.statusCode == 201) {
+          developer.log(response.body, name: 'OLA_ROUTING_JSON');
           final Map<String, dynamic>? primitiveData =
               _processHeavyRouteSync(response.body);
 

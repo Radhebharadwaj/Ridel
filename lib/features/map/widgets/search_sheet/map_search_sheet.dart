@@ -830,7 +830,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         debugPrint(
             "🛑 DEBUG ROUTE COORDS: Count = ${route.coordinates.length}");
       } else {
-        debugPrint("🛑 DEBUG ROUTE ERROR: $_routeErrorMessage");
+        if (_routeErrorMessage != null) {
+          debugPrint("🛑 DEBUG ROUTE ERROR: $_routeErrorMessage");
+        }
       }
 
       if (route != null) {

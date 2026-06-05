@@ -33,6 +33,7 @@ class WeatherModel {
   final int humidity;
   final double windSpeed;
   final double feelsLike;
+  final double uvIndex;
 
   WeatherModel({
     required this.temp,
@@ -46,6 +47,7 @@ class WeatherModel {
     required this.humidity,
     required this.windSpeed,
     required this.feelsLike,
+    required this.uvIndex,
   });
 }
 
@@ -54,7 +56,7 @@ class WeatherService {
     try {
       // 🚀 3. BUG FIX: forecast_days=7 tak badhaya aur daily weather_code add kiya
       final weatherUrl = Uri.parse(
-          "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,weather_code,is_day,relative_humidity_2m,wind_speed_10m,apparent_temperature&daily=weather_code,temperature_2m_max,temperature_2m_min&hourly=temperature_2m,weather_code&timezone=auto&forecast_days=7");
+          "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,weather_code,is_day,relative_humidity_2m,wind_speed_10m,apparent_temperature,uv_index&daily=weather_code,temperature_2m_max,temperature_2m_min&hourly=temperature_2m,weather_code&timezone=auto&forecast_days=7");
 
       final aqiUrl = Uri.parse(
           "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=$lat&longitude=$lon&current=us_aqi");
@@ -137,6 +139,8 @@ class WeatherService {
           feelsLike:
               (wData['current']?['apparent_temperature'] as num?)?.toDouble() ??
                   0.0,
+          uvIndex:
+              (wData['current']?['uv_index'] as num?)?.toDouble() ?? 0.0,
         );
       }
     } catch (e) {

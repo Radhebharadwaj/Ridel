@@ -2,6 +2,15 @@
 <html lang="en">
 
 <head>
+  <script>
+    const originalWarn = console.warn;
+    console.warn = function(...args) {
+      if (typeof args[0] === 'string' && args[0].includes('Could not set property') && args[0].includes('layer')) {
+        return; // Silence MapLibre style parsing spam
+      }
+      originalWarn.apply(console, args);
+    };
+  </script>
   <base href="/">
 
   <meta charset="UTF-8">
