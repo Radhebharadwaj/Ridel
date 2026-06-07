@@ -56,3 +56,12 @@ JSON
   "title": "Scheduled Maintenance 🛠️",
   "body": "Ridel servers will be upgrading tonight at 2:00 AM for 15 minutes."
 }
+
+🚀 Step 5: Fire It!
+Click the SEND button.
+
+If successful, you will get a 200 OK response with the Firebase Message ID.
+
+The message will instantly hit the lock screens of all users subscribed to the all_users topic.
+
+⚠️ WARNING: This is a live production endpoint. Any message sent from here goes to EVERY single user who has the app installed. Double-check your spelling before hitting Send!

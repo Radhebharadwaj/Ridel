@@ -28,62 +28,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     );
   }
 
-  Widget _buildCircularQuickAction({
-    required IconData icon,
-    required String label,
-    required bool isDark,
-    required Color iconColor,
-    required VoidCallback onTap,
-  }) {
-    return RidelBounceButton(
-      onTap: () {
-        AppHaptics.lightImpact();
-        onTap();
-      },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withValues(alpha: 0.20),
-                  Colors.white.withValues(alpha: 0.10),
-                  Colors.white.withValues(alpha: 0.06),
-                ],
-              ),
-              border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.18), width: 1),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  blurRadius: 20,
-                  spreadRadius: -2,
-                  offset: const Offset(0, 14),
-                ),
-              ],
-            ),
-            child: Icon(icon, size: 24, color: iconColor),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: isDark ? Colors.white70 : Colors.black87,
-              letterSpacing: 0.3,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildUnifiedExploreView(bool isDark, double progress,
       {bool isExpandedList = false}) {
@@ -773,42 +718,17 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
   }
 
   Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
-    return SingleChildScrollView(
+    return SavedPlacesRow(
       key: const ValueKey('default_actions_row'),
-      scrollDirection: Axis.horizontal,
-      physics:
-          const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildCircularQuickAction(
-            icon: CupertinoIcons.house_fill,
-            label: 'Home',
-            isDark: isDark,
-            iconColor: Colors.blueAccent,
-            onTap: () => _handleSmartQuickAction('HOME'),
-          ),
-          const SizedBox(width: 24),
-          _buildCircularQuickAction(
-            icon: CupertinoIcons.briefcase_fill,
-            label: 'Work',
-            isDark: isDark,
-            iconColor: Colors.blueAccent,
-            onTap: () => _handleSmartQuickAction('WORK'),
-          ),
-          const SizedBox(width: 24),
-          _buildCircularQuickAction(
-            icon: CupertinoIcons.add,
-            label: 'Add Place',
-            isDark: isDark,
-            iconColor: Colors.blueAccent,
-            onTap: () {
-              AppHaptics.mediumImpact();
-              // Logic for adding custom place
-            },
-          ),
-        ],
-      ),
+      isDark: isDark,
+      pickerController: _locationPickerController,
+      repository: _placesRepository,
+      onPlaceTapped: () {
+        _searchFocus.unfocus();
+        if (_sheetController.isAttached) {
+          _safeAnimateSheet(_safeMinSize);
+        }
+      },
     );
   }
 

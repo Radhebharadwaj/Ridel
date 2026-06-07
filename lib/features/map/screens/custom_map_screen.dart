@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'dart:async';
+import 'dart:convert';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/services/saved_places_service.dart';
 
@@ -126,20 +127,35 @@ class _CustomMapScreenState extends State<CustomMapScreen>
   bool _isFetchingStyle = false;
 
   void _updateStyleFuture() async {
+    if (!mounted) return;
     setState(() => _isFetchingStyle = true);
-    final styleStr = await MapStyleHelper.getOlaStyle(
+    
+    String styleStr = await MapStyleHelper.getOlaStyle(
       _engine.isDarkTheme,
       themeType: _currentTheme,
     );
-    if (mounted) {
-      setState(() {
-        _currentMapStyle = styleStr;
-        _isFetchingStyle = false;
-      });
 
-      // 🚀 FIX: Keep MapProvider's route theme in sync
-      Provider.of<MapProvider>(context, listen: false).setTheme(_currentTheme);
+    // 🚀 PATCH: Inject missing glyphs required by MapLibre for text-field rendering
+    try {
+      final decoded = jsonDecode(styleStr) as Map<String, dynamic>;
+      if (!decoded.containsKey('glyphs') || decoded['glyphs'] == null || decoded['glyphs'].toString().isEmpty) {
+        decoded['glyphs'] = "https://api.olamaps.io/tiles/fonts/{fontstack}/{range}.pbf";
+        styleStr = jsonEncode(decoded);
+      }
+    } catch (e) {
+      debugPrint("Map style parsing error: $e");
     }
+
+    if (!mounted) return;
+
+    // We must use setState so MapLibreMap's didUpdateWidget handles the styleString update safely
+    setState(() {
+      _currentMapStyle = styleStr;
+      _isFetchingStyle = false;
+    });
+
+    // 🚀 FIX: Keep MapProvider's route theme in sync
+    Provider.of<MapProvider>(context, listen: false).setTheme(_currentTheme);
   }
 
   void _onMapSearchTriggered() {

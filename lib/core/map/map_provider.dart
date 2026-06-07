@@ -2290,6 +2290,7 @@ class MapProvider extends ChangeNotifier {
 
     engine.navigation.stopNavigation();
     isActiveNavigation = false;
+    _currentRouteResult = null;
     engine.camera?.setCameraForMode(CameraMode.explore);
     engine.layers?.resetAllLayers(); // Clear navigation styling if needed
     notifyListeners();

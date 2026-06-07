@@ -208,24 +208,36 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
         throw Exception("Empty placemarks array");
       }
     } catch (e) {
-      debugPrint("Global Reverse Geocoding Failed: $e. Attempting OSM Fallback...");
+      debugPrint("Global Reverse Geocoding Failed: $e. Attempting Proxy Fallback...");
       try {
-        final url = Uri.parse('https://nominatim.openstreetmap.org/reverse?format=json&lat=$lat&lon=$lng');
+        final url = Uri.parse('https://ridel.ridel.workers.dev/api/maps/places/v1/reverse-geocode?latlng=$lat,$lng');
         final response = await http.get(url, headers: {'User-Agent': 'RidelApp'});
         
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
-          final address = data['address'] as Map<String, dynamic>?;
-          if (address != null) {
-            String realCity = address['city'] ?? address['town'] ?? address['village'] ?? address['state'] ?? "Unknown Location";
+          if (data['results'] != null && data['results'].isNotEmpty) {
+            final result = data['results'][0];
+            String realCity = "Unknown Location";
+            
+            if (result['address_components'] != null) {
+              final components = result['address_components'] as List;
+              for (var comp in components) {
+                final types = comp['types'] as List;
+                if (types.contains('locality') || types.contains('city') || types.contains('administrative_area_level_2')) {
+                  realCity = comp['short_name'] ?? comp['long_name'] ?? realCity;
+                  break;
+                }
+              }
+            }
+            
             _currentCity = realCity;
             currentCityName.value = _currentCity;
             ProfileRepository.userCity.value = _currentCity;
           } else {
-            throw Exception("No address object in OSM response");
+            throw Exception("No results in proxy response");
           }
         } else {
-          throw Exception("OSM returned status ${response.statusCode}");
+          throw Exception("Proxy returned status ${response.statusCode}");
         }
       } catch (fallbackError) {
         debugPrint("OSM Geocoding Fallback Failed: $fallbackError");

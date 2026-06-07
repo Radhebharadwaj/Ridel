@@ -36,6 +36,10 @@ import 'package:ridel/core/utils/route_utils.dart';
 import 'package:ridel/core/services/notification_service.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 
+// 🏠 SAVED PLACES LOCATION PICKER
+import 'saved_places/location_picker_sheet.dart';
+import 'saved_places/places_repository.dart' as saved;
+
 // YE DONO FILES ISI KA HISSA HAIN (Do not change structure)
 part 'search_sheet_headers.dart';
 part 'search_sheet_views.dart';
@@ -117,6 +121,11 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   // Navigation Dashboard expansion state
   bool _isNavSheetExpanded = false;
+  bool _wasKeyboardOpen = false;
+
+  // 🏠 Saved Places Location Picker
+  late final saved.PlacesRepository _placesRepository;
+  late final LocationPickerController _locationPickerController;
 
   late AnimationController _slideController;
   late Animation<Offset> _slideAnimation;
@@ -167,65 +176,16 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     }
   }
 
-  Future<void> _handleSmartQuickAction(String type) async {
-    AppHaptics.mediumImpact();
-    try {
-      final supabase = Supabase.instance.client;
-      final user = supabase.auth.currentUser;
-
-      Map<String, dynamic>? data;
-      if (user != null) {
-        data = await supabase
-            .from('user_profiles')
-            .select('home_place, work_place')
-            .eq('id', user.id)
-            .maybeSingle();
-      }
-
-      if (!mounted) return; // 🛡️ CRITICAL ASYNC SAFETY
-
-      final column = type == 'HOME' ? 'home_place' : 'work_place';
-      final savedPlace = data?[column];
-
-      if (savedPlace != null && savedPlace['latitude'] != null) {
-        _searchFocus.unfocus();
-        if (_sheetController.isAttached) {
-          // 🍏 APPLE CURVE (easeOutCubic for natural snap)
-          _safeAnimateSheet(_safeMinSize);
-        }
-
-        final lat = (savedPlace['latitude'] as num).toDouble();
-        final lng = (savedPlace['longitude'] as num).toDouble();
-
-        final mapProvider = Provider.of<MapProvider>(context, listen: false);
-        await mapProvider.flyToPlace(lat, lng);
-        if (!mounted) return;
-        mapProvider.setDestinationSelected(true);
-        await mapProvider.calculateAndDrawNativeRoute(
-            context, mapProvider.currentNavMode);
-        AppHaptics.success();
-      } else {
-        setState(() => _selectedActionType = type);
-
-        final mapProvider = Provider.of<MapProvider>(context, listen: false);
-        mapProvider.setMapSelectionMode(type);
-
-        // Collapse sheet to show the full map
-        if (_sheetController.isAttached) {
-          _safeAnimateSheet(_safeMinSize);
-        }
-
-        _showPremiumNotification('Tap anywhere on the map to set $type');
-      }
-    } catch (e) {
-      debugPrint("Smart Quick Action Error: $e");
-    }
-  }
 
   @override
   void initState() {
     super.initState();
     _isSearchMode = widget.isMapTabActive;
+
+    // 🏠 Init Saved Places Location Picker
+    _placesRepository = saved.PlacesRepository();
+    _locationPickerController = LocationPickerController(_placesRepository);
+    _locationPickerController.sheetState.addListener(_onLocationPickerStateChanged);
 
     _pokeDash();
 
@@ -288,6 +248,33 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       if (mounted) setState(() => _isDashVisible = false);
     });
   }
+
+  void _onLocationPickerStateChanged() {
+    if (!mounted) return;
+    final state = _locationPickerController.sheetState.value;
+    final provider = Provider.of<MapProvider>(context, listen: false);
+    
+    if (state == SheetState.selectingLocation) {
+      provider.controller?.addListener(_onCameraMove);
+      // Trigger an initial reverse geocode
+      _onCameraMove();
+      // Shrink sheet to show more map
+      if (_sheetController.isAttached) {
+        _safeAnimateSheet(_safeMinSize);
+      }
+    } else {
+      provider.controller?.removeListener(_onCameraMove);
+    }
+  }
+
+  void _onCameraMove() {
+    final provider = Provider.of<MapProvider>(context, listen: false);
+    final pos = provider.controller?.cameraPosition;
+    if (pos != null) {
+      _locationPickerController.onCameraMove(pos.target);
+    }
+  }
+
 
   void _onSearchChanged() {
     _pokeDash();
@@ -383,6 +370,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   void _handleCancelRoute(BuildContext context, MapProvider provider) {
+    FocusScope.of(context).unfocus();
     // 1. Cache the ENTIRE necessary state BEFORE clearing it
     final cachedPlace = _selectedPlace;
     final cachedCoords = provider.targetDestination;
@@ -1107,6 +1095,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     _searchFocus.dispose();
     _sheetProgress.dispose();
     _slideController.dispose();
+    _locationPickerController.sheetState.removeListener(_onLocationPickerStateChanged);
+    _locationPickerController.dispose();
     super.dispose();
   }
 
@@ -1148,6 +1138,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     final screenSize = MediaQuery.sizeOf(context);
     final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final bool isKeyboardOpen = keyboardHeight > 0;
+    
+    if (isKeyboardOpen && !_wasKeyboardOpen) {
+      _wasKeyboardOpen = true;
+      AppHaptics.lightImpact();
+    } else if (!isKeyboardOpen && _wasKeyboardOpen) {
+      _wasKeyboardOpen = false;
+    }
+    
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isDesktop = screenSize.width > 600;
 
@@ -1190,7 +1188,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     snaps = snaps.toSet().toList();
 
     // 🚨 Dynamic Height Calculation
-    final double expandedHeight = screenSize.height * 0.92;
+    final double expandedHeight = screenSize.height - MediaQuery.paddingOf(context).top;
     final double defaultIdleHeight = screenSize.height;
 
     return Stack(
@@ -1209,9 +1207,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
             alignment: Alignment.bottomCenter,
             child: AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
+                curve: Curves.easeOutQuart,
                 height: provider.isActiveNavigation ? null : (isKeyboardOpen ? expandedHeight : defaultIdleHeight),
-                padding: EdgeInsets.only(bottom: keyboardHeight),
+                padding: EdgeInsets.zero,
                 child: SlideTransition(
                   position: _slideAnimation,
                   child: provider.isActiveNavigation
@@ -1409,10 +1407,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                   child: CustomScrollView(
                                                     controller:
                                                         scrollController,
-                                                    // 🚀 FIX: Prevent overscroll bouncing, disable scrolling when keyboard is open
-                                                    physics: isKeyboardOpen
-                                                        ? const NeverScrollableScrollPhysics()
-                                                        : const ClampingScrollPhysics(
+                                                    // 🚀 FIX: Prevent overscroll bouncing
+                                                    physics: const ClampingScrollPhysics(
                                                             parent:
                                                                 AlwaysScrollableScrollPhysics()),
                                                     keyboardDismissBehavior:
@@ -1488,6 +1484,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                               : const SizedBox(),
                                                         ),
                                                       ),
+                                                      SliverPadding(
+                                                        padding: EdgeInsets.only(bottom: keyboardHeight),
+                                                      ),
                                                       SliverFillRemaining(
                                                         hasScrollBody: false,
                                                         child: Container(
@@ -1519,9 +1518,30 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                       },
                     );
                   },
-                ),
+               ),
               ),
             ))),
+        // 🗺️ FLOATING MAP PIN OVERLAY (visible only when picking a location)
+        ValueListenableBuilder<SheetState>(
+          valueListenable: _locationPickerController.sheetState,
+          builder: (context, state, child) {
+            if (state != SheetState.selectingLocation) {
+              return const SizedBox.shrink();
+            }
+            return Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: screenSize.height * 0.45, // Pin sits above the sheet
+              child: IgnorePointer(
+                child: Center(
+                  child: child!,
+                ),
+              ),
+            );
+          },
+          child: const AnimatedMapPin(),
+        ),
       ],
     );
   }
