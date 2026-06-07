@@ -1,10 +1,23 @@
 // lib/core/services/notification_service.dart
 
 
+import 'dart:async';
 import 'package:path/path.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  
+  final title = message.notification?.title ?? message.data['title'] ?? 'New Alert';
+  final body = message.notification?.body ?? message.data['body'] ?? 'You have a new message';
+  
+  await NotificationService.saveRemotePushToInbox(title, body, message.data);
+}
 
 enum NotificationType { system, important, promo, history }
 
@@ -66,6 +79,16 @@ class NotificationService {
   Database? _db;
   final ValueNotifier<List<RidelNotification>> notificationsNotifier =
       ValueNotifier<List<RidelNotification>>([]);
+
+  final StreamController<Map<String, dynamic>> _notificationTapController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  Stream<Map<String, dynamic>> get onNotificationTapped =>
+      _notificationTapController.stream;
+
+  void triggerNotificationTap(Map<String, dynamic> data) {
+    _notificationTapController.add(data);
+  }
 
   Future<void> init() async {
     try {
@@ -160,9 +183,6 @@ class NotificationService {
   }
 
   Future<void> markAllAsRead() async {
-    if (_db == null) return;
-    await _db!.update('notifications', {'isRead': 1},
-        where: 'isRead = ?', whereArgs: [0]);
     final currentList =
         List<RidelNotification>.from(notificationsNotifier.value);
     bool hasChanges = false;
@@ -173,6 +193,10 @@ class NotificationService {
       }
     }
     if (hasChanges) notificationsNotifier.value = currentList;
+
+    if (_db == null) return;
+    await _db!.update('notifications', {'isRead': 1},
+        where: 'isRead = ?', whereArgs: [0]);
   }
 
   Future<void> clearAllNotifications() async {
@@ -185,27 +209,29 @@ class NotificationService {
   }
 
   Future<void> deleteNotification(String id) async {
-    if (_db != null) {
-      await _db!.delete('notifications', where: 'id = ?', whereArgs: [id]);
-    }
     final currentList =
         List<RidelNotification>.from(notificationsNotifier.value);
     currentList.removeWhere((n) => n.id == id);
     notificationsNotifier.value = currentList;
+
+    if (_db != null) {
+      await _db!.delete('notifications', where: 'id = ?', whereArgs: [id]);
+    }
   }
 
   Future<void> toggleSaveNotification(String id, bool currentState) async {
     final newState = !currentState;
-    if (_db != null) {
-      await _db!.update('notifications', {'isSaved': newState ? 1 : 0},
-          where: 'id = ?', whereArgs: [id]);
-    }
     final currentList =
         List<RidelNotification>.from(notificationsNotifier.value);
     final index = currentList.indexWhere((n) => n.id == id);
     if (index != -1) {
       currentList[index].isSaved = newState;
       notificationsNotifier.value = currentList;
+    }
+
+    if (_db != null) {
+      await _db!.update('notifications', {'isSaved': newState ? 1 : 0},
+          where: 'id = ?', whereArgs: [id]);
     }
   }
 

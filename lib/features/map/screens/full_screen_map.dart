@@ -12,11 +12,13 @@ import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/core/map/map_style_helper.dart';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
+import 'package:ridel/core/utils/ridel_bounce_button.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/features/map/widgets/search_sheet/map_search_sheet.dart';
 import 'package:ridel/features/map/widgets/map_theme_selector.dart';
 import 'package:ridel/features/map/widgets/weather_floating_widget.dart';
 import 'package:ridel/features/map/screens/custom_map_screen.dart';
+import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
 
 class FullScreenMapPage extends StatefulWidget {
   final ValueNotifier<double> searchSheetProgressNotifier;
@@ -153,75 +155,125 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           Positioned.fill(
             child: Consumer<MapProvider>(
               builder: (context, mapProvider, child) {
-                return MapLibreMap(
-                  styleString: _resolvedStyleJson!,
-                  onMapCreated: (controller) {
-                    _tempController = controller;
-                  },
-                  onStyleLoadedCallback: () {
-                    if (_tempController != null) {
-                      mapProvider.engine.onMapCreated(
-                          _tempController!,
-                          isDark,
-                          Provider.of<GlobalLocationService>(context,
-                              listen: false),
-                          this);
-                    }
-                  },
-                  onMapClick: (point, latLng) async {
-                    FocusScope.of(context).unfocus();
-                    bool handled =
-                        await mapProvider.handleRouteClick(point, latLng);
-                    if (!handled) {
-                      mapProvider.clearTargetLocation();
-                    }
-                  },
-                  onMapLongClick: (point, latLng) {
-                    mapProvider.handleMapTap(point, latLng);
-                  },
-                  initialCameraPosition: const CameraPosition(
-                      target: LatLng(28.6139, 77.2090), zoom: 12.0),
-                  compassEnabled: false,
-                  myLocationEnabled: mapProvider.showNativeBlueDot,
-                  myLocationTrackingMode: kIsWeb
-                      ? MyLocationTrackingMode.tracking
-                      : MyLocationTrackingMode.trackingCompass,
-                  logoViewMargins: kIsWeb ? null : const Point(-100, -100),
-                  attributionButtonMargins:
-                      kIsWeb ? null : const Point(-100, -100),
-                  onCameraTrackingDismissed: () =>
-                      mapProvider.engine.onUserPannedMap(),
-                  onUserLocationUpdated: (location) {
-                    final pos = location.position;
-                    mapProvider.updateCurrentLocation(pos);
-                    mapProvider.updateNavigationPuck(
-                      pos,
-                      location.heading?.trueHeading ?? location.bearing ?? 0.0,
-                    );
-                  },
-
-                  // 🚀 NAYA BULLETPROOF CODE YAHAN SE PASTE KAR:
-                  onCameraIdle: () async {
-                    final ctrl = mapProvider.controller ?? _tempController;
-                    if (ctrl != null) {
-                      try {
-                        final bounds = await ctrl.getVisibleRegion();
-
-                        // 1. Pehle provider se location nikalne ki koshish karo
-                        LatLng? userLoc = mapProvider.currentLocation;
-
-                        // 3. Agar location mil gayi, toh Bounds Check karo!
-                        if (userLoc != null) {
-                          bool isVisible = bounds.contains(userLoc);
-                          mapProvider.setUserVisibility(isVisible);
-                        }
-                      } catch (_) {
-                        // Suppressed error
+                return Listener(
+                    behavior: HitTestBehavior.translucent,
+                    onPointerMove: (event) {
+                      if (mapProvider.isActiveNavigation) {
+                        mapProvider.setUserPanning(true);
                       }
-                    }
-                  },
-                );
+                    },
+                    child: MapLibreMap(
+                      styleString: _resolvedStyleJson!,
+                      onMapCreated: (controller) {
+                        _tempController = controller;
+                      },
+                      onStyleLoadedCallback: () {
+                        if (_tempController != null) {
+                          mapProvider.engine.onMapCreated(
+                              _tempController!,
+                              isDark,
+                              Provider.of<GlobalLocationService>(context,
+                                  listen: false),
+                              this);
+                        }
+                      },
+                      onMapClick: (point, latLng) async {
+                        FocusScope.of(context).unfocus();
+                        bool handled =
+                            await mapProvider.handleRouteClick(point, latLng);
+                        if (!handled) {
+                          mapProvider.clearTargetLocation();
+                        }
+                      },
+                      onMapLongClick: (point, latLng) {
+                        mapProvider.handleMapTap(point, latLng);
+                      },
+                      initialCameraPosition: const CameraPosition(
+                          target: LatLng(28.6139, 77.2090), zoom: 12.0),
+                      compassEnabled: false,
+                      myLocationEnabled: mapProvider.showNativeBlueDot,
+                      myLocationTrackingMode: kIsWeb
+                          ? MyLocationTrackingMode.tracking
+                          : MyLocationTrackingMode.trackingCompass,
+                      logoViewMargins: kIsWeb ? null : const Point(-100, -100),
+                      attributionButtonMargins:
+                          kIsWeb ? null : const Point(-100, -100),
+                      onCameraTrackingDismissed: () {
+                        mapProvider.engine.onUserPannedMap();
+                        if (mapProvider.isActiveNavigation) {
+                          mapProvider.setUserPanning(true);
+                        }
+                      },
+                      onUserLocationUpdated: (location) {
+                        final pos = location.position;
+                        mapProvider.updateCurrentLocation(pos);
+                        mapProvider.updateNavigationPuck(
+                          pos,
+                          location.heading?.trueHeading ??
+                              location.bearing ??
+                              0.0,
+                        );
+                      },
+
+                      // 🚀 NAYA BULLETPROOF CODE YAHAN SE PASTE KAR:
+                      onCameraIdle: () async {
+                        final ctrl = mapProvider.controller ?? _tempController;
+                        if (ctrl != null) {
+                          try {
+                            final bounds = await ctrl.getVisibleRegion();
+
+                            // 1. Pehle provider se location nikalne ki koshish karo
+                            LatLng? userLoc = mapProvider.currentLocation;
+
+                            // 3. Agar location mil gayi, toh Bounds Check karo!
+                            if (userLoc != null) {
+                              bool isVisible = bounds.contains(userLoc);
+                              mapProvider.setUserVisibility(isVisible);
+                            }
+                          } catch (_) {
+                            // Suppressed error
+                          }
+                        }
+                      },
+                    ));
               },
+            ),
+          ),
+
+          // 🚀 0. SIRI-STYLE EDGE GLOW FOR TTS
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Consumer<MapProvider>(
+                builder: (context, mapProvider, _) {
+                  return ValueListenableBuilder<bool>(
+                    valueListenable: mapProvider.isSpeaking,
+                    builder: (context, isSpeaking, _) {
+                      return AnimatedOpacity(
+                        duration: isSpeaking ? const Duration(milliseconds: 600) : const Duration(milliseconds: 1500),
+                        curve: Curves.easeInOutCubic,
+                        opacity: isSpeaking ? 1.0 : 0.0,
+                        child: ImageFiltered(
+                          imageFilter: ImageFilter.blur(sigmaX: 80.0, sigmaY: 80.0),
+                          child: ShaderMask(
+                            shaderCallback: (Rect bounds) {
+                              return const SweepGradient(
+                                colors: [Colors.cyan, Colors.purpleAccent, Colors.pinkAccent, Colors.cyan],
+                              ).createShader(bounds);
+                            },
+                            blendMode: BlendMode.srcIn,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.transparent,
+                                border: Border.all(color: Colors.white, width: 30.0),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ),
 
@@ -230,12 +282,25 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             top: topMargin,
             left: sideMargin,
             right: sideMargin,
-            child: _buildPointerSafeWrapper(
-              child: AnimatedAlign(
-                duration: const Duration(milliseconds: 500),
-                curve: Curves.easeOutCubic,
-                alignment: isDesktop ? Alignment.topRight : Alignment.topLeft,
-                child: WeatherFloatingWidget(onMapThemeChanged: (isDark) {}),
+            child: Consumer<MapProvider>(
+              builder: (context, mapProvider, child) {
+                final bool showWeather = !mapProvider.isActiveNavigation;
+                return IgnorePointer(
+                  ignoring: !showWeather,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 300),
+                    opacity: showWeather ? 1.0 : 0.0,
+                    child: child,
+                  ),
+                );
+              },
+              child: _buildPointerSafeWrapper(
+                child: AnimatedAlign(
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeOutCubic,
+                  alignment: isDesktop ? Alignment.topRight : Alignment.topLeft,
+                  child: WeatherFloatingWidget(onMapThemeChanged: (isDark) {}),
+                ),
               ),
             ),
           ),
@@ -247,6 +312,96 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             child: Consumer<MapProvider>(builder: (context, mapProvider, _) {
               return AppleStyleCompass(controller: mapProvider.controller);
             }),
+          ),
+
+          // 🚀 3. TURN-BY-TURN BANNER
+          Positioned(
+            top: topMargin,
+            left: sideMargin,
+            right: sideMargin,
+            child: TurnByTurnBanner(isDark: isDark),
+          ),
+
+
+          Positioned(
+            bottom:
+                isDesktop ? 32.0 : (MediaQuery.paddingOf(context).bottom + 124),
+            left: sideMargin,
+            child: Consumer<MapProvider>(
+              builder: (context, mapProvider, child) {
+                if (mapProvider.engine.camera == null) return const SizedBox.shrink();
+                return ValueListenableBuilder<bool>(
+                  valueListenable: mapProvider.engine.camera!.isUserPanning,
+                  builder: (context, isPanning, _) {
+                    if (!isPanning || !mapProvider.isActiveNavigation) return const SizedBox.shrink();
+                    return _buildPointerSafeWrapper(
+                      child: RidelBounceButton(
+                        onTap: () {
+                          AppHaptics.selectionClick();
+                          mapProvider.engine.camera!.resetCompass();
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(36),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.4),
+                                blurRadius: 24,
+                                offset: const Offset(0, 12),
+                              ),
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(36),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 20, vertical: 14),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0B0E17)
+                                      .withValues(alpha: 0.75),
+                                  borderRadius: BorderRadius.circular(36),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.08),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.navigation_rounded,
+                                      color: Colors.white,
+                                      size: 18,
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      "Re-centre",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: -0.2,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+                );
+              },
+            ),
           ),
 
           Positioned(
@@ -308,10 +463,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         children: [
                           // 🍏 THE APPLE "PILL" (Map Settings + Locate Me)
                           IgnorePointer(
-                            ignoring: false,
+                            ignoring: !(!mapProvider.isActiveNavigation ||
+                                !mapProvider.isAutoTracking),
                             child: AnimatedOpacity(
-                              duration: const Duration(milliseconds: 150),
-                              opacity: 1.0,
+                              duration: const Duration(milliseconds: 300),
+                              opacity: (!mapProvider.isActiveNavigation ||
+                                      !mapProvider.isAutoTracking)
+                                  ? 1.0
+                                  : 0.0,
                               child: Container(
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(50),
@@ -408,7 +567,17 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                               AppHaptics.selectionClick();
 
                                               if (mapProvider
-                                                  .isRouteCalculated) {
+                                                      .isActiveNavigation &&
+                                                  !mapProvider.isAutoTracking) {
+                                                // STATE 4: RE-CENTER
+                                                debugPrint(
+                                                    "📍 Re-Center Tapped!");
+                                                await mapProvider
+                                                    .recenter3DNavigation();
+                                              } else if (mapProvider
+                                                      .isRouteCalculated &&
+                                                  !mapProvider
+                                                      .isActiveNavigation) {
                                                 // STATE 3: START NAVIGATION
                                                 debugPrint(
                                                     "🚀 Start Navigation Tapped! Entering 3D Mode...");
@@ -628,7 +797,15 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     final Color iconColor = isDark ? Colors.white70 : Colors.black87;
     const double defaultSize = 20.0;
 
-    if (provider.isRouteCalculated) {
+    if (provider.isActiveNavigation && !provider.isAutoTracking) {
+      // STATE 4: RE-CENTER
+      return Icon(
+        Icons.navigation_rounded,
+        key: const ValueKey('icon_recenter'),
+        color: const Color(0xFF0A84FF).withValues(alpha: 0.9),
+        size: defaultSize,
+      );
+    } else if (provider.isRouteCalculated && !provider.isActiveNavigation) {
       // STATE 3: START (Keep this slightly prominent but not glowing)
       return Icon(
         Icons.navigation_rounded, // Upward arrow

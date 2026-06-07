@@ -263,13 +263,7 @@ class MapEngine {
     _navigationDestination = destination;
 
     // 1. Draw the route polyline on the map
-    if (mapController != null) {
-      await RouteVisualizer.drawRoute(
-        mapController,
-        route.coordinates,
-        isDarkTheme,
-      );
-    }
+    // (Already drawn by MapLayerController during preview phase)
 
     // 2. Start the navigation state machine (parses steps, builds boundaries)
     await navigation.startNavigation(route);

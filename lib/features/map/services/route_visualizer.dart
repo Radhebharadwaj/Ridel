@@ -140,4 +140,25 @@ class RouteVisualizer {
       ),
     );
   }
+
+  /// Dynamically updates the route source without redrawing the layers.
+  static Future<void> updateRouteSource(
+    MapLibreMapController? controller,
+    List<LatLng> coordinates,
+  ) async {
+    if (controller == null || coordinates.isEmpty) return;
+
+    final List<List<double>> geometryCoords =
+        coordinates.map((c) => [c.longitude, c.latitude]).toList();
+
+    final Map<String, dynamic> geoJsonData = {
+      "type": "Feature",
+      "properties": {},
+      "geometry": {"type": "LineString", "coordinates": geometryCoords}
+    };
+
+    try {
+      await controller.setGeoJsonSource(_sourceId, geoJsonData);
+    } catch (_) {}
+  }
 }

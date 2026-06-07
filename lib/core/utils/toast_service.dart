@@ -1,6 +1,7 @@
 // lib/core/utils/toast_service.dart
 
 import 'dart:async';
+import 'dart:collection';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,6 +12,8 @@ enum ToastType { success, error, info, warning }
 
 class ToastService {
   static OverlayEntry? _overlayEntry;
+  static final Queue<Map<String, dynamic>> _queue = Queue<Map<String, dynamic>>();
+  static bool _isShowing = false;
 
   // 🌟 NAYA: Ab hum optional 'title' pass kar sakte hain
   static void showSuccess(BuildContext context, String message,
@@ -67,6 +70,38 @@ class ToastService {
     String? actionLabel,
     VoidCallback? onActionTap,
   }) {
+    _queue.add({
+      'context': context,
+      'type': type,
+      'title': title,
+      'message': message,
+      'onTap': onTap,
+      'actionLabel': actionLabel,
+      'onActionTap': onActionTap,
+    });
+    
+    _processQueue();
+  }
+
+  static void _processQueue() {
+    if (_isShowing || _queue.isEmpty) return;
+    _isShowing = true;
+
+    final request = _queue.removeFirst();
+    final context = request['context'] as BuildContext;
+    final type = request['type'] as ToastType;
+    final title = request['title'] as String;
+    final message = request['message'] as String;
+    final onTap = request['onTap'] as VoidCallback?;
+    final actionLabel = request['actionLabel'] as String?;
+    final onActionTap = request['onActionTap'] as VoidCallback?;
+
+    if (!context.mounted) {
+      _isShowing = false;
+      _processQueue();
+      return;
+    }
+
     switch (type) {
       case ToastType.error:
         AppHaptics.warning();
@@ -74,14 +109,12 @@ class ToastService {
       case ToastType.success:
         AppHaptics.heavyImpact();
         break;
-      default:
+      case ToastType.warning:
+        AppHaptics.warning();
+        break;
+      case ToastType.info:
         AppHaptics.lightImpact();
         break;
-    }
-
-    if (_overlayEntry != null) {
-      _overlayEntry?.remove();
-      _overlayEntry = null;
     }
 
     _overlayEntry = OverlayEntry(
@@ -95,6 +128,8 @@ class ToastService {
         onDismiss: () {
           _overlayEntry?.remove();
           _overlayEntry = null;
+          _isShowing = false;
+          _processQueue();
         },
       ),
     );

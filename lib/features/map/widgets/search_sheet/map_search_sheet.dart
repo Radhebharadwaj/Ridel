@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/features/map/map_engine/map_engine.dart';
@@ -29,6 +30,7 @@ import 'package:ridel/features/map/services/route_visualizer.dart';
 import 'package:ridel/features/map/services/route_engine_service.dart';
 import 'package:ridel/core/widgets/ridel_liquid_button.dart';
 import 'package:ridel/features/map/widgets/quick_action_buttons.dart';
+import 'package:ridel/core/utils/route_utils.dart';
 
 // 🚀 IMPORT YOUR NOTIFICATION SERVICE HERE
 import 'package:ridel/core/services/notification_service.dart';
@@ -110,8 +112,11 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   final ValueNotifier<double> _sheetProgress = ValueNotifier(0);
   Timer? _debounce;
 
-  bool _showDragHandle = true;
-  Timer? _dragHandleTimer;
+  bool _isDashVisible = true;
+  Timer? _hideDashTimer;
+
+  // Navigation Dashboard expansion state
+  bool _isNavSheetExpanded = false;
 
   late AnimationController _slideController;
   late Animation<Offset> _slideAnimation;
@@ -222,7 +227,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     super.initState();
     _isSearchMode = widget.isMapTabActive;
 
-    _wakeUpDragHandle();
+    _pokeDash();
 
     _slideController = AnimationController(
       vsync: this,
@@ -241,7 +246,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
     _searchFocus.addListener(() {
       /* 🚀 CANCELLED THE FOCUS ASSASSIN
-      _wakeUpDragHandle();
+      _pokeDash();
       if (_searchFocus.hasFocus) {
         if (!_showSearchList) setState(() => _showSearchList = true);
 
@@ -273,19 +278,19 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     unawaited(_handleGuestSessionHistory());
   }
 
-  void _wakeUpDragHandle() {
+  void _pokeDash() {
     if (!mounted) return;
-    if (!_showDragHandle) {
-      setState(() => _showDragHandle = true);
+    if (!_isDashVisible) {
+      setState(() => _isDashVisible = true);
     }
-    _dragHandleTimer?.cancel();
-    _dragHandleTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted) setState(() => _showDragHandle = false);
+    _hideDashTimer?.cancel();
+    _hideDashTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _isDashVisible = false);
     });
   }
 
   void _onSearchChanged() {
-    _wakeUpDragHandle();
+    _pokeDash();
 
     final currentQuery = _searchCtrl.text.trim();
 
@@ -351,7 +356,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   void didUpdateWidget(MapSearchSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isMapTabActive && !oldWidget.isMapTabActive) {
-      _wakeUpDragHandle();
+      _pokeDash();
       unawaited(_slideController.forward());
       if (!_isSearchMode) {
         setState(() => _isSearchMode = true);
@@ -709,6 +714,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         _activeRoutingField = null;
         _currentRoute = null;
         _showSearchList = true;
+        _isNavSheetExpanded = false;
       });
       // 🚀 FIX: Sheet should NOT collapse here! It should retain current size
       // if (_sheetController.isAttached && !_searchFocus.hasFocus) {
@@ -927,7 +933,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   void _expandToFull() {
-    _wakeUpDragHandle();
+    _pokeDash();
     if (!_sheetController.isAttached) return;
     if (_sheetController.size < (_safeMaxSize - 0.02)) {
       _safeAnimateSheet(_safeMaxSize);
@@ -973,7 +979,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     // 2. Backup the current state in case the user wants to UNDO
     final backupCoords = provider.targetDestination!;
     final bool wasRouteDrawn = provider.isRouteCalculated;
-    final bool wasNavigating = provider.isNavigating;
+    final bool wasNavigating = provider.isActiveNavigation;
 
     // BACKUP UI STATE
     final backupPlace = _selectedPlace;
@@ -1040,7 +1046,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   void _handleManualDragUpdate(DragUpdateDetails details) {
-    _wakeUpDragHandle();
+    _pokeDash();
     if (!_sheetController.isAttached) return;
     final screenHeight = MediaQuery.sizeOf(context).height;
     if (screenHeight == 0) return;
@@ -1051,7 +1057,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   void _handleManualDragEnd(DragEndDetails details) {
-    _wakeUpDragHandle();
+    _pokeDash();
     if (!_sheetController.isAttached) return;
     final velocity = details.primaryVelocity ?? 0;
     final size = _sheetController.size;
@@ -1090,7 +1096,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   @override
   void dispose() {
-    _dragHandleTimer?.cancel();
+    _hideDashTimer?.cancel();
     _debounce?.cancel();
     _sheetController.dispose();
     _searchCtrl.dispose();
@@ -1106,16 +1112,16 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   Widget _buildDynamicDragHandle(bool isDark) {
     return MouseRegion(
-      onEnter: (_) => _wakeUpDragHandle(),
-      onHover: (_) => _wakeUpDragHandle(),
+      onEnter: (_) => _pokeDash(),
+      onHover: (_) => _pokeDash(),
       child: GestureDetector(
-        onTapDown: (_) => _wakeUpDragHandle(),
+        onTapDown: (_) => _pokeDash(),
         onVerticalDragUpdate: _handleManualDragUpdate,
         onVerticalDragEnd: _handleManualDragEnd,
         behavior: HitTestBehavior.translucent,
         child: AnimatedOpacity(
           duration: const Duration(milliseconds: 300),
-          opacity: _showDragHandle ? 1.0 : 0.0,
+          opacity: _isDashVisible ? 1.0 : 0.0,
           child: Container(
             height: 32,
             alignment: Alignment.center,
@@ -1138,6 +1144,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   @override
   Widget build(BuildContext context) {
+    final provider = Provider.of<MapProvider>(context);
     final screenSize = MediaQuery.sizeOf(context);
     final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final bool isKeyboardOpen = keyboardHeight > 0;
@@ -1146,9 +1153,16 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
     // Header height is computed inside the builder where progress is available
 
-    final minS = _safeMinSize;
-    final midS = _safeMidSize;
-    final maxS = _safeMaxSize;
+    final isNav = provider.isActiveNavigation;
+    final navCollapsedHeight = 110.0 + MediaQuery.paddingOf(context).bottom;
+    final navExpandedHeight = screenSize.height * 0.55;
+
+    final navExpandedS = (navExpandedHeight / screenSize.height).clamp(0.0, 1.0);
+    final navCollapsedS = (navCollapsedHeight / screenSize.height).clamp(0.0, 1.0);
+
+    final minS = isNav ? navCollapsedS : _safeMinSize;
+    final midS = isNav ? navExpandedS : _safeMidSize;
+    final maxS = isNav ? navExpandedS : _safeMaxSize;
 
     if ((_lastScreenHeight != 0 &&
             (_lastScreenHeight - screenSize.height).abs() > 20) ||
@@ -1176,10 +1190,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     snaps = snaps.toSet().toList();
 
     // 🚨 Dynamic Height Calculation
-    final double expandedHeight = screenSize.height -
-        keyboardHeight -
-        MediaQuery.paddingOf(context).top -
-        20;
+    final double expandedHeight = screenSize.height * 0.92;
     final double defaultIdleHeight = screenSize.height;
 
     return Stack(
@@ -1197,13 +1208,15 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         Align(
             alignment: Alignment.bottomCenter,
             child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
+                duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOutCubic,
-                height: isKeyboardOpen ? expandedHeight : defaultIdleHeight,
-                padding: EdgeInsets.only(bottom: keyboardHeight > 0 ? 0 : 0),
+                height: provider.isActiveNavigation ? null : (isKeyboardOpen ? expandedHeight : defaultIdleHeight),
+                padding: EdgeInsets.only(bottom: keyboardHeight),
                 child: SlideTransition(
                   position: _slideAnimation,
-                  child: NotificationListener<Notification>(
+                  child: provider.isActiveNavigation
+                      ? _buildNavigationDashboardOverlay(isDark)
+                      : NotificationListener<Notification>(
                     onNotification: (notification) {
                       if (notification is ScrollEndNotification &&
                           notification.dragDetails != null) {
@@ -1228,7 +1241,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                       }
 
                       if (notification is DraggableScrollableNotification) {
-                        _wakeUpDragHandle();
+                        _pokeDash();
 
                         final extent = notification.extent;
                         // ⌨️ KEYBOARD DISMISS FIX
@@ -1283,9 +1296,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                     },
                     child: DraggableScrollableSheet(
                       controller: _sheetController,
-                      initialChildSize: isKeyboardOpen ? 1.0 : midS,
+                      initialChildSize: (isKeyboardOpen && !isNav) ? 1.0 : midS,
                       minChildSize: minS,
-                      maxChildSize: isKeyboardOpen ? 1.0 : maxS,
+                      maxChildSize: (isKeyboardOpen && !isNav) ? 1.0 : maxS,
                       snap: true,
                       snapAnimationDuration: const Duration(milliseconds: 350),
                       snapSizes: snaps,
@@ -1293,10 +1306,11 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                         return ValueListenableBuilder<double>(
                           valueListenable: _sheetProgress,
                           builder: (context, progress, child) {
-                            // 🚀 FIX: Lerp header height from 62 (closed) → 76 (open) so closed state matches original
-                            final dynamicHeaderHeight = _showDirections
-                                ? 190.0
-                                : (lerpDouble(62.0, 76.0, progress) ?? 62.0);
+                            final dynamicHeaderHeight = provider.isActiveNavigation
+                                ? (_isNavSheetExpanded ? navExpandedHeight - 40 : navCollapsedHeight)
+                                : (_showDirections
+                                    ? 190.0
+                                    : (lerpDouble(62.0, 76.0, progress) ?? 62.0));
                             const currentSideMargin = 16.0;
                             final currentBottomMargin =
                                 24.0 - (14.0 * progress);
@@ -1311,23 +1325,29 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                             return PointerInterceptor(
                               child: Align(
                                 alignment: Alignment.bottomCenter,
-                                child: ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    maxWidth: isDesktop ? 800 : 450,
-                                  ),
-                                  child: Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      // 🎨 PERFORMANCE FIX: RepaintBoundary around Blur
-                                      RepaintBoundary(
-                                        child: Container(
-                                          margin: EdgeInsets.only(
-                                            left: currentSideMargin,
-                                            right: currentSideMargin,
-                                            bottom: currentBottomMargin +
-                                                MediaQuery.paddingOf(context)
-                                                    .bottom,
-                                          ),
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    return ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        maxWidth: isDesktop ? 800 : 450,
+                                      ),
+                                      child: Stack(
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          // 🎨 PERFORMANCE FIX: RepaintBoundary around Blur
+                                          RepaintBoundary(
+                                            child: AnimatedContainer(
+                                              duration: const Duration(milliseconds: 200),
+                                              curve: Curves.easeOutCubic,
+                                              height: provider.isActiveNavigation
+                                                   ? (_isNavSheetExpanded ? navExpandedHeight : navCollapsedHeight)
+                                                   : constraints.maxHeight,
+                                              margin: EdgeInsets.only(
+                                                left: currentSideMargin,
+                                                right: currentSideMargin,
+                                                bottom: currentBottomMargin +
+                                                    MediaQuery.paddingOf(context).bottom,
+                                              ),
                                           decoration: BoxDecoration(
                                             borderRadius: BorderRadius.circular(
                                                 sheetRadius),
@@ -1429,22 +1449,22 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                 .easeInCubic,
                                                             switchOutCurve: Curves
                                                                 .easeOutCubic,
-                                                            child: _showDirections
-                                                                ? _buildDirectionsHeader(
-                                                                    dynamicHeaderHeight,
-                                                                    isDark,
-                                                                  )
-                                                                : (_selectedPlace != null
-                                                                    ? _buildSelectedPlaceHeader(
+                                                             child: (_showDirections
+                                                                    ? _buildDirectionsHeader(
                                                                         dynamicHeaderHeight,
-                                                                        progress,
                                                                         isDark,
                                                                       )
-                                                                    : _buildSearchHeader(
-                                                                        dynamicHeaderHeight,
-                                                                        progress,
-                                                                        isDark,
-                                                                      )),
+                                                                    : (_selectedPlace != null
+                                                                        ? _buildSelectedPlaceHeader(
+                                                                            dynamicHeaderHeight,
+                                                                            progress,
+                                                                            isDark,
+                                                                          )
+                                                                        : _buildSearchHeader(
+                                                                            dynamicHeaderHeight,
+                                                                            progress,
+                                                                            isDark,
+                                                                          ))),
                                                           ),
                                                         ),
                                                       ),
@@ -1455,15 +1475,15 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                             milliseconds: 150,
                                                           ),
                                                           opacity:
-                                                              progress > 0.05
+                                                              (!provider.isActiveNavigation && progress > 0.05)
                                                                   ? 1.0
                                                                   : 0.0,
-                                                          child: progress > 0.05
+                                                          child: (!provider.isActiveNavigation && progress > 0.05)
                                                               ? _buildSheetContent(
                                                                   isDark,
                                                                   progress,
                                                                   isExpanded:
-                                                                      isKeyboardOpen, // 🚀 Keep expanded content logic
+                                                                      isKeyboardOpen,
                                                                 )
                                                               : const SizedBox(),
                                                         ),
@@ -1491,15 +1511,17 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                       ),
                                     ],
                                   ),
-                                ),
-                              ),
-                            );
-                          },
+                                );
+                              },
+                            ),
+                          ),
                         );
                       },
-                    ),
-                  ),
-                ))),
+                    );
+                  },
+                ),
+              ),
+            ))),
       ],
     );
   }

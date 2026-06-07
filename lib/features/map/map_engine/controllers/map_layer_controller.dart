@@ -161,7 +161,7 @@ class MapLayerController {
         _routeSourceId,
         _routeLineLayerId,
         const LineLayerProperties(
-          lineColor: "#00E5FF",
+          lineColor: "#0A84FF",
           lineWidth: 5.0,
           lineJoin: "round",
           lineCap: "round",
@@ -191,6 +191,15 @@ class MapLayerController {
         await _map!.removeLayer(_routeCasingLayerId);
       }
       await _map!.removeSource(_routeSourceId);
+    } catch (_) {}
+  }
+
+  Future<void> updateRouteSource(List<LatLng> remainingPoints) async {
+    if (_map == null || remainingPoints.length < 2 || !_isDrawingRoute) return;
+    try {
+      final geoJsonCoordinates = remainingPoints.map((p) => [p.longitude, p.latitude]).toList();
+      final geoJson = _buildRouteGeoJson(geoJsonCoordinates);
+      await _map!.setGeoJsonSource(_routeSourceId, geoJson);
     } catch (_) {}
   }
 

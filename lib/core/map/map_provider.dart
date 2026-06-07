@@ -21,6 +21,8 @@ import 'package:ridel/features/map/services/master_search_service.dart';
 import 'package:ridel/features/map/services/place_api_services.dart';
 import 'package:ridel/features/map/services/route_visualizer.dart';
 import 'package:ridel/features/map/services/route_engine_service.dart';
+import 'package:ridel/main.dart' show navigatorKey;
+import 'package:ridel/core/utils/toast_service.dart';
 
 class MapProvider extends ChangeNotifier {
   final MapEngine engine = MapEngine();
@@ -103,14 +105,14 @@ class MapProvider extends ChangeNotifier {
     await _updatePuckGeoJson(location, bearing, customPuckOpacity);
 
     // 2. Animate Camera to Follow User & Rotate Map ONLY if actively navigating
-    if (engine.mapUIState.value == MapUIState.navigating && controller != null) {
+    if (engine.mapUIState.value == MapUIState.navigating && controller != null && isAutoTracking) {
       controller!.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: location,
             bearing: bearing, // THIS ROTATES THE MAP WITH THE USER
             tilt: 50.0,       // Keep the 3D perspective
-            zoom: 17.5,       // Zoomed in for navigation
+            zoom: 18.0,       // Zoomed in for navigation
           )
         ),
         duration: const Duration(seconds: 1), // Smooth 1-second animation between GPS ticks
@@ -277,13 +279,38 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
-  bool isNavigating = false;
+  bool isActiveNavigation = false;
+  bool isAutoTracking = true;
+
+  bool _isUserPanning = false;
+  bool get isUserPanning => _isUserPanning;
+
+  void setUserPanning(bool value) {
+    if (_isUserPanning != value) {
+      _isUserPanning = value;
+      notifyListeners();
+    }
+  }
+
+  void setAutoTracking(bool tracking) {
+    if (isAutoTracking != tracking) {
+      isAutoTracking = tracking;
+      notifyListeners();
+    }
+  }
 
   Future<void> start3DNavigation() async {
     if (controller == null) return;
 
-    isNavigating = true;
-    engine.setUIState(MapUIState.navigating);
+    isActiveNavigation = true;
+    isAutoTracking = true;
+
+    if (_currentRouteResult != null && targetDestination != null) {
+      await engine.startActiveNavigation(_currentRouteResult!, targetDestination!);
+    } else {
+      engine.setUIState(MapUIState.navigating);
+    }
+
     await updatePuckVisibility();
     notifyListeners();
 
@@ -307,8 +334,9 @@ class MapProvider extends ChangeNotifier {
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: targetLoc,
-            zoom: 17.0, // Deep zoom for navigation
-            tilt: 45.0, // 3D Pitch angle
+            zoom: 18.0, // Deep zoom for navigation
+            tilt: 50.0, // 3D Pitch angle
+            bearing: pos?.heading ?? 0.0,
           ),
         ),
         duration: const Duration(milliseconds: 1200),
@@ -323,6 +351,37 @@ class MapProvider extends ChangeNotifier {
       );
     } catch (_) {
       // Suppress error
+    }
+  }
+
+  Future<void> recenter3DNavigation() async {
+    if (controller == null) return;
+
+    isAutoTracking = true;
+    _isUserPanning = false;
+    notifyListeners();
+
+    final pos = engine.locService?.currentPosition;
+    
+    LatLng? targetLoc;
+    if (pos != null) {
+      targetLoc = LatLng(pos.latitude, pos.longitude);
+    } else if (currentLocation != null) {
+      targetLoc = currentLocation;
+    }
+
+    if (targetLoc != null) {
+      await controller!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: targetLoc,
+            zoom: 18.0,
+            tilt: 50.0,
+            bearing: pos?.heading ?? 0.0,
+          ),
+        ),
+        duration: const Duration(milliseconds: 800),
+      );
     }
   }
 
@@ -1014,7 +1073,7 @@ class MapProvider extends ChangeNotifier {
         await _toggleFocusModeLayers(false);
         await hideNavigationPuck();
 
-        isNavigating = false; // Reset navigation state
+        isActiveNavigation = false; // Reset navigation state
         engine.setUIState(MapUIState.idle);
         await updatePuckVisibility();
 
@@ -1050,6 +1109,8 @@ class MapProvider extends ChangeNotifier {
 
   // Helper to safely fully clear everything and notify UI
   Future<void> cancelAndClearRoute() async {
+    _liveLocationSub?.cancel();
+    _liveLocationSub = null;
     // 1. Clear MapLibre Native Layers (Lines AND ETA Pills)
     if (controller != null) {
       // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
@@ -1127,7 +1188,7 @@ class MapProvider extends ChangeNotifier {
     isCinematicSearch = false;
     _tappedPlaceFromMap = null;
     _isDestinationSelected = false;
-    isNavigating = false;
+    isActiveNavigation = false;
     engine.setUIState(MapUIState.idle);
     await updatePuckVisibility();
     currentNavMode = 'driving';
@@ -1391,6 +1452,17 @@ class MapProvider extends ChangeNotifier {
   void startTurnByTurnNavigation() {
     if (_lastRouteData != null) {
       engine.navigation.startNavigation(_lastRouteData!);
+      
+      _liveLocationSub?.cancel();
+      _liveLocationSub = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          distanceFilter: 2,
+        ),
+      ).listen((pos) {
+        engine.navigation.processLocationUpdate(pos);
+      });
+
       AppHaptics.success();
     }
   }
@@ -1399,9 +1471,47 @@ class MapProvider extends ChangeNotifier {
   final List<Circle> _nearbyCircles = [];
   final List<Symbol> _nearbyLabels = [];
 
+  final ValueNotifier<bool> isSpeaking = ValueNotifier(false);
+  Timer? _glowTimer;
+  StreamSubscription<Position>? _liveLocationSub;
+
   MapProvider() {
     engine.state.addListener(() {
       notifyListeners();
+    });
+
+    engine.navigation.voiceInstruction.addListener(() {
+      final text = engine.navigation.voiceInstruction.value;
+      if (text != null) {
+        isSpeaking.value = true;
+        debugPrint("🗣️ TTS Triggered: $text");
+        
+        final int wordCount = text.split(' ').length;
+        final int speakDurationMs = (wordCount * 400) + 800;
+        
+        _glowTimer?.cancel();
+        _glowTimer = Timer(Duration(milliseconds: speakDurationMs), () {
+          isSpeaking.value = false;
+        });
+      }
+    });
+
+    engine.navigation.isGpsLost.addListener(() {
+      final context = navigatorKey.currentContext;
+      if (context != null) {
+        if (engine.navigation.isGpsLost.value == true) {
+          ToastService.showError(context, "Offline Glide Active");
+        } else {
+          ToastService.showSuccess(context, "GPS Signal Restored");
+        }
+      }
+    });
+
+    engine.navigation.remainingPolyline.addListener(() {
+      final points = engine.navigation.remainingPolyline.value;
+      if (points.isNotEmpty && engine.navigation.isNavigating.value) {
+        engine.layers?.updateRouteSource(points);
+      }
     });
 
     // 🧭 Forward UI state machine changes to ChangeNotifier listeners
@@ -1829,6 +1939,15 @@ class MapProvider extends ChangeNotifier {
         }
 
         engine.navigation.startNavigation(routeData);
+        _liveLocationSub?.cancel();
+        _liveLocationSub = Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.bestForNavigation,
+            distanceFilter: 2,
+          ),
+        ).listen((pos) {
+          engine.navigation.processLocationUpdate(pos);
+        });
 
         double minLat = math.min(currentLoc.latitude, stationLoc.latitude);
         double maxLat = math.max(currentLoc.latitude, stationLoc.latitude);
@@ -2137,8 +2256,6 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
-  bool isActiveNavigation = false;
-
   Future<void> startActiveNavigation(BuildContext context) async {
     if (controller == null || targetDestination == null) return;
 
@@ -2152,18 +2269,8 @@ class MapProvider extends ChangeNotifier {
       return;
     }
 
-    // Use existing route data or fetch a new one
-    if (_lastRouteData == null) {
-      final originLoc = LatLng(pos.latitude, pos.longitude);
-      _lastRouteData = await _routingService.getRoute(
-        originLoc,
-        targetDestination!,
-        mode: currentNavMode,
-      );
-      _currentRouteResult = _lastRouteData;
-    }
-
-    if (_lastRouteData == null) {
+    // Use existing route data - DO NOT fetch again (Redundant API call removed)
+    if (_currentRouteResult == null) {
       debugPrint("Cannot start navigation: No route data.");
       return;
     }
@@ -2175,7 +2282,35 @@ class MapProvider extends ChangeNotifier {
     AppHaptics.heavyImpact();
 
     // 🚀 Delegate to MapEngine's active navigation lifecycle
-    await engine.startActiveNavigation(_lastRouteData!, targetDestination!);
+    await engine.startActiveNavigation(_currentRouteResult!, targetDestination!);
+  }
+
+  Future<void> endActiveNavigation() async {
+    if (!isActiveNavigation) return;
+
+    isActiveNavigation = false;
+    notifyListeners();
+
+    await engine.stopActiveNavigation();
+    await updatePuckVisibility();
+
+    // 🚀 Return camera to route overview
+    if (_lastRouteData != null && controller != null) {
+      try {
+        await controller!.animateCamera(
+          CameraUpdate.newLatLngBounds(
+            _calculateBounds(_lastRouteData!.coordinates),
+            bottom: 350,
+            left: 50,
+            right: 50,
+            top: 100,
+          ),
+          duration: const Duration(milliseconds: 1200),
+        );
+      } catch (e) {
+        debugPrint("Camera bounds fit failed on endNavigation: $e");
+      }
+    }
   }
 
   Future<void> autoDrawRouteTo(LatLng destination, BuildContext context) async {
@@ -2221,20 +2356,21 @@ class MapProvider extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   String? get lastError => _lastError;
+  
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
   }
 
-  void _clearError() {
+  void clearError() {
     _lastError = null;
     notifyListeners();
   }
 
-  void clearError() => _clearError();
-
   @override
   void dispose() {
+    _liveLocationSub?.cancel();
+    _liveLocationSub = null;
     _pinAnimController?.dispose();
     engine.dispose();
     super.dispose();

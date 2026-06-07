@@ -71,15 +71,16 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
   }
 
   Future<void> _resolveLocationAndFetchWeather() async {
-    final locService =
-        Provider.of<GlobalLocationService>(context, listen: false);
+    final locService = Provider.of<GlobalLocationService>(context, listen: false);
 
     double? lat;
     double? lng;
+    bool isMocked = false;
 
     if (locService.currentPosition != null) {
       lat = locService.currentPosition!.latitude;
       lng = locService.currentPosition!.longitude;
+      isMocked = locService.currentPosition!.isMocked;
     }
 
     if (lat == null || lng == null) {
@@ -87,6 +88,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
       if (locService.currentPosition != null) {
         lat = locService.currentPosition!.latitude;
         lng = locService.currentPosition!.longitude;
+        isMocked = locService.currentPosition!.isMocked;
       } else {
         // Location completely unavailable; UI stays in "Locating..." loading state
         if (mounted) {
@@ -100,7 +102,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     }
 
     // 🚀 OPTIMIZATION: Strict distance threshold check (3km) to prevent API spam
-    if (_isInitialized && _lastLat != null && _lastLng != null && _weather != null) {
+    if (!isMocked && _isInitialized && _lastLat != null && _lastLng != null && _weather != null) {
       final distance = _calculateDistance(_lastLat!, _lastLng!, lat, lng);
       if (distance <= 3000) return;
     }
@@ -115,14 +117,16 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
         _hasError = false;
       });
     }
-    await _fetchSmartWeatherAndName(lat, lng);
-  }
 
-  Future<void> _fetchSmartWeatherAndName(double lat, double lng) async {
     try {
-      final locService = Provider.of<GlobalLocationService>(context, listen: false);
-      String fullName = locService.currentCity;
-      final data = await _weatherCache.getSmartWeather(lat, lng, fullName);
+      WeatherModel? data;
+      if (!isMocked) {
+        // EXACT GPS: Smart Cache
+        data = await _weatherCache.getSmartWeather(lat, lng, locService.currentCity);
+      } else {
+        // 🚀 PHASE 8: FALLBACK / GPS DENIED -> Fetch by City Name
+        data = await _weatherCache.getSmartWeatherByCity(locService.currentCity);
+      }
 
       if (mounted) {
         setState(() {
@@ -248,7 +252,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     final mapProvider = context.watch<MapProvider>();
     if (mapProvider.currentZoomLevel < 11.0) return const SizedBox.shrink();
 
-    final locService = context.watch<GlobalLocationService>();
+    final locService = context.read<GlobalLocationService>();
     String displayCity = locService.currentCity.isEmpty ? "Locating..." : locService.currentCity;
     String displayState = locService.currentState;
 
@@ -263,10 +267,30 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     // 🚀 OPTIMIZATION: Dynamic max width instead of hardcoded 340 to fix overflow
     double maxWidth = MediaQuery.sizeOf(context).width - 32;
 
-    // 🚀 NEW: Handled Error & Loading States smoothly
+    return ValueListenableBuilder<WeatherModel?>(
+      valueListenable: WeatherService.currentWeather,
+      builder: (context, globalWeather, child) {
+        if (globalWeather != null) {
+          _weather = globalWeather;
+          _isLoading = false;
+          _hasError = false;
+        }
+
+        // 🚀 NEW: Handled Error & Loading States smoothly
     if (_isLoading || _hasError || _weather == null) {
       return RidelBounceButton(
-          onTap: _hasError ? _handleTap : null, // Tap to retry
+          onTap: () async {
+            if (_hasError || _weather == null) {
+              // 🚀 PHASE 8: Interactive Permission Hook
+              bool granted = await locService.requireLocationForMapServices(context);
+              if (granted) {
+                if (mounted) setState(() { _isLoading = true; });
+                _resolveLocationAndFetchWeather();
+              } else {
+                _resolveLocationAndFetchWeather(); // Retry city fallback
+              }
+            }
+          },
           scaleFactor: 0.95,
           child: Container(
             width: _compactWidth,
@@ -300,24 +324,37 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                         width: 1.0),
                   ),
                   child: Center(
-                      child: _hasError
-                          ? Column(
+                      child: _isLoading 
+                          ? CupertinoActivityIndicator(color: isLightMode ? Colors.black54 : Colors.white, radius: 10)
+                          : Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.refresh_rounded,
-                                    color: isLightMode ? Colors.black54 : Colors.white54, size: 24),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.cloud_outlined,
+                                        color: isLightMode ? Colors.black54 : Colors.white60, size: 20),
+                                    const SizedBox(width: 4),
+                                    Text("--°",
+                                        style: GoogleFonts.inter(
+                                            color: isLightMode ? Colors.black54 : Colors.white60,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 20,
+                                            height: 1.0)),
+                                  ],
+                                ),
+                                const SizedBox(height: 5),
                                 Text(
-                                  displayCity == "Locating..." ? "Location\nRequired" : "Fetch Failed",
+                                  "Weather",
                                   textAlign: TextAlign.center,
                                   style: GoogleFonts.inter(
-                                      color: isLightMode ? Colors.black54 : Colors.white54,
-                                      fontSize: 10,
+                                      color: isLightMode ? Colors.black38 : Colors.white38,
+                                      fontSize: 11,
                                       height: 1.1,
-                                      fontWeight: FontWeight.w600)),
+                                      fontWeight: FontWeight.w500)),
                               ],
-                            )
-                          : CupertinoActivityIndicator(
-                              color: isLightMode ? Colors.black54 : Colors.white, radius: 10)),
+                            )),
                 ),
               ),
             ),
@@ -437,6 +474,8 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
           ),
         ),
       );
+      },
+    );
   }
 
   Widget _buildCompactView(bool isNight, bool isLightMode) {

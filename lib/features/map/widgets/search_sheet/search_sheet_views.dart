@@ -333,7 +333,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                 final listView = ListView.builder(
                                   padding: EdgeInsets.zero,
                                   shrinkWrap: !isExpandedList,
-                                  physics: const ClampingScrollPhysics(),
+                                  physics: const BouncingScrollPhysics(),
                                   itemCount: provider.recentSearches.length,
                                   itemBuilder: (context, index) {
                                     final place =
@@ -565,11 +565,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                 );
                                 return isExpandedList
                                     ? Expanded(child: listView)
-                                    : ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                            maxHeight: 320),
-                                        child: listView,
-                                      );
+                                    : listView;
                               },
                             ),
                     ],

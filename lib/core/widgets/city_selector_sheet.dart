@@ -69,16 +69,22 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
         // API failed (500, 404), use fallback
         _masterRegions = _fallbackRegions;
       }
+    } on http.ClientException catch (e) {
+      debugPrint('HTTP Client/CORS Error: $e');
+      _masterRegions = _fallbackRegions;
+    } on TimeoutException catch (e) {
+      debugPrint('Timeout Error: $e');
+      _masterRegions = _fallbackRegions;
     } catch (e) {
-      debugPrint('API Error/CORS failed, using Offline Fallback: $e');
+      debugPrint('API Error failed, using Offline Fallback: $e');
       // 🚀 Network Error (CORS on Web), use fallback
       _masterRegions = _fallbackRegions;
     } finally {
       if (mounted) {
         setState(() {
-          _searchResults = List.from(_masterRegions);
           _isLoading = false;
         });
+        _searchCityLive('');
       }
     }
   }
@@ -91,19 +97,45 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
 
   void _searchCityLive(String query) {
     if (query.isEmpty) {
-      setState(() => _searchResults = List.from(_masterRegions));
+      setState(() {
+        _searchResults = _masterRegions.map((r) {
+          final map = Map<String, dynamic>.from(r as Map);
+          map['type'] = 'region';
+          return map;
+        }).toList();
+      });
       return;
     }
 
     final q = query.toLowerCase();
+    final List<dynamic> flatResults = [];
+
+    for (final region in _masterRegions) {
+      final regionMap = region as Map<String, dynamic>? ?? {};
+      final regionName = regionMap['display_name']?.toString() ?? '';
+      
+      if (regionName.toLowerCase().contains(q)) {
+        final map = Map<String, dynamic>.from(regionMap);
+        map['type'] = 'region';
+        flatResults.add(map);
+      }
+
+      final coveredCities = regionMap['covered_cities'] as List? ?? [];
+      for (final city in coveredCities) {
+        final cityString = city.toString();
+        if (cityString.toLowerCase().contains(q)) {
+          flatResults.add({
+            'type': 'sub_city',
+            'city_name': cityString,
+            'region_id': regionMap['region_id'],
+            'region_name': regionName,
+          });
+        }
+      }
+    }
+
     setState(() {
-      _searchResults = _masterRegions.where((region) {
-        final matchesName =
-            region['display_name'].toString().toLowerCase().contains(q);
-        final matchesSubCity = (region['covered_cities'] as List)
-            .any((city) => city.toString().toLowerCase().contains(q));
-        return matchesName || matchesSubCity;
-      }).toList();
+      _searchResults = flatResults;
     });
   }
 
@@ -224,14 +256,40 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
     }
   }
 
-  void _onRegionSelected(dynamic region) async {
+  dynamic _selectedRegion; // 🚀 PHASE 7: Tracking selected region for sub-cities
+
+  void _onRegionSelected(dynamic region) {
     AppHaptics.selectionClick();
     
-    ProfileRepository.userCity.value = region['display_name']?.toString() ?? '';
+    final coveredCities = region['covered_cities'] as List?;
+    if (coveredCities != null && coveredCities.isNotEmpty) {
+      setState(() {
+        _selectedRegion = region;
+      });
+    } else {
+      // Fallback if no sub-cities are defined
+      _finalizeCitySelection(region['display_name']?.toString() ?? '', region['region_id']?.toString() ?? '');
+    }
+  }
+
+  void _onSubCitySelected(String subCity) {
+    AppHaptics.selectionClick();
     
-    await DatabaseHelper.instance.switchCity(region['region_id']?.toString() ?? '');
+    // Capitalize properly: "new delhi" -> "New Delhi"
+    String displayCity = subCity.split(' ').map((word) => word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1)}' : '').join(' ');
     
-    if (mounted) Navigator.pop(context);
+    _finalizeCitySelection(displayCity, _selectedRegion['region_id']?.toString() ?? '');
+  }
+
+  Future<void> _finalizeCitySelection(String displayCity, String regionId) async {
+    ProfileRepository.userCity.value = displayCity;
+    await DatabaseHelper.instance.switchCity(regionId);
+    
+    if (mounted) {
+      final locService = Provider.of<GlobalLocationService>(context, listen: false);
+      locService.setMockLocationForCity(displayCity);
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -245,116 +303,147 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            height: 52,
-            padding: const EdgeInsets.only(left: 16, right: 8),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E2129) : Colors.white,
-              borderRadius: BorderRadius.circular(100),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.12)
-                    : Colors.black.withValues(alpha: 0.05),
-                width: 1.0,
+          // 🚀 SHOW BACK BUTTON IF REGION SELECTED
+          if (_selectedRegion != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () {
+                    AppHaptics.lightImpact();
+                    setState(() => _selectedRegion = null);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white70 : Colors.black87, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Back to Regions',
+                          style: GoogleFonts.inter(color: isDark ? Colors.white70 : Colors.black87, fontWeight: FontWeight.w600, fontSize: 15),
+                        )
+                      ],
+                    ),
+                  ),
+                ),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                )
-              ],
             ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.search_rounded,
-                  size: 20,
-                  color: isDark ? Colors.white54 : Colors.black54,
+
+          if (_selectedRegion == null) ...[
+            Container(
+              height: 52,
+              padding: const EdgeInsets.only(left: 16, right: 8),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E2129) : Colors.white,
+                borderRadius: BorderRadius.circular(100),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : Colors.black.withValues(alpha: 0.05),
+                  width: 1.0,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    onChanged: _searchCityLive,
-                    style: GoogleFonts.inter(
-                      color: textColor,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    cursorColor: accentColor,
-                    decoration: InputDecoration(
-                      hintText: 'Search city (e.g., Noida)...',
-                      hintStyle: GoogleFonts.inter(
-                        color: isDark ? Colors.white54 : Colors.black54,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w400,
-                      ),
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                ),
-                if (_searchCtrl.text.isNotEmpty)
-                  GestureDetector(
-                    onTap: () {
-                      AppHaptics.lightImpact();
-                      _searchCtrl.clear();
-                      _searchCityLive('');
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: const BoxDecoration(
-                        color: Colors.transparent,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.close_rounded,
-                        color: isDark ? Colors.white54 : Colors.black54,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 28),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              AppHaptics.heavyImpact();
-              unawaited(_handleGpsSelection());
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  )
+                ],
+              ),
               child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: accentColor.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.my_location_rounded,
-                        color: accentColor, size: 20),
+                  Icon(
+                    Icons.search_rounded,
+                    size: 20,
+                    color: isDark ? Colors.white54 : Colors.black54,
                   ),
-                  const SizedBox(width: 16),
-                  Text(
-                    'Auto-detect my region',
-                    style: GoogleFonts.inter(
-                      color: accentColor,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchCtrl,
+                      onChanged: _searchCityLive,
+                      style: GoogleFonts.inter(
+                        color: textColor,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      cursorColor: accentColor,
+                      decoration: InputDecoration(
+                        hintText: 'Search city (e.g., Noida)...',
+                        hintStyle: GoogleFonts.inter(
+                          color: isDark ? Colors.white54 : Colors.black54,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w400,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
                   ),
+                  if (_searchCtrl.text.isNotEmpty)
+                    GestureDetector(
+                      onTap: () {
+                        AppHaptics.lightImpact();
+                        _searchCtrl.clear();
+                        _searchCityLive('');
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: Colors.transparent,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.close_rounded,
+                          color: isDark ? Colors.white54 : Colors.black54,
+                          size: 20,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 32),
+            const SizedBox(height: 28),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _handleGpsSelection,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.my_location_rounded,
+                          color: accentColor, size: 20),
+                    ),
+                    const SizedBox(width: 16),
+                    Text(
+                      'Auto-detect my region',
+                      style: GoogleFonts.inter(
+                        color: accentColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+          ],
           Text(
-            _searchCtrl.text.isEmpty ? 'AVAILABLE REGIONS' : 'SEARCH RESULTS',
+            _selectedRegion != null 
+                ? 'SELECT YOUR CITY IN ${_selectedRegion['display_name'].toString().toUpperCase()}'
+                : _searchCtrl.text.isEmpty ? 'AVAILABLE REGIONS' : 'SEARCH RESULTS',
             style: GoogleFonts.inter(
               color: isDark ? Colors.white54 : Colors.black54,
               fontSize: 11,
@@ -368,7 +457,7 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
                 ? const Center(
                     child: CircularProgressIndicator(color: accentColor),
                   )
-                : _searchResults.isEmpty
+                : (_selectedRegion == null && _searchResults.isEmpty)
                     ? Center(
                         child: Text(
                           'City not available yet',
@@ -382,9 +471,112 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
                             .copyWith(scrollbars: false),
                         child: ListView.builder(
                           physics: const BouncingScrollPhysics(),
-                          itemCount: _searchResults.length,
+                          itemCount: _selectedRegion != null 
+                              ? (_selectedRegion['covered_cities'] as List).length 
+                              : _searchResults.length,
                           itemBuilder: (context, index) {
-                            final region = _searchResults[index];
+                            
+                            // 🚀 SUB-CITY LISTING
+                            if (_selectedRegion != null) {
+                              final subCity = (_selectedRegion['covered_cities'] as List)[index] as String;
+                              String displaySubCity = subCity.split(' ').map((word) => word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1)}' : '').join(' ');
+                              
+                              return Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () => _onSubCitySelected(subCity),
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14, horizontal: 8),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.place_rounded,
+                                          color: isDark ? Colors.white24 : Colors.black26,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Expanded(
+                                          child: Text(
+                                            displaySubCity,
+                                            style: GoogleFonts.inter(
+                                              color: textColor,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+
+                            final item = _searchResults[index];
+                            final bool isSubCity = item is Map && item['type'] == 'sub_city';
+
+                            if (isSubCity) {
+                              final subCityName = item['city_name'] as String;
+                              final displaySubCity = subCityName.split(' ').map((word) => word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1)}' : '').join(' ');
+                              
+                              return Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () {
+                                    AppHaptics.selectionClick();
+                                    _finalizeCitySelection(displaySubCity, item['region_id'].toString());
+                                  },
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14, horizontal: 8),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.location_on_rounded,
+                                          color: isDark ? Colors.white24 : Colors.black26,
+                                          size: 24,
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                displaySubCity,
+                                                style: GoogleFonts.inter(
+                                                  color: textColor,
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                "In ${item['region_name']}",
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 13,
+                                                  color: isDark
+                                                      ? Colors.white54
+                                                      : Colors.black54,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+
+                            // 🚀 MASTER REGION LISTING
+                            final region = item;
                             return Material(
                               color: Colors.transparent,
                               child: InkWell(

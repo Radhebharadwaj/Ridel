@@ -20,18 +20,24 @@ class MapCameraController {
   MapCameraState state = MapCameraState.free;
   CameraMode currentMode = CameraMode.explore;
 
+  final ValueNotifier<bool> isUserPanning = ValueNotifier(false);
+  Timer? _recenterTimer;
+  double _currentBearing = 0.0;
+  double _currentZoom = 18.0; // Base zoom
+  double _currentPitch = 45.0;
+
   String? _lastError;
 
-  Circle? _userLocationDot;
+  Symbol? _userLocationPuck;
   Circle? _userLocationHalo;
   double _blueDotOpacity = 1.0;
 
   void setBlueDotOpacity(double opacity) {
     _blueDotOpacity = opacity;
-    if (_userLocationDot != null && _userLocationHalo != null && _currentDotPos != null) {
+    if (_userLocationPuck != null && _userLocationHalo != null && _currentDotPos != null) {
       try {
         map.updateCircle(_userLocationHalo!, CircleOptions(circleOpacity: 0.25 * opacity));
-        map.updateCircle(_userLocationDot!, CircleOptions(circleOpacity: 1.0 * opacity, circleStrokeOpacity: 1.0 * opacity));
+        map.updateSymbol(_userLocationPuck!, SymbolOptions(iconOpacity: 1.0 * opacity));
       } catch (_) {}
     }
   }
@@ -61,6 +67,38 @@ class MapCameraController {
   void onUserPanGesture() {
     cancelAnimations();
     state = MapCameraState.free;
+    setUserPanning(true);
+
+    final cam = map.cameraPosition;
+    if (cam != null) {
+      _currentZoom = cam.zoom;
+      _currentPitch = cam.tilt;
+      _currentBearing = cam.bearing;
+    }
+  }
+
+  void setUserPanning(bool value) {
+    if (value) {
+      isUserPanning.value = true;
+      _recenterTimer?.cancel();
+      _recenterTimer = Timer(const Duration(seconds: 10), () {
+        isUserPanning.value = false;
+        state = MapCameraState.heading;
+        if (currentMode == CameraMode.driving && locService.currentPosition != null) {
+          final pos = locService.currentPosition!;
+          animateCameraCinematic(
+            center: _calculateLookAhead(LatLng(pos.latitude, pos.longitude), _currentBearing, _currentZoom),
+            zoom: _currentZoom,
+            bearing: _currentBearing,
+            pitch: _currentPitch
+          );
+        }
+      });
+    } else {
+      isUserPanning.value = false;
+      _recenterTimer?.cancel();
+      state = MapCameraState.heading;
+    }
   }
 
   void cancelAnimations() {
@@ -85,6 +123,8 @@ class MapCameraController {
 
   void dispose() {
     cancelAnimations();
+    isUserPanning.dispose();
+    _recenterTimer?.cancel();
     _cameraTicker?.dispose();
     _blueDotTicker?.dispose();
     _cameraTicker = null;
@@ -94,14 +134,14 @@ class MapCameraController {
       if (_userLocationHalo != null) {
         map.removeCircle(_userLocationHalo!);
       }
-      if (_userLocationDot != null) {
-        map.removeCircle(_userLocationDot!);
+      if (_userLocationPuck != null) {
+        map.removeSymbol(_userLocationPuck!);
       }
     } catch (_) {}
   }
 
   SpringSimulation _createSim(double start, double end, double velocity,
-      {double stiffness = 45.0, double damping = 12.0}) {
+      {double stiffness = 30.0, double damping = 14.0}) {
     return SpringSimulation(
       SpringDescription(mass: 1.0, stiffness: stiffness, damping: damping),
       start,
@@ -165,7 +205,7 @@ class MapCameraController {
 
   void _onBlueDotTick(Duration elapsed) {
     if (_dotLatSim == null ||
-        _userLocationDot == null ||
+        _userLocationPuck == null ||
         _userLocationHalo == null) {
       return;
     }
@@ -182,8 +222,8 @@ class MapCameraController {
       try {
         map.updateCircle(
             _userLocationHalo!, CircleOptions(geometry: _currentDotPos));
-        map.updateCircle(
-            _userLocationDot!, CircleOptions(geometry: _currentDotPos));
+        map.updateSymbol(
+            _userLocationPuck!, SymbolOptions(geometry: _currentDotPos));
       } catch (_) {}
     }
 
@@ -255,8 +295,40 @@ class MapCameraController {
     return R * (2 * atan2(sqrt(a), sqrt(1 - a)));
   }
 
+  LatLng _calculateLookAhead(LatLng source, double bearing, double zoom) {
+    const double R = 6371000.0; // Earth's radius in meters
+    double distance = (19.0 - zoom).clamp(0.0, 10.0) * 40.0;
+
+    double lat1 = source.latitude * (pi / 180);
+    double lon1 = source.longitude * (pi / 180);
+    double brng = bearing * (pi / 180);
+
+    double lat2 = asin(sin(lat1) * cos(distance / R) +
+        cos(lat1) * sin(distance / R) * cos(brng));
+    double lon2 = lon1 + atan2(sin(brng) * sin(distance / R) * cos(lat1),
+        cos(distance / R) - sin(lat1) * sin(lat2));
+
+    return LatLng(lat2 * (180 / pi), lon2 * (180 / pi));
+  }
+
   Future<void> setCameraForMode(CameraMode mode) async {
     currentMode = mode;
+    
+    if (mode == CameraMode.explore || mode == CameraMode.transit) {
+      if (_userLocationPuck != null) {
+        try {
+          map.removeSymbol(_userLocationPuck!);
+        } catch (_) {}
+        _userLocationPuck = null;
+      }
+      if (_userLocationHalo != null) {
+        try {
+          map.removeCircle(_userLocationHalo!);
+        } catch (_) {}
+        _userLocationHalo = null;
+      }
+    }
+
     final cam = map.cameraPosition;
 
     switch (mode) {
@@ -277,10 +349,6 @@ class MapCameraController {
 
       case CameraMode.driving:
         state = MapCameraState.heading;
-        if (cam != null) {
-          await animateCameraCinematic(
-              center: cam.target, zoom: 17.8, pitch: 60.0);
-        }
 
         if (!kIsWeb) {
           map.updateMyLocationTrackingMode(
@@ -294,18 +362,27 @@ class MapCameraController {
           Position? pos = locService.currentPosition;
           if (pos != null) {
             await animateCameraCinematic(
-                center: LatLng(pos.latitude, pos.longitude),
-                zoom: 17.8,
-                pitch: 60.0,
+                center: _calculateLookAhead(LatLng(pos.latitude, pos.longitude), pos.heading, _currentZoom),
+                zoom: _currentZoom,
+                pitch: _currentPitch,
                 bearing: pos.heading);
+          } else if (cam != null) {
+            await animateCameraCinematic(
+                center: cam.target, zoom: _currentZoom, pitch: _currentPitch);
           }
         } catch (_) {}
         break;
     }
   }
 
-  Future<void> processLocationUpdate(Position newPos) async {
+  Future<void> processLocationUpdate(Position newPos, {bool isSimulated = false}) async {
     final latLng = LatLng(newPos.latitude, newPos.longitude);
+
+    double targetHeading = newPos.heading >= 0 ? newPos.heading : _currentBearing;
+    double diff = targetHeading - _currentBearing;
+    diff = ((diff + 540) % 360) - 180;
+    _currentBearing += diff * 0.04;
+    _currentBearing = (_currentBearing + 360) % 360;
 
     bool shouldUpdatePos = true;
     if (_currentDotPos != null) {
@@ -317,19 +394,27 @@ class MapCameraController {
     }
 
     if (shouldUpdatePos) {
-      await _drawOrUpdateCustomBlueDot(latLng);
+      await _drawOrUpdateCustomBlueDot(latLng, isSimulated: isSimulated, heading: _currentBearing);
     }
 
-    if (currentMode != CameraMode.driving || state != MapCameraState.heading) {
+    if (currentMode != CameraMode.driving) {
       return;
     }
 
-    final safeCenter = _currentDotPos ?? latLng;
-    final targetCenter = shouldUpdatePos ? latLng : safeCenter;
+    double speedKmh = newPos.speed >= 0 ? newPos.speed * 3.6 : 0.0;
+    double targetZoom = (18.5 - (speedKmh / 100) * 4.5).clamp(14.0, 18.5);
+    _currentZoom += (targetZoom - _currentZoom) * 0.025;
 
-    // Smooth camera follow update
-    await animateCameraCinematic(
-        center: targetCenter, bearing: newPos.heading, zoom: 17.8, pitch: 60.0);
+    double targetPitch = (35.0 + (speedKmh / 80) * 35.0).clamp(35.0, 70.0);
+    _currentPitch += (targetPitch - _currentPitch) * 0.025;
+
+    if (!isUserPanning.value && state == MapCameraState.heading) {
+      final targetCenter = _calculateLookAhead(_currentDotPos ?? latLng, _currentBearing, _currentZoom);
+
+      // Smooth camera follow update
+      await animateCameraCinematic(
+          center: targetCenter, bearing: _currentBearing, zoom: _currentZoom, pitch: _currentPitch);
+    }
   }
 
   void resetCompass() {
@@ -376,7 +461,8 @@ class MapCameraController {
 
     final userPos = LatLng(locService.currentPosition!.latitude,
         locService.currentPosition!.longitude);
-    await _drawOrUpdateCustomBlueDot(userPos, ignoreThrottle: true);
+    double heading = locService.currentPosition!.heading >= 0 ? locService.currentPosition!.heading : _currentBearing;
+    await _drawOrUpdateCustomBlueDot(userPos, ignoreThrottle: true, heading: heading);
 
     double targetTilt = is3DMode ? 45.0 : 0.0;
 
@@ -395,28 +481,49 @@ class MapCameraController {
             MyLocationTrackingMode.trackingCompass);
       }
     }
+
+    if (currentMode == CameraMode.explore) {
+      if (_userLocationPuck != null) {
+        try {
+          map.removeSymbol(_userLocationPuck!);
+        } catch (_) {}
+        _userLocationPuck = null;
+      }
+      if (_userLocationHalo != null) {
+        try {
+          map.removeCircle(_userLocationHalo!);
+        } catch (_) {}
+        _userLocationHalo = null;
+      }
+    }
   }
 
   Future<void> _drawOrUpdateCustomBlueDot(LatLng pos,
-      {bool ignoreThrottle = false}) async {
-    if (_userLocationDot == null || _userLocationHalo == null) {
+      {bool ignoreThrottle = false, bool isSimulated = false, double heading = 0.0}) async {
+    if (currentMode != CameraMode.driving && !isSimulated && !ignoreThrottle) {
+      return;
+    }
+
+    double targetPuckOpacity = isSimulated ? 0.4 : 1.0;
+    double targetHaloRadius = isSimulated ? 45.0 : 0.0; // Hidden when normal, expanded when GPS lost
+    double targetHaloOpacity = isSimulated ? 0.15 : 0.0;
+
+    if (_userLocationPuck == null || _userLocationHalo == null) {
       _currentDotPos = pos;
       try {
         _userLocationHalo = await map.addCircle(CircleOptions(
           geometry: pos,
-          circleRadius: 18.0,
+          circleRadius: targetHaloRadius,
           circleColor: "#007AFF",
-          circleOpacity: 0.25 * _blueDotOpacity,
+          circleOpacity: targetHaloOpacity * _blueDotOpacity,
         ));
 
-        _userLocationDot = await map.addCircle(CircleOptions(
+        _userLocationPuck = await map.addSymbol(SymbolOptions(
           geometry: pos,
-          circleRadius: 7.0,
-          circleColor: "#007AFF",
-          circleOpacity: 1.0 * _blueDotOpacity,
-          circleStrokeWidth: 2.5,
-          circleStrokeColor: "#FFFFFF",
-          circleStrokeOpacity: 1.0 * _blueDotOpacity,
+          iconImage: "assets/images/nav_puck.png",
+          iconSize: 1.0,
+          iconOpacity: targetPuckOpacity * _blueDotOpacity,
+          iconRotate: heading,
         ));
       } catch (e) {
         debugPrint("Failed to draw custom blue dot: $e");
@@ -428,11 +535,32 @@ class MapCameraController {
       _currentDotPos = pos;
       try {
         await map.updateCircle(
-            _userLocationHalo!, CircleOptions(geometry: pos));
-        await map.updateCircle(_userLocationDot!, CircleOptions(geometry: pos));
+            _userLocationHalo!, CircleOptions(
+              geometry: pos,
+              circleRadius: targetHaloRadius,
+              circleOpacity: targetHaloOpacity * _blueDotOpacity,
+            ));
+        await map.updateSymbol(_userLocationPuck!, SymbolOptions(
+              geometry: pos,
+              iconOpacity: targetPuckOpacity * _blueDotOpacity,
+              iconRotate: heading,
+            ));
       } catch (_) {}
       return;
     }
+
+    // Update opacity/radius even if not ignoreThrottle, as animation tick won't update those
+    try {
+      map.updateCircle(
+          _userLocationHalo!, CircleOptions(
+            circleRadius: targetHaloRadius,
+            circleOpacity: targetHaloOpacity * _blueDotOpacity,
+          ));
+      map.updateSymbol(_userLocationPuck!, SymbolOptions(
+            iconOpacity: targetPuckOpacity * _blueDotOpacity,
+            iconRotate: heading,
+          ));
+    } catch (_) {}
 
     // Continuous Frame Interpolation for Blue Dot
     final currentLat =

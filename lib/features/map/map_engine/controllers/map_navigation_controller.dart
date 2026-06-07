@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:isolate';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:geolocator/geolocator.dart';
@@ -21,6 +22,8 @@ class MapNavigationController {
   final ValueNotifier<double> remainingDuration = ValueNotifier(0.0);
   final ValueNotifier<int> currentStepIndexNotifier = ValueNotifier(0);
   final ValueNotifier<String?> maneuverIcon = ValueNotifier(null);
+  final ValueNotifier<String?> voiceInstruction = ValueNotifier(null);
+  final ValueNotifier<List<LatLng>> remainingPolyline = ValueNotifier([]);
 
   // 🧭 Compass & Bearing States
   final ValueNotifier<double> currentBearing = ValueNotifier(0.0);
@@ -31,6 +34,11 @@ class MapNavigationController {
 
   // 🚨 NEW — Off-Route State (for reroute UI overlay)
   final ValueNotifier<bool> isOffRoute = ValueNotifier(false);
+
+  // 📡 NEW — Dead Reckoning State
+  DateTime? _lastRealGpsTime;
+  Timer? _heartbeatTimer;
+  final ValueNotifier<bool> isGpsLost = ValueNotifier(false);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 🧠 INTERNAL STATE
@@ -45,7 +53,7 @@ class MapNavigationController {
   List<LatLng> _stepStartLocations = []; // Needed for step boundary mapping
   List<LatLng> _stepEndLocations = [];
   List<double> _stepDistances = [];
-  List<double> _stepDurations = [];
+  final Set<int> _spokenMilestones = {};
 
   // ───── 🚀 NEW — Local Windowing State ─────
   /// Current start index of the sliding window over the polyline.
@@ -65,6 +73,9 @@ class MapNavigationController {
 
   // ───── External Controllers ─────
   MapCameraController? _cameraController;
+
+  double _smoothedSpeed = -1.0;
+  double _averageRouteSpeed = 5.0; // Base fallback (approx 18 km/h)
 
   // ───── Off-route detection ─────
   bool _isRerouting = false;
@@ -87,6 +98,18 @@ class MapNavigationController {
     _consecutiveOffRouteTicks = 0;
     _snapResult.reset();
     isOffRoute.value = false;
+    _lastRealGpsTime = DateTime.now();
+    _startGpsHeartbeat();
+
+    final double routeDistanceMeters = route.distanceKm * 1000.0;
+    final double routeDurationSeconds = route.durationMins * 60.0;
+    _averageRouteSpeed = (routeDistanceMeters > 0 && routeDurationSeconds > 0) 
+        ? (routeDistanceMeters / routeDurationSeconds) 
+        : 5.0;
+    _smoothedSpeed = -1.0;
+
+    remainingDistance.value = routeDistanceMeters;
+    remainingDuration.value = routeDurationSeconds;
 
     // 🚀 Safely cast List<dynamic> to List<Map<String, dynamic>>
     final List<Map<String, dynamic>> rawSteps =
@@ -98,7 +121,6 @@ class MapNavigationController {
     _parsedInstructions = parsed.instructions;
     _maneuverIcons = parsed.maneuverIcons;
     _stepDistances = parsed.stepDistances;
-    _stepDurations = parsed.stepDurations;
 
     // 🚀 Reconstruct LatLng on Main Thread (safe from Isolate memory restrictions)
     _stepStartLocations = List.generate(parsed.startLatitudes.length,
@@ -113,11 +135,18 @@ class MapNavigationController {
     );
 
     _updateNavigationNotifiers();
+    if (_stepDistances.isNotEmpty) distanceToNextTurn.value = _stepDistances.first;
+    remainingPolyline.value = route.coordinates;
+    if (route.coordinates.isNotEmpty) {
+      snappedPosition.value = route.coordinates.first;
+    }
     isNavigating.value = true;
     _cameraController?.setCameraForMode(CameraMode.driving);
   }
 
   void stopNavigation() {
+    _heartbeatTimer?.cancel();
+    isGpsLost.value = false;
     isNavigating.value = false;
     isOffRoute.value = false;
     snappedPosition.value = null;
@@ -130,10 +159,11 @@ class MapNavigationController {
     _stepStartLocations.clear();
     _stepEndLocations.clear();
     _stepDistances.clear();
-    _stepDurations.clear();
     _stepBoundaries.clear();
+    _spokenMilestones.clear();
     _isRerouting = false;
     _snapResult.reset();
+    remainingPolyline.value = [];
 
     _cameraController?.setCameraForMode(CameraMode.explore);
   }
@@ -142,7 +172,12 @@ class MapNavigationController {
   // ⚡ THE 60 FPS LOCATION LOOP — HOT PATH
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Future<void> processLocationUpdate(Position userPos) async {
+  Future<void> processLocationUpdate(Position userPos, {bool isSimulated = false}) async {
+    if (!isSimulated) {
+      _lastRealGpsTime = DateTime.now();
+      isGpsLost.value = false;
+    }
+
     if (!isNavigating.value ||
         _activeRoute == null ||
         _parsedInstructions.isEmpty) {
@@ -203,6 +238,12 @@ class MapNavigationController {
 
       if (newStepIndex != _currentStepIndex &&
           newStepIndex < _parsedInstructions.length) {
+        _spokenMilestones.clear();
+        final double initialStepDist = _stepDistances[newStepIndex];
+        if (initialStepDist < 1000) _spokenMilestones.add(1000);
+        if (initialStepDist < 500) _spokenMilestones.add(500);
+        if (initialStepDist < 200) _spokenMilestones.add(200);
+        if (initialStepDist < 50) _spokenMilestones.add(50);
         _currentStepIndex = newStepIndex;
         _updateNavigationNotifiers();
       }
@@ -217,12 +258,23 @@ class MapNavigationController {
       _snapResult.alongTrackFraction,
     );
     remainingDistance.value = remDist;
+    remainingPolyline.value = [snappedPosition.value!, ...polyline.sublist(_snapResult.segmentIndex + 1)];
 
     // Null-safe speed fallback
     final double currentSpeed = userPos.speed >= 0 ? userPos.speed : 0.0;
+
+    if (_smoothedSpeed < 0) {
+      _smoothedSpeed = currentSpeed > 0 ? currentSpeed : _averageRouteSpeed;
+    } else {
+      final double alpha = currentSpeed > _smoothedSpeed ? 0.2 : 0.05;
+      _smoothedSpeed = (currentSpeed * alpha) + (_smoothedSpeed * (1 - alpha));
+    }
+
+    final double effectiveSpeedForEta = max(_smoothedSpeed, 2.0); // 2.0 m/s is ~7.2 km/h (slow walking/crawling traffic).
+
     remainingDuration.value = RoutingService.estimateRemainingTime(
       remDist,
-      currentSpeed,
+      effectiveSpeedForEta,
     );
 
     // Distance to next turn = distance from snapped position to current step end
@@ -233,22 +285,32 @@ class MapNavigationController {
         _stepEndLocations[_currentStepIndex].latitude,
         _stepEndLocations[_currentStepIndex].longitude,
       );
+      if (_currentStepIndex < _parsedInstructions.length) {
+        _checkAndTriggerVoice(distanceToNextTurn.value, _parsedInstructions[_currentStepIndex]);
+      }
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // 🎯 STEP 7: Arrival Detection
     // ─────────────────────────────────────────────────────────────────────
-    if (remDist < 25.0) {
-      currentInstruction.value = "You have arrived!";
+    if (remDist < 25.0 && _currentStepIndex >= _parsedInstructions.length - 1) {
+      if (isGpsLost.value == true) {
+        currentInstruction.value = "Near destination. GPS signal lost.";
+        voiceInstruction.value = "You are near your destination, but GPS signal is lost.";
+      } else {
+        currentInstruction.value = "You have arrived!";
+        voiceInstruction.value = "You have arrived at your destination.";
+      }
       remainingDistance.value = 0.0;
       distanceToNextTurn.value = 0.0;
+      remainingDuration.value = 0.0;
       // Don't auto-stop — let the UI handle the arrival UX.
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // 🎯 STEP 8: Camera Follow (using snapped position + segment bearing)
     // ─────────────────────────────────────────────────────────────────────
-    await _cameraController?.processLocationUpdate(userPos);
+    await _cameraController?.processLocationUpdate(userPos, isSimulated: isSimulated);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -298,11 +360,31 @@ class MapNavigationController {
     }
   }
 
+  void _checkAndTriggerVoice(double distanceMeters, String instruction) {
+    final milestones = [1000, 500, 200, 50]; // meters
+    for (final milestone in milestones) {
+      if (distanceMeters <= milestone && !_spokenMilestones.contains(milestone)) {
+        _spokenMilestones.add(milestone);
+        String formattedText;
+        if (milestone == 1000) {
+          formattedText = "In 1 kilometer, $instruction";
+        } else if (milestone == 50) {
+          formattedText = "Turn soon: $instruction";
+        } else {
+          formattedText = "In $milestone meters, $instruction";
+        }
+        voiceInstruction.value = formattedText;
+        break;
+      }
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // 🧹 LIFECYCLE
   // ═══════════════════════════════════════════════════════════════════════════
 
   void dispose() {
+    _heartbeatTimer?.cancel();
     stopNavigation();
     isNavigating.dispose();
     currentInstruction.dispose();
@@ -311,10 +393,104 @@ class MapNavigationController {
     remainingDuration.dispose();
     currentStepIndexNotifier.dispose();
     maneuverIcon.dispose();
+    voiceInstruction.dispose();
     currentBearing.dispose();
     isDeviatedFromNorth.dispose();
     snappedPosition.dispose();
     isOffRoute.dispose();
+    isGpsLost.dispose();
+    remainingPolyline.dispose();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 📡 DEAD RECKONING ENGINE (Tunnel Mode)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  void _startGpsHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_lastRealGpsTime != null) {
+        final int age = DateTime.now().difference(_lastRealGpsTime!).inSeconds;
+        if (age > 10) {
+          isGpsLost.value = true;
+          _simulateLocation();
+        }
+      }
+    });
+  }
+
+  void _simulateLocation() {
+    if (!isNavigating.value || _activeRoute == null) return;
+    
+    final LatLng? startLoc = snappedPosition.value;
+    if (startLoc == null) return;
+
+    if (_smoothedSpeed <= 0.5) {
+      final Position stoppedPos = Position(
+        longitude: startLoc.longitude,
+        latitude: startLoc.latitude,
+        timestamp: DateTime.now(),
+        accuracy: 10.0,
+        altitude: 0.0,
+        altitudeAccuracy: 0.0,
+        heading: _snapResult.segmentBearing,
+        headingAccuracy: 0.0,
+        speed: 0.0,
+        speedAccuracy: 0.0,
+        isMocked: true,
+      );
+      processLocationUpdate(stoppedPos, isSimulated: true);
+      return;
+    }
+
+    double moveDist = _smoothedSpeed * 1.0;
+    final List<LatLng> polyline = _activeRoute!.coordinates;
+    int idx = _snapResult.segmentIndex;
+    LatLng current = startLoc;
+    double remainingMove = moveDist;
+
+    while (idx < polyline.length - 1 && remainingMove > 0) {
+      final LatLng pNext = polyline[idx + 1];
+      final double distToNext = RoutingService.haversine(
+        current.latitude, current.longitude, pNext.latitude, pNext.longitude);
+      
+      if (remainingMove >= distToNext) {
+        remainingMove -= distToNext;
+        current = pNext;
+        idx++;
+      } else {
+        final double bearing = RoutingService.bearing(
+            current.latitude, current.longitude, pNext.latitude, pNext.longitude);
+        
+        const double R = 6371000.0;
+        final double d = remainingMove / R;
+        final double lat1 = current.latitude * pi / 180.0;
+        final double lon1 = current.longitude * pi / 180.0;
+        final double brng = bearing * pi / 180.0;
+        
+        final double lat2 = asin(sin(lat1) * cos(d) + cos(lat1) * sin(d) * cos(brng));
+        final double lon2 = lon1 + atan2(sin(brng) * sin(d) * cos(lat1), cos(d) - sin(lat1) * sin(lat2));
+        
+        current = LatLng(lat2 * 180.0 / pi, lon2 * 180.0 / pi);
+        remainingMove = 0;
+      }
+    }
+
+    final Position mockedPosition = Position(
+      longitude: current.longitude,
+      latitude: current.latitude,
+      timestamp: DateTime.now(),
+      accuracy: 10.0,
+      altitude: 0.0,
+      altitudeAccuracy: 0.0,
+      heading: _snapResult.segmentBearing,
+      headingAccuracy: 0.0,
+      speed: _smoothedSpeed,
+      speedAccuracy: 0.0,
+      isMocked: true,
+    );
+
+    processLocationUpdate(mockedPosition, isSimulated: true);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -331,7 +507,6 @@ class MapNavigationController {
     final endLngs = <double>[];
 
     final stepDistances = <double>[];
-    final stepDurations = <double>[];
 
     for (final step in steps) {
       final raw = step['html_instructions'] as String? ?? 'Continue';
@@ -352,12 +527,10 @@ class MapNavigationController {
 
       stepDistances
           .add((step['distance']?['value'] as num?)?.toDouble() ?? 0.0);
-      stepDurations
-          .add((step['duration']?['value'] as num?)?.toDouble() ?? 0.0);
     }
 
     return _ParsedSteps(instructions, icons, startLats, startLngs, endLats,
-        endLngs, stepDistances, stepDurations);
+        endLngs, stepDistances);
   }
 }
 
@@ -375,7 +548,6 @@ class _ParsedSteps {
   final List<double> endLongitudes;
 
   final List<double> stepDistances;
-  final List<double> stepDurations;
 
   _ParsedSteps(
       this.instructions,
@@ -384,6 +556,5 @@ class _ParsedSteps {
       this.startLongitudes,
       this.endLatitudes,
       this.endLongitudes,
-      this.stepDistances,
-      this.stepDurations);
+      this.stepDistances);
 }

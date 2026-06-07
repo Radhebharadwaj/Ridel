@@ -175,18 +175,18 @@ class _AppHeaderState extends State<AppHeader> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: ValueListenableBuilder<String>(
-              valueListenable: ProfileRepository.userCity,
+            child: ValueListenableBuilder<String?>(
+              valueListenable: context.read<GlobalLocationService>().currentCityName,
               builder: (context, cityName, child) {
-                final displayTitle = _formatCityName(cityName);
+                final displayTitle = cityName != null && cityName.isNotEmpty 
+                    ? _formatCityName(cityName) 
+                    : 'Locating...';
                 final isFake = cityName == "Fake GPS Detected";
 
                 return AnimatedSwitcher(
                   duration: const Duration(milliseconds: 400),
                   reverseDuration: const Duration(milliseconds: 200),
                   switchInCurve: Curves.easeOutBack,
-                  // 🚀 FIX: Invalid 'alignment' parameter hata diya.
-                  // layoutBuilder ka Stack already left align kar raha hai perfectly!
                   layoutBuilder:
                       (Widget? currentChild, List<Widget> previousChildren) {
                     return Stack(

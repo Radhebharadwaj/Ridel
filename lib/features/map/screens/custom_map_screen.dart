@@ -451,7 +451,13 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                   ? MyLocationRenderMode.normal
                   : MyLocationRenderMode.compass,
               trackCameraPosition: true,
-              onCameraTrackingDismissed: _engine.onUserPannedMap,
+              onCameraTrackingDismissed: () {
+                final provider = Provider.of<MapProvider>(context, listen: false);
+                if (provider.isActiveNavigation) {
+                  provider.setAutoTracking(false);
+                }
+                _engine.onUserPannedMap();
+              },
               onMapClick: (point, latlng) async {
                 final mapProvider =
                     Provider.of<MapProvider>(context, listen: false);
@@ -620,11 +626,15 @@ class _CustomMapScreenState extends State<CustomMapScreen>
             child: ValueListenableBuilder<String>(
                 valueListenable: _interactionState,
                 builder: (context, interactionStateValue, child) {
+                  final provider = Provider.of<MapProvider>(context);
                   final bool isTiltingActive = interactionStateValue == "tilt";
+                  
+                  bool showPill = !provider.isActiveNavigation || !provider.isAutoTracking;
+                  
                   double finalControlOpacity =
-                      (isTiltingActive || !showControls) ? 0.0 : buttonOpacity;
+                      (isTiltingActive || !showControls || !showPill) ? 0.0 : buttonOpacity;
                   bool ignoreControls =
-                      isTiltingActive || !showControls || buttonOpacity == 0.0;
+                      isTiltingActive || !showControls || buttonOpacity == 0.0 || !showPill;
 
                   return AnimatedOpacity(
                     duration: const Duration(milliseconds: 200),
@@ -692,8 +702,16 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                                   )
                                 : GestureDetector(
                                     key: const ValueKey('locate_btn'),
-                                    onTap: () =>
-                                        provider.engine.onLocateMeTapped(),
+                                    onTap: () {
+                                      final p = Provider.of<MapProvider>(context, listen: false);
+                                      if (p.currentRouteResult != null && !p.isActiveNavigation) {
+                                        p.start3DNavigation();
+                                      } else if (p.isActiveNavigation && !p.isAutoTracking) {
+                                        p.recenter3DNavigation();
+                                      } else {
+                                        p.engine.onLocateMeTapped();
+                                      }
+                                    },
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(50),
                                       child: BackdropFilter(
@@ -779,15 +797,19 @@ class _CustomMapScreenState extends State<CustomMapScreen>
               child: ValueListenableBuilder<String>(
                   valueListenable: _interactionState,
                   builder: (context, interactionStateValue, child) {
+                    final provider = Provider.of<MapProvider>(context);
                     final bool isTiltingActive =
                         interactionStateValue == "tilt";
+                    
+                    bool showPill = !provider.isActiveNavigation || !provider.isAutoTracking;
+                    
                     double finalControlOpacity =
-                        (isTiltingActive || !showControls)
+                        (isTiltingActive || !showControls || !showPill)
                             ? 0.0
                             : buttonOpacity;
                     bool ignoreControls = isTiltingActive ||
                         !showControls ||
-                        buttonOpacity == 0.0;
+                        buttonOpacity == 0.0 || !showPill;
 
                     return AnimatedOpacity(
                       duration: const Duration(milliseconds: 200),
