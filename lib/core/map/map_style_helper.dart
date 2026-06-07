@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
 // 🚀 NATIVE THEMES ONLY
 enum MapThemeType { light, dark }
 
@@ -12,12 +10,6 @@ class MapStyleHelper {
 
   static Future<String> getOlaStyle(bool isSystemDark,
       {MapThemeType? themeType}) async {
-    final String apiKey = dotenv.env['OLA_MAPS_API_KEY'] ?? '';
-
-    // API Key nahi hai toh seedha fallback
-    if (apiKey.isEmpty) {
-      return _getFallbackStyle(isSystemDark);
-    }
 
     final bool useDark =
         themeType != null ? (themeType == MapThemeType.dark) : isSystemDark;
@@ -35,7 +27,7 @@ class MapStyleHelper {
     }
 
     final String styleUrl =
-        "https://api.olamaps.io/tiles/vector/v1/styles/$styleName/style.json?api_key=$apiKey";
+        "https://ridel.ridel.workers.dev/api/maps/tiles/vector/v1/styles/$styleName/style.json";
 
     try {
       final response = await http
@@ -49,12 +41,12 @@ class MapStyleHelper {
 
       // 1. Sprites & Glyphs URL Fix
       if (styleData['sprite'] != null) {
-        final String s = styleData['sprite'].toString().split('?').first;
-        styleData['sprite'] = "$s?api_key=$apiKey";
+        final String s = styleData['sprite'].toString().split('?').first.replaceAll('https://api.olamaps.io', 'https://ridel.ridel.workers.dev/api/maps');
+        styleData['sprite'] = s;
       }
       if (styleData['glyphs'] != null) {
-        final String g = styleData['glyphs'].toString().split('?').first;
-        styleData['glyphs'] = "$g?api_key=$apiKey";
+        final String g = styleData['glyphs'].toString().split('?').first.replaceAll('https://api.olamaps.io', 'https://ridel.ridel.workers.dev/api/maps');
+        styleData['glyphs'] = g;
       }
 
       // 🚀 2. PRODUCTION-GRADE TILE SANITIZER
@@ -68,10 +60,11 @@ class MapStyleHelper {
                   .toString()
                   .split('?')
                   .first
-                  .replaceAll('.json', '/{z}/{x}/{y}.pbf');
+                  .replaceAll('.json', '/{z}/{x}/{y}.pbf')
+                  .replaceAll('https://api.olamaps.io', 'https://ridel.ridel.workers.dev/api/maps');
 
               source.remove('url');
-              source['tiles'] = ["$baseUrl?api_key=$apiKey"];
+              source['tiles'] = [baseUrl];
               source['minzoom'] = 0;
               source['maxzoom'] = 14;
             }
@@ -81,8 +74,8 @@ class MapStyleHelper {
               final List<dynamic> tiles = source['tiles'];
               for (int i = 0; i < tiles.length; i++) {
                 final String cleanTileUrl =
-                    tiles[i].toString().split('?').first;
-                tiles[i] = "$cleanTileUrl?api_key=$apiKey";
+                    tiles[i].toString().split('?').first.replaceAll('https://api.olamaps.io', 'https://ridel.ridel.workers.dev/api/maps');
+                tiles[i] = cleanTileUrl;
               }
             }
           }

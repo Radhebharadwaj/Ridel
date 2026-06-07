@@ -5,7 +5,6 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:ridel/features/map/models/place_model.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 // =========================================================================
 // 🚀 1. The Unified Data Model (Apple Maps Style Rich Data)
@@ -102,11 +101,8 @@ class PlaceEnrichmentService {
       return _geocodeCache[cacheKey]!;
     }
 
-    final String apiKey = dotenv.env['OLA_MAPS_API_KEY'] ?? '';
-    if (apiKey.isEmpty) return _createFallbackPin(lat, lng);
-
     final url = Uri.parse(
-        'https://api.olamaps.io/places/v1/reverse-geocode?latlng=$lat,$lng&api_key=$apiKey');
+        'https://ridel.ridel.workers.dev/api/maps/places/v1/reverse-geocode?latlng=$lat,$lng');
 
     try {
       final response = await _fetchWithRetry(url);

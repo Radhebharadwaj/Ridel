@@ -8,6 +8,7 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:ridel/core/utils/toast_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -41,6 +42,28 @@ class RidelNotification {
     this.isRead = false,
     this.isSaved = false,
   });
+
+  RidelNotification copyWith({
+    String? id,
+    String? title,
+    String? message,
+    NotificationType? type,
+    DateTime? timestamp,
+    DateTime? expiresAt,
+    bool? isRead,
+    bool? isSaved,
+  }) {
+    return RidelNotification(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      message: message ?? this.message,
+      type: type ?? this.type,
+      timestamp: timestamp ?? this.timestamp,
+      expiresAt: expiresAt ?? this.expiresAt,
+      isRead: isRead ?? this.isRead,
+      isSaved: isSaved ?? this.isSaved,
+    );
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -127,6 +150,28 @@ class NotificationService {
 
       await _autoCleanupExpired();
       await loadNotifications();
+
+      // Foreground FCM Listener
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+        final title = message.notification?.title ?? message.data['title'] ?? 'New Alert';
+        final body = message.notification?.body ?? message.data['body'] ?? 'You have a new message';
+        
+        await NotificationService.saveRemotePushToInbox(title, body, message.data);
+        
+        if (ToastService.navigatorKey.currentContext != null) {
+          ToastService.showInfo(ToastService.navigatorKey.currentContext!, body, title: title);
+        }
+      });
+
+      // 🔔 Auto-subscribe to FCM broadcast topic for all users
+      if (!kIsWeb) {
+        try {
+          await FirebaseMessaging.instance.subscribeToTopic('all_users');
+          debugPrint('🔔 Subscribed to FCM topic: all_users');
+        } catch (e) {
+          debugPrint('⚠️ FCM topic subscription failed: $e');
+        }
+      }
     } catch (e) {
       debugPrint('🚨 Notification DB Load Error: $e');
     }
@@ -186,9 +231,9 @@ class NotificationService {
     final currentList =
         List<RidelNotification>.from(notificationsNotifier.value);
     bool hasChanges = false;
-    for (var n in currentList) {
-      if (!n.isRead) {
-        n.isRead = true;
+    for (int i = 0; i < currentList.length; i++) {
+      if (!currentList[i].isRead) {
+        currentList[i] = currentList[i].copyWith(isRead: true);
         hasChanges = true;
       }
     }
@@ -225,7 +270,7 @@ class NotificationService {
         List<RidelNotification>.from(notificationsNotifier.value);
     final index = currentList.indexWhere((n) => n.id == id);
     if (index != -1) {
-      currentList[index].isSaved = newState;
+      currentList[index] = currentList[index].copyWith(isSaved: newState);
       notificationsNotifier.value = currentList;
     }
 
@@ -286,5 +331,10 @@ class NotificationService {
         List<RidelNotification>.from(notificationsNotifier.value);
     currentList.insert(0, newNotif);
     notificationsNotifier.value = currentList;
+  }
+
+  void dispose() {
+    _notificationTapController.close();
+    notificationsNotifier.dispose();
   }
 }

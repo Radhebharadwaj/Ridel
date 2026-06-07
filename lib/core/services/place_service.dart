@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart'; 
-import 'package:flutter_dotenv/flutter_dotenv.dart'; // 🚀 ADDED: To securely fetch API Key
 import 'package:ridel/features/map/models/place_model.dart';
 
 class PlaceService {
@@ -12,15 +11,7 @@ class PlaceService {
   // 1. PREMIUM SEARCH (Forward Geocoding via Ola Maps)
   // ==========================================================
   Future<List<PlaceModel>> searchPremiumPlaces(String query, {LatLng? userLocation}) async {
-    // 🚀 FIX: Fetch API Key securely from .env
-    final String apiKey = dotenv.env['OLA_MAPS_API_KEY'] ?? '';
-    
-    if (apiKey.isEmpty) {
-      if (kDebugMode) print("⚠️ Ola Maps API Key is missing in .env file.");
-      return [];
-    }
-
-    String urlStr = "https://api.olamaps.io/places/v1/autocomplete?input=${Uri.encodeComponent(query)}&api_key=$apiKey";
+    String urlStr = "https://ridel.ridel.workers.dev/api/maps/places/v1/autocomplete?input=${Uri.encodeComponent(query)}";
     
     final url = Uri.parse(urlStr);
     
@@ -76,10 +67,7 @@ class PlaceService {
   // 3. PLACE DETAILS (Get exact coordinates via Place ID)
   // ==========================================================
   static Future<LatLng?> getPlaceDetails(String placeId) async {
-    final String apiKey = dotenv.env['OLA_MAPS_API_KEY'] ?? '';
-    if (apiKey.isEmpty) return null;
-
-    final url = Uri.parse("https://api.olamaps.io/places/v1/details?place_id=$placeId&api_key=$apiKey");
+    final url = Uri.parse("https://ridel.ridel.workers.dev/api/maps/places/v1/details?place_id=$placeId");
     try {
       final response = await http.get(url).timeout(_timeout);
       if (response.statusCode == 200) {

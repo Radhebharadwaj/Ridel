@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:isolate';
+
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -92,13 +92,17 @@ class MapNavigationController {
   // ═══════════════════════════════════════════════════════════════════════════
 
   Future<void> startNavigation(RouteResult route) async {
+    // Force early camera tilt so the UI responds instantly
+    _cameraController?.setCameraForMode(CameraMode.driving);
+
     _activeRoute = route;
     _currentStepIndex = 0;
     _windowStart = 0;
     _consecutiveOffRouteTicks = 0;
     _snapResult.reset();
     isOffRoute.value = false;
-    _lastRealGpsTime = DateTime.now();
+    isGpsLost.value = false;
+    _lastRealGpsTime = DateTime.now().add(const Duration(seconds: 5));
     _startGpsHeartbeat();
 
     final double routeDistanceMeters = route.distanceKm * 1000.0;
@@ -115,8 +119,8 @@ class MapNavigationController {
     final List<Map<String, dynamic>> rawSteps =
         List<Map<String, dynamic>>.from(route.steps);
 
-    // 🚀 Offload heavy parsing to a background isolate
-    final parsed = await Isolate.run(() => _parseStepsSync(rawSteps));
+    // 🚀 Execute synchronously (Isolate.run crashes on Flutter Web)
+    final parsed = _parseStepsSync(rawSteps);
 
     _parsedInstructions = parsed.instructions;
     _maneuverIcons = parsed.maneuverIcons;
@@ -134,6 +138,12 @@ class MapNavigationController {
       _stepStartLocations,
     );
 
+    // Prime the Top Banner immediately
+    if (_parsedInstructions.isNotEmpty) {
+      currentInstruction.value = _parsedInstructions.first;
+      if (_stepDistances.isNotEmpty) distanceToNextTurn.value = _stepDistances.first;
+    }
+
     _updateNavigationNotifiers();
     if (_stepDistances.isNotEmpty) distanceToNextTurn.value = _stepDistances.first;
     remainingPolyline.value = route.coordinates;
@@ -141,7 +151,6 @@ class MapNavigationController {
       snappedPosition.value = route.coordinates.first;
     }
     isNavigating.value = true;
-    _cameraController?.setCameraForMode(CameraMode.driving);
   }
 
   void stopNavigation() {

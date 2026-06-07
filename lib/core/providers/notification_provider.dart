@@ -9,7 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
-import '../../main.dart' show navigatorKey;
+import 'package:ridel/core/utils/toast_service.dart' show ToastService;
 import '../services/notification_service.dart';
 
 // ==========================================
@@ -100,7 +100,7 @@ class NotificationProvider extends ChangeNotifier {
           try {
             final data = jsonDecode(response.payload!);
             if (data['screen'] != null) {
-              navigatorKey.currentState
+              ToastService.navigatorKey.currentState
                   ?.pushNamed('/${data['screen']}', arguments: data);
             }
           } catch (e) {

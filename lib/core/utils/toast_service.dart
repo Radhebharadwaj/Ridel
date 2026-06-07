@@ -8,9 +8,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:ridel/core/utils/app_haptics.dart';
 
+
 enum ToastType { success, error, info, warning }
 
 class ToastService {
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   static OverlayEntry? _overlayEntry;
   static final Queue<Map<String, dynamic>> _queue = Queue<Map<String, dynamic>>();
   static bool _isShowing = false;
@@ -88,7 +90,6 @@ class ToastService {
     _isShowing = true;
 
     final request = _queue.removeFirst();
-    final context = request['context'] as BuildContext;
     final type = request['type'] as ToastType;
     final title = request['title'] as String;
     final message = request['message'] as String;
@@ -96,7 +97,9 @@ class ToastService {
     final actionLabel = request['actionLabel'] as String?;
     final onActionTap = request['onActionTap'] as VoidCallback?;
 
-    if (!context.mounted) {
+    final overlayState = navigatorKey.currentState?.overlay;
+
+    if (overlayState == null) {
       _isShowing = false;
       _processQueue();
       return;
@@ -133,7 +136,7 @@ class ToastService {
         },
       ),
     );
-    Overlay.of(context).insert(_overlayEntry!);
+    overlayState.insert(_overlayEntry!);
   }
 }
 

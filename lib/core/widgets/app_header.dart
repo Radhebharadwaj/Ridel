@@ -15,6 +15,7 @@ import 'city_selector_sheet.dart';
 import 'ridel_glass_dropdown.dart';
 import 'ridel_sheet.dart';
 
+import 'package:ridel/features/admin/admin_broadcast_screen.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
 import 'package:ridel/core/widgets/ridel_liquid_button.dart';
 
@@ -234,6 +235,15 @@ class _AppHeaderState extends State<AppHeader> {
                           key: const ValueKey("normal_title"),
                           child: GestureDetector(
                             onTap: _openCitySelector,
+                            onLongPress: () {
+                              AppHaptics.heavyImpact();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const AdminBroadcastScreen(),
+                                ),
+                              );
+                            },
                             behavior: HitTestBehavior.opaque,
                             child: Text(
                               displayTitle,

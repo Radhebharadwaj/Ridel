@@ -154,8 +154,23 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners(); // Notify city/fallback changes
       } catch (e) {
         debugPrint("GPS Timeout/Error: $e");
-        // Sirf timeout hone par hi IP fallback do
-        await _fetchLocationFromIP(); 
+        
+        Position? lastPos;
+        try {
+          lastPos = await Geolocator.getLastKnownPosition();
+        } catch (_) {}
+        
+        if (lastPos != null) {
+          debugPrint("Using last known position as safety net.");
+          currentPositionNotifier.value = lastPos;
+          _isUsingIpFallback = false;
+          _lastCityGeocodedPosition = lastPos;
+          await forceReverseGeocode(lastPos);
+          WeatherService.getWeather(lastPos.latitude, lastPos.longitude);
+          notifyListeners();
+        } else {
+          await _fetchLocationFromIP();
+        }
       }
     }
   }
@@ -328,12 +343,13 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     double lng = 77.2090;
 
     String c = city.toLowerCase().trim();
-    if (c == "delhi" || c == "new delhi") { lat = 28.6139; lng = 77.2090; }
-    else if (c == "noida") { lat = 28.5355; lng = 77.3910; }
-    else if (c == "gurugram" || c == "gurgaon") { lat = 28.4595; lng = 77.0266; }
-    else if (c == "faridabad") { lat = 28.4089; lng = 77.3178; }
-    else if (c == "ghaziabad") { lat = 28.6692; lng = 77.4538; }
-    else if (c == "greater noida") { lat = 28.4744; lng = 77.5040; }
+    if (c == "delhi" || c == "new delhi") { lat = 28.6139; lng = 77.2090; _currentState = "Delhi"; }
+    else if (c == "noida") { lat = 28.5355; lng = 77.3910; _currentState = "Uttar Pradesh"; }
+    else if (c == "gurugram" || c == "gurgaon") { lat = 28.4595; lng = 77.0266; _currentState = "Haryana"; }
+    else if (c == "faridabad") { lat = 28.4089; lng = 77.3178; _currentState = "Haryana"; }
+    else if (c == "ghaziabad") { lat = 28.6692; lng = 77.4538; _currentState = "Uttar Pradesh"; }
+    else if (c == "greater noida") { lat = 28.4744; lng = 77.5040; _currentState = "Uttar Pradesh"; }
+    else { _currentState = ""; }
 
     currentPositionNotifier.value = Position(
       latitude: lat,
@@ -384,7 +400,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
         );
 
         _currentCity = forceSelectCityUI ? "Select City" : (data['city']?.toString() ?? "Unknown Location");
-        _currentState = data['region']?.toString() ?? "";
+        _currentState = forceSelectCityUI ? "" : (data['region']?.toString() ?? "");
         currentCityName.value = _currentCity;
         _isUsingIpFallback = true;
         ProfileRepository.userCity.value = _currentCity;
@@ -408,7 +424,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
       headingAccuracy: 0, speed: 0, speedAccuracy: 0, isMocked: true,
     );
     _currentCity = forceSelectCityUI ? "Select City" : "Nagpur";
-    _currentState = "Maharashtra";
+    _currentState = forceSelectCityUI ? "" : "Maharashtra";
     currentCityName.value = _currentCity;
     _isUsingIpFallback = true;
     ProfileRepository.userCity.value = _currentCity;

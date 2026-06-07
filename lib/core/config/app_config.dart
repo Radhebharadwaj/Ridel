@@ -1,8 +1,6 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AppConfig {
-  // 🗺️ MAPS
-  static String get olaMapsKey => dotenv.env['OLA_MAPS_API_KEY'] ?? '';
   static String get esriKey => dotenv.env['ESRI_SATELLITE_KEY'] ?? '';
 
   // ☁️ BACKEND & SVELTEKIT

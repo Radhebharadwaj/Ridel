@@ -16,6 +16,7 @@ import 'package:ridel/core/config/app_config.dart';
 import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/features/auth/screens/splash_screen.dart';
+import 'package:ridel/core/widgets/app_gate_overlay.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -45,7 +46,7 @@ final ValueNotifier<bool> globalSidebarOpen = ValueNotifier<bool>(true);
 final ValueNotifier<bool> globalSearchSheetOpen = ValueNotifier<bool>(true);
 final ValueNotifier<bool> globalIsHome = ValueNotifier<bool>(true);
 
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+// globalNavigatorKey is imported from toast_service.dart
 
 // ----------------------------------------------------------------------
 // 🔔 BACKGROUND HANDLER (Mobile Only)
@@ -217,10 +218,10 @@ class _RidelAppState extends State<RidelApp> {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       // 🚀 Security Alert Trigger
       if (message.data['type'] == '2fa_request') {
-        if (navigatorKey.currentContext != null) {
+        if (ToastService.navigatorKey.currentContext != null) {
           AppHaptics.heavyImpact();
           RidelSheet.show(
-            navigatorKey.currentContext!,
+            ToastService.navigatorKey.currentContext!,
             title: "Security Alert",
             showBackButton: false,
             child: LoginApprovalSheet(requestData: message.data),
@@ -254,9 +255,9 @@ class _RidelAppState extends State<RidelApp> {
   void _handleNotificationClick(Map<String, dynamic> data) {
     Future.delayed(const Duration(milliseconds: 500), () async {
       if (data['type'] == '2fa_request') {
-        if (navigatorKey.currentContext != null) {
+        if (ToastService.navigatorKey.currentContext != null) {
           RidelSheet.show(
-            navigatorKey.currentContext!,
+            ToastService.navigatorKey.currentContext!,
             title: "Security Alert",
             showBackButton: false,
             child: LoginApprovalSheet(requestData: data),
@@ -269,7 +270,7 @@ class _RidelAppState extends State<RidelApp> {
         }
       } else if (data['type'] == 'internal_screen' && data['screen'] != null) {
         final screen = data['screen'];
-        navigatorKey.currentState
+        ToastService.navigatorKey.currentState
             ?.pushNamed('/${screen.toString().toLowerCase()}', arguments: data);
       }
     });
@@ -282,7 +283,7 @@ class _RidelAppState extends State<RidelApp> {
           [ThemeService.themeNotifier, ThemeService.fontNotifier]),
       builder: (context, _) {
         return MaterialApp(
-          navigatorKey: navigatorKey,
+          navigatorKey: ToastService.navigatorKey,
           title: 'Ridel',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.getLightTheme(ThemeService.fontNotifier.value),
@@ -298,7 +299,7 @@ class _RidelAppState extends State<RidelApp> {
               PointerDeviceKind.trackpad,
             },
           ),
-          home: const SplashScreen(),
+          home: const AppGateOverlay(child: SplashScreen()),
         );
       },
     );

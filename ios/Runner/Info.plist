@@ -66,5 +66,10 @@
 		<string>Ridel needs camera access to let you take a profile picture.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>Ridel needs gallery access to let you select a profile picture.</string>
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>fetch</string>
+			<string>remote-notification</string>
+		</array>
 	</dict>
 </plist>

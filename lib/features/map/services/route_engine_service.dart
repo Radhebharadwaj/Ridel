@@ -5,7 +5,6 @@ import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 class RouteResult {
@@ -90,7 +89,7 @@ double safeDoubleFromJson(dynamic value) {
 
 /// 🧠 The Ultimate Routing Brain
 class RouteEngineService {
-  static const String _baseUrl = 'https://api.olamaps.io/routing/v1/directions';
+  static const String _baseUrl = 'https://ridel.ridel.workers.dev/api/maps/routing/v1/directions';
 
   final http.Client _client = http.Client();
 
@@ -266,11 +265,6 @@ class RouteEngineService {
   }
 
   Future<RouteResult?> _getOlaRoute(LatLng origin, LatLng destination, String mode) async {
-    final key = dotenv.env['OLA_MAPS_API_KEY'] ?? '';
-    if (key.isEmpty || key == 'YOUR_KEY_HERE') {
-      throw Exception("Ola key is missing or placeholder. Skipping.");
-    }
-
     String apiMode = 'driving';
     if (mode == 'walk' || mode == 'walking' || mode == 'pedestrian') {
       apiMode = 'walking';
@@ -283,7 +277,7 @@ class RouteEngineService {
     }
 
     final String olaApiUrl =
-        '$_baseUrl?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=$apiMode&alternatives=true&steps=true&traffic_metadata=true&overview=full&api_key=$key';
+        '$_baseUrl?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=$apiMode&alternatives=true&steps=true&traffic_metadata=true&overview=full';
 
     int attempts = 0;
     while (attempts < 2) {
@@ -328,58 +322,11 @@ class RouteEngineService {
   }
 
   Future<RouteResult?> _getGoogleRoute(LatLng origin, LatLng destination, String mode) async {
-    final key = dotenv.env['GOOGLE_MAPS_API_KEY'] ?? '';
-    if (key.isEmpty || key == 'YOUR_KEY_HERE') {
-      throw Exception("Google key is missing or placeholder. Skipping.");
-    }
-    String apiMode = 'driving';
-    if (mode == 'walk' || mode == 'walking') {
-      apiMode = 'walking';
-    } else if (mode == 'bike') {
-      apiMode = 'bicycling';
-    }
-    
-    final url = 'https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=$apiMode&alternatives=true&overview=full&key=$key';
-    
-    final response = await _client.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      if (data['status'] == 'OK' && data['routes'] != null && data['routes'].isNotEmpty) {
-        return _parseGoogleRouteResponse(data);
-      } else {
-        throw Exception("Google API Error: ${data['status']}");
-      }
-    } else {
-      throw Exception("Google API HTTP ${response.statusCode}");
-    }
+    throw Exception("Google key is missing or placeholder. Skipping.");
   }
 
   Future<RouteResult?> _getMapboxRoute(LatLng origin, LatLng destination, String mode) async {
-    final key = dotenv.env['MAPBOX_API_KEY'] ?? '';
-    if (key.isEmpty || key == 'YOUR_KEY_HERE') {
-      throw Exception("Mapbox key is missing or placeholder. Skipping.");
-    }
-    
-    String profile = 'driving';
-    if (mode == 'walk' || mode == 'walking') {
-      profile = 'walking';
-    } else if (mode == 'bike') {
-      profile = 'cycling';
-    }
-    
-    final url = 'https://api.mapbox.com/directions/v5/mapbox/$profile/${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}?alternatives=true&geometries=geojson&overview=full&annotations=congestion&steps=true&access_token=$key';
-    
-    final response = await _client.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      if (data['routes'] != null && data['routes'].isNotEmpty) {
-        return _parseOSRMMapboxRouteResponse(data);
-      } else {
-        throw Exception("Mapbox API No Routes");
-      }
-    } else {
-      throw Exception("Mapbox API HTTP ${response.statusCode}");
-    }
+    throw Exception("Mapbox key is missing or placeholder. Skipping.");
   }
 
   Future<RouteResult?> _getOSRMRoute(LatLng origin, LatLng destination, String profile) async {
@@ -404,82 +351,6 @@ class RouteEngineService {
       }
     } else {
       throw Exception("OSRM API HTTP ${response.statusCode}");
-    }
-  }
-
-  RouteResult? _parseGoogleRouteResponse(Map<String, dynamic> data) {
-    try {
-      final routes = data['routes'] as List;
-      List<List<LatLng>> allRoutesCoordinates = [];
-      List<double> allDurationSeconds = [];
-      
-      for (var route in routes) {
-        final overviewPolyline = route['overview_polyline']['points'] as String;
-        final coords = decodePolyline(overviewPolyline);
-        allRoutesCoordinates.add(coords);
-        
-        final legs = route['legs'] as List;
-        double duration = 0;
-        if (legs.isNotEmpty) {
-          duration = safeDoubleFromJson(legs[0]['duration']['value']);
-        }
-        allDurationSeconds.add(duration);
-      }
-      
-      final primaryRoute = routes[0];
-      final legs = primaryRoute['legs'] as List;
-      final primaryLeg = legs.isNotEmpty ? legs[0] : null;
-      
-      double distanceKm = 0.0;
-      int durationMins = 0;
-      List<Map<String, dynamic>> steps = [];
-      String firstInstruction = "Head to destination";
-      
-      if (primaryLeg != null) {
-        distanceKm = safeDoubleFromJson(primaryLeg['distance']['value']) / 1000.0;
-        durationMins = (safeDoubleFromJson(primaryLeg['duration']['value']) / 60.0).ceil();
-        
-        final rawSteps = primaryLeg['steps'] as List? ?? [];
-        for (var step in rawSteps) {
-          steps.add({
-            'html_instructions': step['html_instructions'],
-            'distance': safeDoubleFromJson(step['distance']['value']),
-            'duration': safeDoubleFromJson(step['duration']['value']),
-          });
-        }
-        
-        if (steps.isNotEmpty && steps[0]['html_instructions'] != null) {
-          firstInstruction = steps[0]['html_instructions'].toString().replaceAll(RegExp(r'<[^>]*>'), '');
-        }
-      }
-      
-      final geoJson = {
-        "type": "FeatureCollection",
-        "features": [
-          {
-            "type": "Feature",
-            "geometry": {
-              "type": "LineString",
-              "coordinates": allRoutesCoordinates.first.map((c) => [c.longitude, c.latitude]).toList()
-            },
-            "properties": {}
-          }
-        ]
-      };
-      
-      return RouteResult(
-        allRoutesCoordinates: allRoutesCoordinates,
-        geoJson: geoJson,
-        distanceKm: distanceKm,
-        durationMins: durationMins,
-        allDurationSeconds: allDurationSeconds,
-        steps: steps,
-        firstInstruction: firstInstruction,
-        fetchedAt: DateTime.now(),
-      );
-    } catch (e) {
-      debugPrint("Error parsing Google Route: $e");
-      return null;
     }
   }
 

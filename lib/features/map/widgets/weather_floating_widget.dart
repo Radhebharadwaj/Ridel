@@ -256,6 +256,15 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     String displayCity = locService.currentCity.isEmpty ? "Locating..." : locService.currentCity;
     String displayState = locService.currentState;
 
+    if (displayCity.toLowerCase() == displayState.toLowerCase() && displayCity.isNotEmpty) {
+      String c = displayCity.toLowerCase();
+      if (c == "delhi" || c == "new delhi") {
+        displayState = "National Capital Territory";
+      } else {
+        displayState = "Union Territory";
+      }
+    }
+
     final isLightMode = Theme.of(context).brightness == Brightness.light;
     final glassColor = isLightMode 
         ? Colors.white.withValues(alpha: 0.65)

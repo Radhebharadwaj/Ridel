@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 
 // 🚀 1. SPEED OPTIMIZATION: Global Persistent HTTP Client & Timeout
 final http.Client _apiClient = http.Client();
@@ -55,88 +54,86 @@ class WeatherModel {
 
 class WeatherService {
   static final ValueNotifier<WeatherModel?> currentWeather = ValueNotifier(null);
-  static bool _weatherTableMissing = false;
+  static Future<List<dynamic>?> _queryD1(String sql, [List<dynamic>? params]) async {
+    if (kIsWeb) {
+      debugPrint("🌐 Web Detected: Bypassing D1 Cache to avoid CORS.");
+      return null;
+    }
+    
+    final url = Uri.parse('https://ridel.ridel.workers.dev/api/weather');
+    final response = await _apiClient.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({"sql": sql, "params": params ?? []}),
+    ).timeout(_apiTimeout);
 
-  static double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    const double p = 0.017453292519943295; // Math.PI / 180
-    final double a = 0.5 - math.cos((lat2 - lat1) * p) / 2 + 
-        math.cos(lat1 * p) * math.cos(lat2 * p) * 
-        (1 - math.cos((lon2 - lon1) * p)) / 2;
-    return 12742 * math.asin(math.sqrt(a)); // distance in km
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      if (json['success'] == true) {
+        return json['results'] as List<dynamic>?;
+      }
+      throw Exception('D1 Query Error: ${json['error'] ?? json['errors']}');
+    }
+    throw Exception('D1 HTTP Error: ${response.statusCode}');
   }
 
   static Future<WeatherModel?> getWeather(double lat, double lon) async {
-    if (!_weatherTableMissing) {
-      try {
-        // 🚀 1. GLOBAL DB CHECK (Community-Driven Cache)
-        final threeHoursAgo = DateTime.now().toUtc().subtract(const Duration(hours: 3)).toIso8601String();
+    try {
+      // 🚀 1. GLOBAL DB CHECK (Community-Driven Cache)
+      int gridLat = (lat / 0.03).round();
+      int gridLng = (lon / 0.03).round();
+      String gridId = 'grid_${gridLat}_$gridLng';
+
+      final results = await _queryD1('SELECT * FROM weather_grid_cache WHERE grid_id = ?', [gridId]);
+
+      if (results != null && results.isNotEmpty) {
+        final closestRecord = results.first;
+        debugPrint("⚡ GLOBAL DB CACHE HIT for grid: $gridId");
         
-        const double radiusKm = 3.0;
-        const double latDelta = radiusKm / 111.0;
-        final double lngDelta = radiusKm / (111.0 * math.cos(lat * math.pi / 180.0));
-
-        final double minLat = lat - latDelta;
-        final double maxLat = lat + latDelta;
-        final double minLng = lon - lngDelta;
-        final double maxLng = lon + lngDelta;
-
-        final recentRecords = await Supabase.instance.client
-            .from('weather_cache')
-            .select()
-            .gte('updated_at', threeHoursAgo)
-            .gte('lat', minLat)
-            .lte('lat', maxLat)
-            .gte('lng', minLng)
-            .lte('lng', maxLng);
-
-        Map<String, dynamic>? closestRecord;
-        double minDistance = 3.0;
-
-        for (var record in recentRecords) {
-          double rLat = record['lat'] is num ? (record['lat'] as num).toDouble() : double.tryParse(record['lat'].toString()) ?? 0.0;
-          double rLng = record['lng'] is num ? (record['lng'] as num).toDouble() : double.tryParse(record['lng'].toString()) ?? 0.0;
-          
-          double dist = _calculateDistance(lat, lon, rLat, rLng);
-          if (dist <= 3.0 && dist < minDistance) {
-            minDistance = dist;
-            closestRecord = record;
-          }
+        final highLowRaw = closestRecord['high_low'];
+        Map<String, dynamic> highLow = {};
+        if (highLowRaw is String) {
+          highLow = jsonDecode(highLowRaw);
+        } else if (highLowRaw is Map) {
+          highLow = Map<String, dynamic>.from(highLowRaw);
+        }
+        
+        final hourlyRawStr = closestRecord['hourly_forecast'];
+        List<dynamic> hourlyRaw = [];
+        if (hourlyRawStr is String) {
+          hourlyRaw = jsonDecode(hourlyRawStr);
+        } else if (hourlyRawStr is List) {
+          hourlyRaw = hourlyRawStr;
         }
 
-        if (closestRecord != null) {
-          debugPrint("⚡ GLOBAL DB CACHE HIT (Distance: ${minDistance.toStringAsFixed(2)}km)");
-          final weatherDataStr = closestRecord['weather_data'];
-          final Map<String, dynamic> weatherData = weatherDataStr is String ? json.decode(weatherDataStr) : weatherDataStr;
-          
-          final hourlyRaw = weatherData['hourly'] as List<dynamic>? ?? [];
-          final dailyRaw = weatherData['daily'] as List<dynamic>? ?? [];
-          
-          final cachedWeather = WeatherModel(
-            temp: (weatherData['temp'] as num?)?.toDouble() ?? 0.0,
-            weatherCode: (weatherData['weatherCode'] as num?)?.toInt() ?? 0,
-            aqi: (weatherData['aqi'] as num?)?.toInt() ?? 50,
-            tempMax: (weatherData['tempMax'] as num?)?.toDouble() ?? 0.0,
-            tempMin: (weatherData['tempMin'] as num?)?.toDouble() ?? 0.0,
-            hourly: hourlyRaw.map((h) => HourlyWeather(h['time']?.toString() ?? '', (h['temp'] as num?)?.toDouble() ?? 0.0, (h['code'] as num?)?.toInt() ?? 0)).toList(),
-            daily: dailyRaw.map((d) => DailyWeather(d['time']?.toString() ?? '', (d['maxTemp'] as num?)?.toDouble() ?? 0.0, (d['minTemp'] as num?)?.toDouble() ?? 0.0, (d['code'] as num?)?.toInt() ?? 0)).toList(),
-            humidity: (weatherData['humidity'] as num?)?.toInt() ?? 0,
-            windSpeed: (weatherData['wind_speed'] as num?)?.toDouble() ?? 0.0,
-            feelsLike: (weatherData['feels_like'] as num?)?.toDouble() ?? 0.0,
-            uvIndex: (weatherData['uv_index'] as num?)?.toDouble() ?? 0.0,
-          );
-          currentWeather.value = cachedWeather;
-          return cachedWeather;
+        final dailyRawStr = closestRecord['daily_forecast'];
+        List<dynamic> dailyRaw = [];
+        if (dailyRawStr is String) {
+          dailyRaw = jsonDecode(dailyRawStr);
+        } else if (dailyRawStr is List) {
+          dailyRaw = dailyRawStr;
         }
-      } on PostgrestException catch (e) {
-        if (e.code == 'PGRST205') {
-          debugPrint("⚠️ Table 'weather_cache' not found. Disabling.");
-          _weatherTableMissing = true;
-        } else {
-          debugPrint("⚠️ Supabase DB Check Error: $e");
-        }
-      } catch (e) {
-        debugPrint("⚠️ Supabase DB Check Error: $e");
+
+        final cachedWeather = WeatherModel(
+          temp: (closestRecord['current_temp'] as num?)?.toDouble() ?? 0.0,
+          weatherCode: (closestRecord['condition'] as num?)?.toInt() ?? 0,
+          aqi: (closestRecord['aqi'] as num?)?.toInt() ?? 50,
+          tempMax: (highLow['max'] as num?)?.toDouble() ?? 0.0,
+          tempMin: (highLow['min'] as num?)?.toDouble() ?? 0.0,
+          hourly: hourlyRaw.map((h) => HourlyWeather(h['time']?.toString() ?? '', (h['temp'] as num?)?.toDouble() ?? 0.0, (h['code'] as num?)?.toInt() ?? 0)).toList(),
+          daily: dailyRaw.map((d) => DailyWeather(d['time']?.toString() ?? '', (d['maxTemp'] as num?)?.toDouble() ?? 0.0, (d['minTemp'] as num?)?.toDouble() ?? 0.0, (d['code'] as num?)?.toInt() ?? 0)).toList(),
+          humidity: (closestRecord['humidity'] as num?)?.toInt() ?? 0,
+          windSpeed: (closestRecord['wind_speed'] as num?)?.toDouble() ?? 0.0,
+          feelsLike: (closestRecord['feels_like'] as num?)?.toDouble() ?? 0.0,
+          uvIndex: (closestRecord['uv_index'] as num?)?.toDouble() ?? 0.0,
+        );
+        currentWeather.value = cachedWeather;
+        return cachedWeather;
       }
+    } catch (e) {
+      debugPrint("⚠️ D1 Cache Error: $e");
     }
 
     // 🚀 2. API FALLBACK
@@ -217,43 +214,37 @@ class WeatherService {
   }
 
   static Future<void> _seedDatabase(double lat, double lon, WeatherModel weather) async {
-    if (_weatherTableMissing) return;
     try {
-      final weatherJson = {
-        'temp': weather.temp,
-        'weatherCode': weather.weatherCode,
-        'aqi': weather.aqi,
-        'tempMax': weather.tempMax,
-        'tempMin': weather.tempMin,
-        'humidity': weather.humidity,
-        'wind_speed': weather.windSpeed,
-        'feels_like': weather.feelsLike,
-        'uv_index': weather.uvIndex,
-        'hourly': weather.hourly.map((h) => {'time': h.time, 'temp': h.temp, 'code': h.code}).toList(),
-        'daily': weather.daily.map((d) => {'time': d.time, 'maxTemp': d.maxTemp, 'minTemp': d.minTemp, 'code': d.code}).toList(),
-      };
+      int gridLat = (lat / 0.03).round();
+      int gridLng = (lon / 0.03).round();
+      String gridId = 'grid_${gridLat}_$gridLng';
 
-      await Supabase.instance.client.from('weather_cache').upsert({
-        // Let Supabase handle upsert via unique ID or just insert.
-        'lat': lat,
-        'lng': lon,
-        'weather_data': weatherJson,
-        'humidity': weather.humidity,
-        'wind_speed': weather.windSpeed,
-        'feels_like': weather.feelsLike,
-        'uv_index': weather.uvIndex,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      });
-      debugPrint("✅ Seeded fresh weather to Supabase Community Cache.");
-    } on PostgrestException catch (e) {
-      if (e.code == 'PGRST205') {
-        debugPrint("⚠️ Table 'weather_cache' not found during seed. Disabling.");
-        _weatherTableMissing = true;
-      } else {
-        debugPrint("⚠️ Failed to seed weather to Supabase: $e");
-      }
+      final highLowStr = jsonEncode({'max': weather.tempMax, 'min': weather.tempMin});
+      final hourlyStr = jsonEncode(weather.hourly.map((h) => {'time': h.time, 'temp': h.temp, 'code': h.code}).toList());
+      final dailyStr = jsonEncode(weather.daily.map((d) => {'time': d.time, 'maxTemp': d.maxTemp, 'minTemp': d.minTemp, 'code': d.code}).toList());
+
+      await _queryD1(
+        '''
+        REPLACE INTO weather_grid_cache 
+        (grid_id, city_name, current_temp, condition, aqi, high_low, hourly_forecast, daily_forecast, last_updated, uv_index) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''',
+        [
+          gridId,
+          'Unknown', // city_name
+          weather.temp,
+          weather.weatherCode,
+          weather.aqi,
+          highLowStr,
+          hourlyStr,
+          dailyStr,
+          DateTime.now().toUtc().toIso8601String(),
+          weather.uvIndex
+        ]
+      );
+      debugPrint("✅ Seeded fresh weather to Cloudflare D1 Cache.");
     } catch (e) {
-      debugPrint("⚠️ Failed to seed weather to Supabase: $e");
+      debugPrint("⚠️ D1 Cache Error (Seed): $e");
     }
   }
 

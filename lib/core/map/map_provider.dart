@@ -21,7 +21,7 @@ import 'package:ridel/features/map/services/master_search_service.dart';
 import 'package:ridel/features/map/services/place_api_services.dart';
 import 'package:ridel/features/map/services/route_visualizer.dart';
 import 'package:ridel/features/map/services/route_engine_service.dart';
-import 'package:ridel/main.dart' show navigatorKey;
+import 'package:ridel/features/map/map_engine/controllers/map_camera_controller.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 
 class MapProvider extends ChangeNotifier {
@@ -1497,7 +1497,7 @@ class MapProvider extends ChangeNotifier {
     });
 
     engine.navigation.isGpsLost.addListener(() {
-      final context = navigatorKey.currentContext;
+      final context = ToastService.navigatorKey.currentContext;
       if (context != null) {
         if (engine.navigation.isGpsLost.value == true) {
           ToastService.showError(context, "Offline Glide Active");
@@ -2285,32 +2285,14 @@ class MapProvider extends ChangeNotifier {
     await engine.startActiveNavigation(_currentRouteResult!, targetDestination!);
   }
 
-  Future<void> endActiveNavigation() async {
+  void endActiveNavigation() {
     if (!isActiveNavigation) return;
 
+    engine.navigation.stopNavigation();
     isActiveNavigation = false;
+    engine.camera?.setCameraForMode(CameraMode.explore);
+    engine.layers?.resetAllLayers(); // Clear navigation styling if needed
     notifyListeners();
-
-    await engine.stopActiveNavigation();
-    await updatePuckVisibility();
-
-    // 🚀 Return camera to route overview
-    if (_lastRouteData != null && controller != null) {
-      try {
-        await controller!.animateCamera(
-          CameraUpdate.newLatLngBounds(
-            _calculateBounds(_lastRouteData!.coordinates),
-            bottom: 350,
-            left: 50,
-            right: 50,
-            top: 100,
-          ),
-          duration: const Duration(milliseconds: 1200),
-        );
-      } catch (e) {
-        debugPrint("Camera bounds fit failed on endNavigation: $e");
-      }
-    }
   }
 
   Future<void> autoDrawRouteTo(LatLng destination, BuildContext context) async {
