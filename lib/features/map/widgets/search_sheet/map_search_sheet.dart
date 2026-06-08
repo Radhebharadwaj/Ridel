@@ -1309,6 +1309,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                 24.0 - (14.0 * progress);
                             const sheetRadius = 50.0;
 
+                            final bool isExpanded = isKeyboardOpen || _searchFocus.hasFocus;
                             final Color sheetBgColor = isDark
                                 ? const Color(0xFF0B0E17)
                                     .withValues(alpha: isExpanded ? 1.0 : 0.80)

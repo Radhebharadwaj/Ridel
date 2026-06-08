@@ -4,8 +4,8 @@ compatibility_date = "2026-06-07"
 
 [vars]
 admin-secret = "{@*##!/*--GiT*@}{@*##!/*pAsSkEy*@}"
-OLA_MAPS_API_KEY = "LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs"
-WEATHER_API_KEY = "35a975baea9c49c996c190519260706"
+OLA_MAPS_API_KEY = "" # Add this securely using `npx wrangler secret put OLA_MAPS_API_KEY`
+WEATHER_API_KEY = "" # Add this securely using `npx wrangler secret put WEATHER_API_KEY`
 
 [[r2_buckets]]
 binding = "MAPS"
