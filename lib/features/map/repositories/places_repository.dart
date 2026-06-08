@@ -26,7 +26,8 @@ class PlacesRepository {
 
       // 3. If Supabase data differs from the cache, update local cache & yield
       final localJson = jsonEncode(localPlaces.map((p) => p.toJson()).toList());
-      final remoteJson = jsonEncode(remotePlaces.map((p) => p.toJson()).toList());
+      final remoteJson =
+          jsonEncode(remotePlaces.map((p) => p.toJson()).toList());
 
       if (localJson != remoteJson) {
         await _localCache.savePlaces(remotePlaces);
