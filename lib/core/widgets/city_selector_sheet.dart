@@ -2,7 +2,6 @@ import 'dart:async';
 
 
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:provider/provider.dart';
@@ -13,6 +12,7 @@ import 'package:ridel/core/widgets/ridel_sheet.dart';
 import 'package:ridel/features/profile/services/profile_repository.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/features/commute/shared/services/database_helper.dart';
+import 'package:ridel/core/utils/location_guard.dart';
 
 class CitySelectorSheet extends StatefulWidget {
   const CitySelectorSheet({super.key});
@@ -128,24 +128,11 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
   }
 
   Future<void> _handleGpsSelection() async {
+    bool hasLocation = await LocationGuard.checkAndRequestLocation(context);
+    if (!hasLocation || !mounted) return;
+
     final previousCityState = ProfileRepository.userCity.value;
     ProfileRepository.userCity.value = 'Locating...';
-
-    // 🚀 Actively check permissions first
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (!mounted) return;
-
-    if (permission == LocationPermission.deniedForever) {
-      ProfileRepository.userCity.value = previousCityState;
-      if (mounted) {
-        ToastService.showError(context,
-            'Location access needed to auto-detect your region. Please enable it in Settings.');
-      }
-      // 🚀 GlobalLocationService will handle opening settings now
-    }
 
     final locationService =
         Provider.of<GlobalLocationService>(context, listen: false);
@@ -189,7 +176,10 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
           // ✅ Data Available Hai: Database switch karo aur sheet band karo
           await DatabaseHelper.instance.switchCity(matchedRegion['region_id']);
           AppHaptics.success();
-          if (mounted) Navigator.pop(context);
+          if (mounted) {
+            ToastService.showSuccess(context, "Region detected successfully!");
+            Navigator.pop(context);
+          }
         } else {
           // ❌ Data Available Nahi Hai: Pyar se Sorry bolo!
           AppHaptics.heavyImpact();

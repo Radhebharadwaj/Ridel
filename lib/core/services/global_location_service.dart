@@ -95,8 +95,8 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           await Geolocator.openLocationSettings();
         }
         _isUsingIpFallback = false;
-        _currentCity = "Select City"; // Prompt manual entry
-        ProfileRepository.userCity.value = "Select City";
+        _currentCity = "Delhi"; // Prompt manual entry
+        ProfileRepository.userCity.value = "Delhi";
         notifyListeners();
         return;
       }
@@ -478,8 +478,13 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           isMocked: true, // Tells the app this is not exact GPS
         );
 
-        _currentCity = forceSelectCityUI ? "Select City" : (data['city']?.toString() ?? "Current Location");
-        _currentState = forceSelectCityUI ? "" : (data['region']?.toString() ?? "");
+        String fetchedCityName = data['city']?.toString() ?? "Delhi";
+        if (fetchedCityName.trim().isEmpty || fetchedCityName.toLowerCase().contains('select city') || fetchedCityName == "Current Location") {
+            fetchedCityName = 'Delhi';
+        }
+
+        _currentCity = forceSelectCityUI ? "Delhi" : fetchedCityName;
+        _currentState = forceSelectCityUI ? "Delhi" : (data['region']?.toString() ?? "");
         currentCityName.value = _currentCity;
         _isUsingIpFallback = true;
         ProfileRepository.userCity.value = _currentCity;
@@ -502,8 +507,8 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
       accuracy: 10000.0, altitude: 0, altitudeAccuracy: 0, heading: 0,
       headingAccuracy: 0, speed: 0, speedAccuracy: 0, isMocked: true,
     );
-    _currentCity = forceSelectCityUI ? "Select City" : "Nagpur";
-    _currentState = forceSelectCityUI ? "" : "Maharashtra";
+    _currentCity = forceSelectCityUI ? "Delhi" : "Nagpur";
+    _currentState = forceSelectCityUI ? "Delhi" : "Maharashtra";
     currentCityName.value = _currentCity;
     _isUsingIpFallback = true;
     ProfileRepository.userCity.value = _currentCity;

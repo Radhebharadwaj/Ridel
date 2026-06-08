@@ -4,7 +4,6 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:provider/provider.dart';
@@ -19,6 +18,7 @@ import 'package:ridel/features/map/widgets/map_theme_selector.dart';
 import 'package:ridel/features/map/widgets/weather_floating_widget.dart';
 import 'package:ridel/features/map/screens/custom_map_screen.dart';
 import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
+import 'package:ridel/core/utils/location_guard.dart';
 
 class FullScreenMapPage extends StatefulWidget {
   final ValueNotifier<double> searchSheetProgressNotifier;
@@ -576,6 +576,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                             onTap: () async {
                                               AppHaptics.selectionClick();
 
+                                              bool hasLocation = await LocationGuard.checkAndRequestLocation(context);
+                                              if (!hasLocation || !context.mounted) return;
+
                                               if (mapProvider
                                                       .isActiveNavigation &&
                                                   !mapProvider.isAutoTracking) {
@@ -760,36 +763,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   }
 
   Future<void> _handleLocateMeTapped(MapProvider mapProvider) async {
+    bool hasLocation = await LocationGuard.checkAndRequestLocation(context);
+    if (!hasLocation) return;
+
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        if (mounted) {
-          ToastService.showError(context, "Please enable Location Services.");
-        }
-        return;
-      }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          if (mounted) {
-            ToastService.showError(context, "Location permission denied.");
-          }
-          return;
-        }
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        if (mounted) {
-          ToastService.showError(
-            context,
-            "Location permissions are permanently denied. Please enable in App Settings.",
-          );
-        }
-        return;
-      }
-
       if (mounted) {
         await Provider.of<GlobalLocationService>(context, listen: false)
             .forceRefreshLocation();
