@@ -71,9 +71,114 @@ async function getFCMToken(serviceAccountJSON) {
   return data.access_token;
 }
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, HEAD, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, admin-secret, Admin-Secret",
+};
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders });
+    }
+
+    // GET /api/weather
+    if (url.pathname === "/api/weather" && request.method === "GET") {
+      const authHeader = request.headers.get("Admin-Secret");
+      if (authHeader !== env.ADMIN_SECRET) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { 
+          status: 401, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        });
+      }
+
+      const lat = url.searchParams.get("lat");
+      const lng = url.searchParams.get("lng");
+      if (!lat || !lng) {
+        return new Response(JSON.stringify({ error: "Missing lat/lng" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      try {
+        const gridLat = Math.round(parseFloat(lat) * 20) / 20;
+        const gridLng = Math.round(parseFloat(lng) * 20) / 20;
+        const gridId = `grid_${gridLat}_${gridLng}`;
+
+        // Cache Check
+        const { results } = await env.DB.prepare("SELECT * FROM weather_grid_cache WHERE grid_id = ?").bind(gridId).all();
+        if (results && results.length > 0) {
+          const record = results[0];
+          const lastUpdated = new Date(record.last_updated);
+          const now = new Date();
+          const diffMinutes = (now - lastUpdated) / (1000 * 60);
+
+          if (diffMinutes < 60) {
+            // Return cached data
+            return new Response(JSON.stringify({
+              success: true,
+              fromCache: true,
+              data: {
+                temp: record.current_temp,
+                condition: record.condition,
+                aqi: record.aqi,
+                humidity: record.humidity,
+                windSpeed: record.wind_speed,
+                feelsLike: record.feels_like,
+                uvIndex: record.uv_index,
+                daily: JSON.parse(record.daily_forecast || "[]")
+              }
+            }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+        }
+
+        // Fetch & Store
+        const weatherUrl = `http://api.weatherapi.com/v1/forecast.json?key=${env.WEATHER_API_KEY}&q=${lat},${lng}&days=7&aqi=yes`;
+        const fetchRes = await fetch(weatherUrl);
+        const freshData = await fetchRes.json();
+
+        if (freshData.error) {
+          throw new Error(freshData.error.message);
+        }
+
+        const current = freshData.current;
+        const temp = current.temp_c;
+        const humidity = current.humidity;
+        const windSpeed = current.wind_kph;
+        const feelsLike = current.feelslike_c;
+        const uvIndex = current.uv;
+        const condition = current.condition.code;
+        const aqi = current.air_quality ? current.air_quality["us-epa-index"] : 50;
+        const daily = freshData.forecast && freshData.forecast.forecastday ? freshData.forecast.forecastday : [];
+
+        await env.DB.prepare(`
+          REPLACE INTO weather_grid_cache 
+          (grid_id, city_name, current_temp, condition, aqi, last_updated, humidity, wind_speed, feels_like, uv_index, daily_forecast) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          gridId, "Unknown", temp, condition, aqi, new Date().toISOString(), humidity, windSpeed, feelsLike, uvIndex, JSON.stringify(daily)
+        ).run();
+
+        return new Response(JSON.stringify({
+          success: true,
+          fromCache: false,
+          data: {
+            temp,
+            condition,
+            aqi,
+            humidity,
+            windSpeed,
+            feelsLike,
+            uvIndex,
+            daily
+          }
+        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
 
     // POST /admin/broadcast
     if (url.pathname === "/admin/broadcast" && request.method === "POST") {
@@ -82,7 +187,7 @@ export default {
       if (authHeader !== env.ADMIN_SECRET) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), { 
           status: 401, 
-          headers: { "Content-Type": "application/json" } 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
         });
       }
 
@@ -94,7 +199,7 @@ export default {
         if (!title || !msgBody) {
           return new Response(JSON.stringify({ error: "Missing title or body" }), { 
             status: 400, 
-            headers: { "Content-Type": "application/json" } 
+            headers: { ...corsHeaders, "Content-Type": "application/json" } 
           });
         }
 
@@ -132,24 +237,24 @@ export default {
         if (!fcmResponse.ok) {
           return new Response(JSON.stringify({ error: fcmData }), { 
             status: fcmResponse.status, 
-            headers: { "Content-Type": "application/json" } 
+            headers: { ...corsHeaders, "Content-Type": "application/json" } 
           });
         }
 
         // 6. Return Success
         return new Response(JSON.stringify({ success: true, message: "Broadcast sent successfully!" }), { 
           status: 200, 
-          headers: { "Content-Type": "application/json" } 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
         });
 
       } catch (e) {
         return new Response(JSON.stringify({ error: e.message }), { 
           status: 500, 
-          headers: { "Content-Type": "application/json" } 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
         });
       }
     }
 
-    return new Response("Not Found", { status: 404 });
+    return new Response("Not Found", { status: 404, headers: { ...corsHeaders, "Content-Type": "text/plain" } });
   }
 };

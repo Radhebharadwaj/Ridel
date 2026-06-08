@@ -8,6 +8,7 @@ import 'package:ridel/features/commute/shared/widgets/expandable_services_grid.d
 
 // 🚀 SAARI FILES YAHAN CONNECT HAIN
 import 'nearest_station_sheet.dart';
+import 'network_map_sheet.dart';
 import '../../shared/widgets/smart_ticketing_overlay.dart';
 import '../../shared/widgets/station_selector_sheet.dart';
 import '../../shared/services/database_helper.dart';
@@ -71,7 +72,7 @@ class MetroServicesGrid extends StatelessWidget {
               showBackButton: true,
               showFullScreenButton: true,
               sheetColor: const Color(0xFF0B0E17),
-              child: const SizedBox.shrink(),
+              child: const NetworkMapSheetContent(),
             );
             break;
 

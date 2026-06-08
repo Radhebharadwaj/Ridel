@@ -1,7 +1,7 @@
 import 'dart:async';
+import 'package:flutter/services.dart';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:ridel/core/services/global_location_service.dart';
@@ -141,38 +141,56 @@ class MapEngine {
             await rootBundle.load('assets/images/nav_puck.png');
         final Uint8List puckBytes = puckBytesData.buffer.asUint8List();
         await controller.addImage('nav_puck', puckBytes);
+      } catch (e) {
+        debugPrint("⚠️ Failed to load nav_puck image, adding transparent fallback: $e");
+        final Uint8List transparentPixel = Uint8List.fromList([
+          137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
+          1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65,
+          84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73,
+          69, 78, 68, 174, 66, 96, 130
+        ]);
+        await controller.addImage('nav_puck', transparentPixel);
+      }
 
-        // 🚀 Init GeoJsonSource and SymbolLayer for 3D Puck
-        try {
-          await controller.addGeoJsonSource('nav_puck_source', {
-            "type": "FeatureCollection",
-            "features": []
-          });
-          
-          await controller.addSymbolLayer(
-            'nav_puck_source',
-            'nav_puck_layer',
-            const SymbolLayerProperties(
-              iconImage: 'nav_puck',
-              iconPitchAlignment: 'map',
-              iconRotationAlignment: 'map',
-              iconAllowOverlap: true,
-              iconIgnorePlacement: true,
-              iconSize: 0.4,
-              iconOpacity: 1.0,
-              iconRotate: ['get', 'bearing'],
-            ),
-          );
-        } catch (e) {
-          debugPrint("⚠️ Failed to init nav_puck layer: $e");
-        }
+      // 🚀 Init GeoJsonSource and SymbolLayer for 3D Puck
+      try {
+        await controller.addGeoJsonSource('nav_puck_source', {
+          "type": "FeatureCollection",
+          "features": []
+        });
+        
+        await controller.addSymbolLayer(
+          'nav_puck_source',
+          'nav_puck_layer',
+          const SymbolLayerProperties(
+            iconImage: 'nav_puck',
+            iconPitchAlignment: 'map',
+            iconRotationAlignment: 'map',
+            iconAllowOverlap: true,
+            iconIgnorePlacement: true,
+            iconSize: 0.4,
+            iconOpacity: 1.0,
+            iconRotate: ['get', 'bearing'],
+          ),
+        );
+      } catch (e) {
+        debugPrint("⚠️ Failed to init nav_puck layer: $e");
+      }
 
+      try {
         final ByteData pinBytesData =
             await rootBundle.load('assets/images/custom_pin.png');
         final Uint8List pinBytes = pinBytesData.buffer.asUint8List();
         await controller.addImage('custom_pin', pinBytes);
       } catch (e) {
-        debugPrint("⚠️ Failed to load custom images: $e");
+        debugPrint("⚠️ Failed to load custom_pin image, adding transparent fallback: $e");
+        final Uint8List transparentPixel = Uint8List.fromList([
+          137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
+          1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65,
+          84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73,
+          69, 78, 68, 174, 66, 96, 130
+        ]);
+        await controller.addImage('custom_pin', transparentPixel);
       }
 
       await layers?.initLayerSystem();

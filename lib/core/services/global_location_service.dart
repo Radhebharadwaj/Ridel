@@ -4,15 +4,18 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart'; // 🚀 NEW: Needed for WidgetsBindingObserver
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http; // 🚀 NEW: For IP Fallback
-import 'package:geocoding/geocoding.dart';
+// Native geocoding removed, using Ola Maps.
 import 'package:ridel/features/profile/services/profile_repository.dart';
+import 'package:ridel/core/config/app_config.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // 🚀 FIX 3: SharedPreferences
 import 'package:ridel/core/services/weather_service.dart';
 
 class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
   // --- STATE VARIABLES ---
   final ValueNotifier<Position?> currentPositionNotifier = ValueNotifier(null);
-  final ValueNotifier<String?> currentCityName = ValueNotifier(null);
+  final ValueNotifier<String> currentCityName = ValueNotifier('Locating...');
+  double? cachedLat;
+  double? cachedLng;
   bool _isLocationServiceEnabled = false;
   LocationPermission _permission = LocationPermission.denied;
   bool _isUsingIpFallback = false; // 🚀 NEW: Track if we are using IP location
@@ -146,7 +149,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
         currentPositionNotifier.value = pos;
         _isUsingIpFallback = false;
         _lastCityGeocodedPosition = pos; // Set initial geocode pos
-        await forceReverseGeocode(pos);
+        await resolveCityName(pos.latitude, pos.longitude);
         
         // 🚀 TRIGGER WEATHER FETCH
         WeatherService.getWeather(pos.latitude, pos.longitude);
@@ -165,7 +168,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           currentPositionNotifier.value = lastPos;
           _isUsingIpFallback = false;
           _lastCityGeocodedPosition = lastPos;
-          await forceReverseGeocode(lastPos);
+          await resolveCityName(lastPos.latitude, lastPos.longitude);
           WeatherService.getWeather(lastPos.latitude, lastPos.longitude);
           notifyListeners();
         } else {
@@ -186,65 +189,121 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     debugPrint("Refreshing global city...");
-    await forceReverseGeocode(newPos);
+    await resolveCityName(newPos.latitude, newPos.longitude);
     _lastCityGeocodedPosition = newPos;
   }
 
-  Future<void> forceReverseGeocode(Position pos) async {
-    final lat = pos.latitude;
-    final lng = pos.longitude;
-    try {
-      List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
-      if (placemarks.isNotEmpty) {
-        final place = placemarks.first;
-        _currentCity = place.locality?.isNotEmpty == true ? place.locality! 
-                 : place.subAdministrativeArea?.isNotEmpty == true ? place.subAdministrativeArea! 
-                 : place.administrativeArea?.isNotEmpty == true ? place.administrativeArea! 
-                 : "Delhi";
-        _currentState = place.administrativeArea ?? "";
-        currentCityName.value = _currentCity;
-        ProfileRepository.userCity.value = _currentCity; // 🚀 Update Header globally
-      } else {
-        throw Exception("Empty placemarks array");
+  String _sanitizeCityName(String rawName) {
+    if (rawName.isEmpty) return "Locating...";
+    String clean = rawName
+        .replaceAll(RegExp(r'^(New|West|East|North|South)\s+', caseSensitive: false), '')
+        .trim();
+    if (clean.isEmpty) return "Locating...";
+    return clean[0].toUpperCase() + clean.substring(1).toLowerCase();
+  }
+
+  Future<void> resolveCityName(double currentLat, double currentLng, {bool forceRefresh = false}) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (!forceRefresh) {
+      final savedLat = prefs.getDouble('cachedLat');
+      final savedLng = prefs.getDouble('cachedLng');
+      final savedCity = prefs.getString('cachedLocality');
+
+      if (savedLat != null && savedLng != null && savedCity != null) {
+        final distance = Geolocator.distanceBetween(savedLat, savedLng, currentLat, currentLng);
+        if (distance < 15000) {
+          _currentCity = savedCity;
+          currentCityName.value = savedCity;
+          ProfileRepository.userCity.value = savedCity;
+          cachedLat = savedLat;
+          cachedLng = savedLng;
+          return;
+        }
       }
-    } catch (e) {
-      debugPrint("Global Reverse Geocoding Failed: $e. Attempting Proxy Fallback...");
-      try {
-        final url = Uri.parse('https://ridel.ridel.workers.dev/api/maps/places/v1/reverse-geocode?latlng=$lat,$lng');
-        final response = await http.get(url, headers: {'User-Agent': 'RidelApp'});
-        
-        if (response.statusCode == 200) {
-          final data = json.decode(response.body);
-          if (data['results'] != null && data['results'].isNotEmpty) {
-            final result = data['results'][0];
-            String realCity = "Unknown Location";
-            
-            if (result['address_components'] != null) {
-              final components = result['address_components'] as List;
+    }
+
+    String? newCity;
+    try {
+      final apiKey = AppConfig.olaMapsKey;
+      if (apiKey.isEmpty) throw Exception("Ola Maps API Key missing");
+
+      final url = Uri.parse('https://api.olamaps.io/places/v1/reverse-geocode?latlng=$currentLat,$currentLng&api_key=$apiKey');
+      final response = await http.get(url, headers: {'Accept': 'application/json'}).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['results'] != null && data['results'].isNotEmpty) {
+          final result = data['results'][0];
+          if (result['address_components'] != null) {
+            final components = result['address_components'] as List;
+            for (var comp in components) {
+              final types = comp['types'] as List;
+              if (types.contains('locality') || types.contains('city')) {
+                newCity = comp['short_name'] ?? comp['long_name'];
+                break;
+              }
+            }
+            if (newCity == null) {
               for (var comp in components) {
                 final types = comp['types'] as List;
-                if (types.contains('locality') || types.contains('city') || types.contains('administrative_area_level_2')) {
-                  realCity = comp['short_name'] ?? comp['long_name'] ?? realCity;
+                if (types.contains('sub_locality') || types.contains('neighborhood') || types.contains('sub_locality_level_1')) {
+                  newCity = comp['short_name'] ?? comp['long_name'];
                   break;
                 }
               }
             }
-            
-            _currentCity = realCity;
-            currentCityName.value = _currentCity;
-            ProfileRepository.userCity.value = _currentCity;
-          } else {
-            throw Exception("No results in proxy response");
           }
-        } else {
-          throw Exception("Proxy returned status ${response.statusCode}");
+          if (newCity == null) {
+            final formatted = result['formatted_address'] as String?;
+            if (formatted != null && formatted.isNotEmpty) {
+               final parts = formatted.split(',');
+               if (parts.isNotEmpty) {
+                  newCity = parts[0].trim();
+               }
+            }
+          }
         }
-      } catch (fallbackError) {
-        debugPrint("OSM Geocoding Fallback Failed: $fallbackError");
-        _currentCity = "Unknown Location";
-        currentCityName.value = _currentCity;
-        ProfileRepository.userCity.value = _currentCity;
       }
+    } catch (e) {
+      // Ola Maps failed, proceed to fallback silently
+    }
+
+    if (newCity == null) {
+      try {
+        final url = Uri.parse('https://nominatim.openstreetmap.org/reverse?lat=$currentLat&lon=$currentLng&format=json');
+        final response = await http.get(url, headers: {
+          'User-Agent': 'Ridel_App_v1.0 (contact@ridelapp.com)' 
+        }).timeout(const Duration(seconds: 5));
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['address'] != null) {
+            final address = data['address'];
+            newCity = address['city'] ?? 
+                      address['town'] ?? 
+                      address['village'] ?? 
+                      address['state_district'] ?? 
+                      address['county'];
+          }
+        }
+      } catch (e) {
+        // Fallback failed silently
+      }
+    }
+
+    if (newCity != null) {
+      newCity = _sanitizeCityName(newCity);
+
+      prefs.setDouble('cachedLat', currentLat);
+      prefs.setDouble('cachedLng', currentLng);
+      prefs.setString('cachedLocality', newCity);
+      
+      _currentCity = newCity;
+      currentCityName.value = newCity;
+      ProfileRepository.userCity.value = newCity;
+      cachedLat = currentLat;
+      cachedLng = currentLng;
     }
   }
 
@@ -322,24 +381,32 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     try {
-      List<Placemark> placemarks = await placemarkFromCoordinates(currentLoc.latitude, currentLoc.longitude)
-          .timeout(const Duration(seconds: 5));
-      if (placemarks.isNotEmpty) {
-        final place = placemarks.first;
-        // Construct a clean, human-readable address
-        _currentAddressName = [place.street, place.subLocality, place.locality]
-            .where((e) => e != null && e.isNotEmpty)
-            .join(', ');
-        
-        if (_currentAddressName == null || _currentAddressName!.isEmpty) {
-          _currentAddressName = _currentCity;
-        }
+      final apiKey = AppConfig.olaMapsKey;
+      if (apiKey.isEmpty) throw Exception("Ola Maps API Key missing");
 
-        _lastAddressGeocodedPosition = currentLoc;
-        notifyListeners();
+      final url = Uri.parse(
+          'https://api.olamaps.io/places/v1/reverse-geocode?latlng=${currentLoc.latitude},${currentLoc.longitude}&api_key=$apiKey');
+
+      final response = await http.get(url, headers: {
+        'Accept': 'application/json',
+      }).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['results'] != null && data['results'].isNotEmpty) {
+          final result = data['results'][0];
+          
+          _currentAddressName = result['formatted_address'] ?? result['name'] ?? _currentCity;
+          _lastAddressGeocodedPosition = currentLoc;
+          notifyListeners();
+        } else {
+          throw Exception("Empty results in Ola Maps response");
+        }
+      } else {
+        throw Exception("Ola Maps API Error: ${response.statusCode}");
       }
     } catch (e) {
-      debugPrint("Reverse Geocode for exact address failed: $e");
+      debugPrint("Ola Maps Geocoding Failed: $e");
       // 🚨 FALLBACK: Show exact coordinates if API fails
       _currentAddressName = "${currentLoc.latitude.toStringAsFixed(5)}, ${currentLoc.longitude.toStringAsFixed(5)}";
       _lastAddressGeocodedPosition = currentLoc;
@@ -411,7 +478,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           isMocked: true, // Tells the app this is not exact GPS
         );
 
-        _currentCity = forceSelectCityUI ? "Select City" : (data['city']?.toString() ?? "Unknown Location");
+        _currentCity = forceSelectCityUI ? "Select City" : (data['city']?.toString() ?? "Current Location");
         _currentState = forceSelectCityUI ? "" : (data['region']?.toString() ?? "");
         currentCityName.value = _currentCity;
         _isUsingIpFallback = true;

@@ -130,32 +130,44 @@ class _CustomMapScreenState extends State<CustomMapScreen>
     if (!mounted) return;
     setState(() => _isFetchingStyle = true);
     
-    String styleStr = await MapStyleHelper.getOlaStyle(
-      _engine.isDarkTheme,
-      themeType: _currentTheme,
-    );
-
-    // 🚀 PATCH: Inject missing glyphs required by MapLibre for text-field rendering
     try {
-      final decoded = jsonDecode(styleStr) as Map<String, dynamic>;
-      if (!decoded.containsKey('glyphs') || decoded['glyphs'] == null || decoded['glyphs'].toString().isEmpty) {
-        decoded['glyphs'] = "https://api.olamaps.io/tiles/fonts/{fontstack}/{range}.pbf";
-        styleStr = jsonEncode(decoded);
+      String styleStr = await MapStyleHelper.getOlaStyle(
+        _engine.isDarkTheme,
+        themeType: _currentTheme,
+      );
+
+      // 🚀 PATCH: Inject missing glyphs required by MapLibre for text-field rendering
+      try {
+        final decoded = jsonDecode(styleStr) as Map<String, dynamic>;
+        if (!decoded.containsKey('glyphs') || decoded['glyphs'] == null || decoded['glyphs'].toString().isEmpty) {
+          decoded['glyphs'] = "https://api.olamaps.io/tiles/fonts/{fontstack}/{range}.pbf";
+          styleStr = jsonEncode(decoded);
+        }
+      } catch (e) {
+        debugPrint("Map style parsing error: $e");
       }
+
+      if (!mounted) return;
+
+      // We must use setState so MapLibreMap's didUpdateWidget handles the styleString update safely
+      setState(() {
+        _currentMapStyle = styleStr;
+        _isFetchingStyle = false;
+      });
     } catch (e) {
-      debugPrint("Map style parsing error: $e");
+      debugPrint("MapLibre style/asset fetch error: $e");
+      if (!mounted) return;
+      setState(() {
+        _isFetchingStyle = false;
+        // Fallback style to prevent engine crash on null/invalid
+        _currentMapStyle ??= '{"version":8,"name":"Fallback","sources":{},"layers":[]}';
+      });
     }
 
-    if (!mounted) return;
-
-    // We must use setState so MapLibreMap's didUpdateWidget handles the styleString update safely
-    setState(() {
-      _currentMapStyle = styleStr;
-      _isFetchingStyle = false;
-    });
-
     // 🚀 FIX: Keep MapProvider's route theme in sync
-    Provider.of<MapProvider>(context, listen: false).setTheme(_currentTheme);
+    if (mounted) {
+      Provider.of<MapProvider>(context, listen: false).setTheme(_currentTheme);
+    }
   }
 
   void _onMapSearchTriggered() {
@@ -443,8 +455,8 @@ class _CustomMapScreenState extends State<CustomMapScreen>
         children: [
           if (_currentMapStyle == null)
             PremiumMapSkeleton(isDark: widget.isDark)
-          else
-            MapLibreMap(
+          else ...[
+              MapLibreMap(
               styleString: _currentMapStyle!,
               initialCameraPosition: const CameraPosition(
                   target: LatLng(28.6139, 77.2090),
@@ -465,7 +477,7 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                   : MyLocationTrackingMode.trackingCompass,
               myLocationRenderMode: kIsWeb
                   ? MyLocationRenderMode.normal
-                  : MyLocationRenderMode.compass,
+                  : MyLocationRenderMode.normal,
               trackCameraPosition: true,
               onCameraTrackingDismissed: () {
                 final provider = Provider.of<MapProvider>(context, listen: false);
@@ -574,6 +586,7 @@ class _CustomMapScreenState extends State<CustomMapScreen>
                         _engine.mapController!.cameraPosition!.zoom);
               },
             ),
+          ],
           if (_isFetchingStyle)
             Positioned.fill(
               child: Container(

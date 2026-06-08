@@ -151,7 +151,7 @@ class WeatherCacheService {
             .map((h) => {'time': h.time, 'temp': h.temp, 'code': h.code})
             .toList(),
         'daily': weather.daily
-            .map((d) => {'time': d.time, 'maxTemp': d.maxTemp, 'minTemp': d.minTemp, 'code': d.code})
+            .map((d) => {'date': d.date, 'maxTemp': d.maxTemp, 'minTemp': d.minTemp, 'conditionCode': d.conditionCode, 'conditionText': d.conditionText, 'conditionIcon': d.conditionIcon})
             .toList(),
       });
       await prefs.setString('weather_cache_$gridId', dataStr);
@@ -169,21 +169,30 @@ class WeatherCacheService {
         final hourlyRaw = data['hourly'] as List<dynamic>? ?? [];
         final dailyRaw = data['daily'] as List<dynamic>? ?? [];
         return WeatherModel(
-          temp: data['temp'] ?? 0.0,
-          weatherCode: data['weatherCode'] ?? 0,
-          aqi: data['aqi'] ?? 50,
-          tempMax: data['tempMax'] ?? 0.0,
-          tempMin: data['tempMin'] ?? 0.0,
+          temp: (data['temp'] as num?)?.toDouble() ?? 0.0,
+          weatherCode: (data['weatherCode'] as num?)?.toInt() ?? 0,
+          aqi: (data['aqi'] as num?)?.toInt() ?? 50,
+          tempMax: (data['tempMax'] as num?)?.toDouble() ?? 0.0,
+          tempMin: (data['tempMin'] as num?)?.toDouble() ?? 0.0,
           hourly: hourlyRaw
-              .map((h) => HourlyWeather(h['time'], h['temp'], h['code']))
+              .map((h) => HourlyWeather(
+                  h['time']?.toString() ?? '',
+                  (h['temp'] as num?)?.toDouble() ?? 0.0,
+                  (h['code'] as num?)?.toInt() ?? 0))
               .toList(),
           daily: dailyRaw
-              .map((d) => DailyWeather(d['time'], d['maxTemp'], d['minTemp'], d['code']))
+              .map((d) => ForecastDayModel(
+                  d['date']?.toString() ?? '',
+                  (d['maxTemp'] as num?)?.toDouble() ?? 0.0,
+                  (d['minTemp'] as num?)?.toDouble() ?? 0.0,
+                  (d['conditionCode'] as num?)?.toInt() ?? 0,
+                  d['conditionText']?.toString() ?? '',
+                  d['conditionIcon']?.toString() ?? ''))
               .toList(),
-          humidity: data['humidity'] ?? 0,
-          windSpeed: data['wind_speed'] ?? 0.0,
-          feelsLike: data['feels_like'] ?? 0.0,
-          uvIndex: data['uv_index'] ?? 0.0,
+          humidity: (data['humidity'] as num?)?.toInt() ?? 0,
+          windSpeed: (data['wind_speed'] as num?)?.toDouble() ?? 0.0,
+          feelsLike: (data['feels_like'] as num?)?.toDouble() ?? 0.0,
+          uvIndex: (data['uv_index'] as num?)?.toDouble() ?? 0.0,
         );
       }
     } catch (_) {}

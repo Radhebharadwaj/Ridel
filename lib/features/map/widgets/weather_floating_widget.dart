@@ -9,8 +9,9 @@ import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/services/weather_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/features/map/services/weather_cache_service.dart';
-import 'package:ridel/features/profile/services/profile_repository.dart';
+
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
+import 'package:intl/intl.dart';
 
 enum WeatherState { compact, expanded, full }
 
@@ -85,6 +86,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
 
     if (lat == null || lng == null) {
       await locService.forceRefreshLocation();
+      if (!mounted) return;
       if (locService.currentPosition != null) {
         lat = locService.currentPosition!.latitude;
         lng = locService.currentPosition!.longitude;
@@ -128,22 +130,24 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
         data = await _weatherCache.getSmartWeatherByCity(locService.currentCity);
       }
 
-      if (mounted) {
-        setState(() {
-          if (data != null) {
-            _weather = data;
-            _hasError = false;
-          } else {
-            _hasError = true;
-          }
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint("Weather Widget Fetch Error: $e");
-      if (mounted) {
-        setState(() {
+      if (!mounted) return;
+      setState(() {
+        if (data != null) {
+          _weather = data;
+          _hasError = false;
+        } else {
           _hasError = true;
+        }
+      });
+    } catch (e) {
+      debugPrint('Weather Widget Catch: $e');
+      if (!mounted) return;
+      setState(() {
+        _hasError = true;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
           _isLoading = false;
         });
       }
@@ -292,6 +296,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
             if (_hasError || _weather == null) {
               // 🚀 PHASE 8: Interactive Permission Hook
               bool granted = await locService.requireLocationForMapServices(context);
+              if (!mounted) return;
               if (granted) {
                 if (mounted) setState(() { _isLoading = true; });
                 _resolveLocationAndFetchWeather();
@@ -570,9 +575,10 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   ValueListenableBuilder<String>(
-                                    valueListenable: ProfileRepository.userCity,
+                                    valueListenable: context.read<GlobalLocationService>().currentCityName,
                                     builder: (context, cityValue, child) {
-                                      String displayCityValue = cityValue.isNotEmpty ? cityValue[0].toUpperCase() + cityValue.substring(1) : cityValue;
+                                      String safeCity = cityValue;
+                                      String displayCityValue = safeCity.isNotEmpty ? safeCity[0].toUpperCase() + safeCity.substring(1) : safeCity;
                                       return Text(displayCityValue,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
@@ -813,35 +819,37 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     );
   }
 
+  String _formatDayName(DateTime targetDate) {
+    DateTime now = DateTime.now();
+    DateTime today = DateTime(now.year, now.month, now.day);
+    DateTime tomorrow = today.add(const Duration(days: 1));
+    DateTime target = DateTime(targetDate.year, targetDate.month, targetDate.day);
+
+    if (target == today) return "Today";
+    if (target == tomorrow) return "Tomorrow";
+    return DateFormat('EEEE').format(targetDate);
+  }
+
   // 🚀 COMPLETELY FIXED: REAL DAILY 7-DAY DATA PARSING
   List<Widget> _generate7Days(bool isLightMode) {
     if (_weather!.daily.isEmpty) return [const Text("No forecast available")];
 
-    List<String> weekdays = [
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday",
-      "Sunday"
-    ];
-
     return _weather!.daily.map((dayData) {
-      String dayName = dayData.time; // Fallback
+      String dayName = dayData.date; // Fallback
       try {
-        DateTime date = DateTime.parse(dayData.time);
-        DateTime now = DateTime.now();
-        if (date.day == now.day && date.month == now.month) {
-          dayName = "Today";
-        } else if (date.day == now.add(const Duration(days: 1)).day) {
-          dayName = "Tomorrow";
+        DateTime date;
+        // Handle both unix timestamp (seconds) and ISO-8601 string
+        if (int.tryParse(dayData.date) != null) {
+          date = DateTime.fromMillisecondsSinceEpoch(int.parse(dayData.date) * 1000);
         } else {
-          dayName = weekdays[date.weekday - 1];
+          date = DateTime.parse(dayData.date);
         }
-      } catch (e) {/* Ignore */}
+        dayName = _formatDayName(date);
+      } catch (e) {
+        debugPrint("Date Parsing Error: $e");
+      }
 
-      return _buildDailyItem(dayName, dayData.code, dayData.minTemp.toInt(),
+      return _buildDailyItem(dayName, dayData.conditionCode, dayData.minTemp.toInt(),
           dayData.maxTemp.toInt(), isLightMode);
     }).toList()
       ..add(const SizedBox(height: 20)); // Bottom padding
@@ -854,7 +862,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           SizedBox(
-              width: 95,
+              width: 100, // 🚀 CRITICAL FOR ALIGNMENT
               child: Text(day,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

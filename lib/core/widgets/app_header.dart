@@ -5,9 +5,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/services/notification_service.dart';
-import 'package:ridel/core/services/place_service.dart';
+
 import 'package:ridel/core/widgets/notification_sheet.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+
 
 import '../../features/profile/services/profile_repository.dart';
 import '../utils/app_haptics.dart';
@@ -74,23 +74,7 @@ class _AppHeaderState extends State<AppHeader> {
           Provider.of<GlobalLocationService>(context, listen: false);
 
       if (!locationService.hasValidLocation) {
-        ProfileRepository.userCity.value = "Locating...";
         await locationService.initializeEcoLocation();
-      }
-
-      final position = locationService.currentPosition;
-
-      if (position != null) {
-        final detectedCity = await PlaceService.getCityFromCoordinates(
-            position.latitude, position.longitude);
-
-        if (detectedCity != null) {
-          ProfileRepository.userCity.value = detectedCity;
-          final user = Supabase.instance.client.auth.currentUser;
-          if (user != null) {
-            await _repo.updateProfile({'current_city': detectedCity});
-          }
-        }
       }
     } catch (_) {}
   }
@@ -110,15 +94,7 @@ class _AppHeaderState extends State<AppHeader> {
     });
   }
 
-  String _formatCityName(String name) {
-    if (name.isEmpty) return "Select City";
-    String clean = name
-        .replaceAll(RegExp(r'^New\s+', caseSensitive: false), '')
-        .replaceAll(RegExp(r'^West\s+', caseSensitive: false), '')
-        .trim();
-    if (clean.isEmpty) return "Select City";
-    return clean[0].toUpperCase() + clean.substring(1).toLowerCase();
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -176,12 +152,18 @@ class _AppHeaderState extends State<AppHeader> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: ValueListenableBuilder<String?>(
+            child: ValueListenableBuilder<String>(
               valueListenable: context.read<GlobalLocationService>().currentCityName,
               builder: (context, cityName, child) {
-                final displayTitle = cityName != null && cityName.isNotEmpty 
-                    ? _formatCityName(cityName) 
-                    : 'Locating...';
+                // Determine the primary display city from GlobalLocationService
+                String displayCity = cityName.isNotEmpty ? cityName : "Detecting...";
+
+                // Title Case
+                displayCity = displayCity.split(' ').map((word) {
+                   return word.isEmpty ? "" : word[0].toUpperCase() + word.substring(1).toLowerCase();
+                }).join(' ');
+
+                final displayTitle = displayCity;
                 final isFake = cityName == "Fake GPS Detected";
 
                 return AnimatedSwitcher(

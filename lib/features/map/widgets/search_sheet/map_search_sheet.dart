@@ -205,28 +205,15 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     if (widget.isMapTabActive) unawaited(_slideController.forward());
 
     _searchFocus.addListener(() {
-      /* 🚀 CANCELLED THE FOCUS ASSASSIN
-      _pokeDash();
       if (_searchFocus.hasFocus) {
-        if (!_showSearchList) setState(() => _showSearchList = true);
-
-        try {
-          _nearbyTileCtrl.expand();
-        } catch (_) {}
+        if (_sheetController.isAttached) {
+          _safeAnimateSheet(1.0);
+        }
       } else {
-
-        try {
-          _nearbyTileCtrl.collapse();
-        } catch (_) {}
-        
-        final provider = Provider.of<MapProvider>(context, listen: false);
-        // ONLY revert to idle if we aren't actively looking at a selected place
-        if (provider.engine.mapUIState.value != MapUIState.placeSelected) {
-          provider.engine.setUIState(MapUIState.idle);
+        if (_sheetController.isAttached && _sheetController.size > _safeMidSize) {
+          _safeAnimateSheet(_safeMidSize);
         }
       }
-      setState(() {});
-      */
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1197,9 +1184,16 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           opacity: (isKeyboardOpen && widget.isMapTabActive) ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 300),
           child: (isKeyboardOpen && widget.isMapTabActive)
-              ? BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                  child: Container(color: Colors.black.withValues(alpha: 0.3)),
+              ? GestureDetector(
+                  onTap: () {
+                    _searchFocus.unfocus();
+                    _originFocus.unfocus();
+                    _destFocus.unfocus();
+                  },
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                    child: Container(color: Colors.black.withValues(alpha: 0.3)),
+                  ),
                 )
               : const SizedBox.shrink(),
         ),
@@ -1393,27 +1387,29 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                     width: 1.0,
                                                   ),
                                                 ),
-                                                child: ScrollConfiguration(
-                                                  behavior:
-                                                      ScrollConfiguration.of(
-                                                              context)
-                                                          .copyWith(
-                                                    scrollbars: false,
-                                                    dragDevices: {
-                                                      PointerDeviceKind.touch,
-                                                      PointerDeviceKind.mouse,
-                                                    },
-                                                  ),
-                                                  child: CustomScrollView(
-                                                    controller:
-                                                        scrollController,
-                                                    // 🚀 FIX: Prevent overscroll bouncing
-                                                    physics: const ClampingScrollPhysics(
-                                                            parent:
-                                                                AlwaysScrollableScrollPhysics()),
-                                                    keyboardDismissBehavior:
-                                                        ScrollViewKeyboardDismissBehavior
-                                                            .onDrag,
+                                                child: Padding(
+                                                  padding: EdgeInsets.only(bottom: keyboardHeight),
+                                                  child: ScrollConfiguration(
+                                                    behavior:
+                                                        ScrollConfiguration.of(
+                                                                context)
+                                                            .copyWith(
+                                                      scrollbars: false,
+                                                      dragDevices: {
+                                                        PointerDeviceKind.touch,
+                                                        PointerDeviceKind.mouse,
+                                                      },
+                                                    ),
+                                                    child: CustomScrollView(
+                                                      controller:
+                                                          scrollController,
+                                                      // 🚀 FIX: Prevent overscroll bouncing
+                                                      physics: const ClampingScrollPhysics(
+                                                              parent:
+                                                                  AlwaysScrollableScrollPhysics()),
+                                                      keyboardDismissBehavior:
+                                                          ScrollViewKeyboardDismissBehavior
+                                                              .onDrag,
                                                     slivers: [
                                                       SliverAppBar(
                                                         pinned: true,
@@ -1483,9 +1479,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                 )
                                                               : const SizedBox(),
                                                         ),
-                                                      ),
-                                                      SliverPadding(
-                                                        padding: EdgeInsets.only(bottom: keyboardHeight),
                                                       ),
                                                       SliverFillRemaining(
                                                         hasScrollBody: false,

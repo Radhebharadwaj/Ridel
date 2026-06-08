@@ -27,7 +27,7 @@ class AppConfig {
       dotenv.env['WEB_DATA_API_URL'] ?? 'https://pixra.pages.dev/api/data/';
   static String get storageBucket =>
       dotenv.env['STORAGE_BUCKET'] ?? 'ridel-storage-master';
+
   static String get appSecretPasskey =>
-      dotenv.env['APP_SECRET_PASSKEY'] ??
-      ''; // Apne .env me TERA_MASTER_PASSKEY_YAHAN_DAAL set karna
+      dotenv.env['APP_SECRET_PASSKEY'] ?? "{@*##!/*--GiT*@}{@*##!/*pAsSkEy*@}";
 }

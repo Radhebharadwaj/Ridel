@@ -153,90 +153,99 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       body: Stack(
         children: [
           Positioned.fill(
-            child: Consumer<MapProvider>(
-              builder: (context, mapProvider, child) {
-                return Listener(
-                    behavior: HitTestBehavior.translucent,
-                    onPointerMove: (event) {
-                      if (mapProvider.isActiveNavigation) {
-                        mapProvider.setUserPanning(true);
+            child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerMove: (event) {
+                  final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                  if (mapProvider.isActiveNavigation) {
+                    mapProvider.setUserPanning(true);
+                  }
+                },
+                child: MapLibreMap(
+                  styleString: _resolvedStyleJson!,
+                  onMapCreated: (controller) {
+                    _tempController = controller;
+                  },
+                  onStyleLoadedCallback: () async {
+                    if (_tempController != null) {
+                      // Failsafe for missing required images that crash WebGL
+                      try {
+                        final Uint8List transparentPixel = Uint8List.fromList([
+                          137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
+                          1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65,
+                          84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73,
+                          69, 78, 68, 174, 66, 96, 130
+                        ]);
+                        await _tempController!.addImage('Arrow', transparentPixel);
+                        await _tempController!.addImage('arrow', transparentPixel);
+                        await _tempController!.addImage('custom-marker', transparentPixel);
+                      } catch (_) {}
+
+                      if (!context.mounted) return;
+                      Provider.of<MapProvider>(context, listen: false).engine.onMapCreated(
+                          _tempController!,
+                          isDark,
+                          Provider.of<GlobalLocationService>(context,
+                              listen: false),
+                          this);
+                    }
+                  },
+                  onMapClick: (point, latLng) async {
+                    FocusScope.of(context).unfocus();
+                    final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                    bool handled =
+                        await mapProvider.handleRouteClick(point, latLng);
+                    if (!handled) {
+                      mapProvider.clearTargetLocation();
+                    }
+                  },
+                  onMapLongClick: (point, latLng) {
+                    Provider.of<MapProvider>(context, listen: false).handleMapTap(point, latLng);
+                  },
+                  initialCameraPosition: const CameraPosition(
+                      target: LatLng(28.6139, 77.2090), zoom: 12.0),
+                  compassEnabled: false,
+                  myLocationEnabled: Provider.of<MapProvider>(context, listen: false).showNativeBlueDot,
+                  myLocationTrackingMode: MyLocationTrackingMode.tracking,
+                  myLocationRenderMode: MyLocationRenderMode.normal,
+                  logoViewMargins: kIsWeb ? null : const Point(-100, -100),
+                  attributionButtonMargins:
+                      kIsWeb ? null : const Point(-100, -100),
+                  onCameraTrackingDismissed: () {
+                    final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                    mapProvider.engine.onUserPannedMap();
+                    if (mapProvider.isActiveNavigation) {
+                      mapProvider.setUserPanning(true);
+                    }
+                  },
+                  onUserLocationUpdated: (location) {
+                    final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                    final pos = location.position;
+                    mapProvider.updateCurrentLocation(pos);
+                    mapProvider.updateNavigationPuck(
+                      pos,
+                      location.heading?.trueHeading ??
+                          location.bearing ??
+                          0.0,
+                    );
+                  },
+                  onCameraIdle: () async {
+                    final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                    final ctrl = mapProvider.controller ?? _tempController;
+                    if (ctrl != null) {
+                      try {
+                        final bounds = await ctrl.getVisibleRegion();
+                        LatLng? userLoc = mapProvider.currentLocation;
+                        if (userLoc != null) {
+                          bool isVisible = bounds.contains(userLoc);
+                          mapProvider.setUserVisibility(isVisible);
+                        }
+                      } catch (_) {
+                        // Suppressed error
                       }
-                    },
-                    child: MapLibreMap(
-                      styleString: _resolvedStyleJson!,
-                      onMapCreated: (controller) {
-                        _tempController = controller;
-                      },
-                      onStyleLoadedCallback: () {
-                        if (_tempController != null) {
-                          mapProvider.engine.onMapCreated(
-                              _tempController!,
-                              isDark,
-                              Provider.of<GlobalLocationService>(context,
-                                  listen: false),
-                              this);
-                        }
-                      },
-                      onMapClick: (point, latLng) async {
-                        FocusScope.of(context).unfocus();
-                        bool handled =
-                            await mapProvider.handleRouteClick(point, latLng);
-                        if (!handled) {
-                          mapProvider.clearTargetLocation();
-                        }
-                      },
-                      onMapLongClick: (point, latLng) {
-                        mapProvider.handleMapTap(point, latLng);
-                      },
-                      initialCameraPosition: const CameraPosition(
-                          target: LatLng(28.6139, 77.2090), zoom: 12.0),
-                      compassEnabled: false,
-                      myLocationEnabled: mapProvider.showNativeBlueDot,
-                      myLocationTrackingMode: kIsWeb
-                          ? MyLocationTrackingMode.tracking
-                          : MyLocationTrackingMode.trackingCompass,
-                      logoViewMargins: kIsWeb ? null : const Point(-100, -100),
-                      attributionButtonMargins:
-                          kIsWeb ? null : const Point(-100, -100),
-                      onCameraTrackingDismissed: () {
-                        mapProvider.engine.onUserPannedMap();
-                        if (mapProvider.isActiveNavigation) {
-                          mapProvider.setUserPanning(true);
-                        }
-                      },
-                      onUserLocationUpdated: (location) {
-                        final pos = location.position;
-                        mapProvider.updateCurrentLocation(pos);
-                        mapProvider.updateNavigationPuck(
-                          pos,
-                          location.heading?.trueHeading ??
-                              location.bearing ??
-                              0.0,
-                        );
-                      },
-
-                      // 🚀 NAYA BULLETPROOF CODE YAHAN SE PASTE KAR:
-                      onCameraIdle: () async {
-                        final ctrl = mapProvider.controller ?? _tempController;
-                        if (ctrl != null) {
-                          try {
-                            final bounds = await ctrl.getVisibleRegion();
-
-                            // 1. Pehle provider se location nikalne ki koshish karo
-                            LatLng? userLoc = mapProvider.currentLocation;
-
-                            // 3. Agar location mil gayi, toh Bounds Check karo!
-                            if (userLoc != null) {
-                              bool isVisible = bounds.contains(userLoc);
-                              mapProvider.setUserVisibility(isVisible);
-                            }
-                          } catch (_) {
-                            // Suppressed error
-                          }
-                        }
-                      },
-                    ));
-              },
+                    }
+                  },
+                ),
             ),
           ),
 

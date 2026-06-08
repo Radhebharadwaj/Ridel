@@ -4,22 +4,22 @@ import 'dart:convert'; // 🔥 JSON decode karne ke liye zaroori hai
 class MapStation {
   final String id;
   final String name;
-  final double x;     
-  final double y;     
-  final double textX; 
-  final double textY; 
-  final double lat;   
-  final double lng;   
+  final double x;
+  final double y;
+  final double textX;
+  final double textY;
+  final double lat;
+  final double lng;
   final List<Offset> allDots; // 🔥 NAYA: Har station ke saare dots isme aayenge
 
   MapStation({
-    required this.id, 
-    required this.name, 
-    required this.x, 
+    required this.id,
+    required this.name,
+    required this.x,
     required this.y,
     required this.textX,
     required this.textY,
-    required this.lat, 
+    required this.lat,
     required this.lng,
     required this.allDots,
   });
@@ -33,7 +33,7 @@ class MapStation {
     }
 
     List<Offset> parsedDots = [];
-    
+
     // 🔥 JSON Parsing Logic (Agar JSON hai to list banao, warna normal x,y use karo)
     if (map['all_dots'] != null && map['all_dots'].toString().isNotEmpty) {
       try {
@@ -53,24 +53,29 @@ class MapStation {
       name: map['name']?.toString() ?? 'Unknown',
       x: parseDouble(map['x']),
       y: parseDouble(map['y']),
-      textX: map['text_x'] != null ? parseDouble(map['text_x']) : parseDouble(map['x']), 
-      textY: map['text_y'] != null ? parseDouble(map['text_y']) : parseDouble(map['y']), 
-      lat: parseDouble(map['lat']), 
-      lng: parseDouble(map['lon']), 
+      textX: map['text_x'] != null
+          ? parseDouble(map['text_x'])
+          : parseDouble(map['x']),
+      textY: map['text_y'] != null
+          ? parseDouble(map['text_y'])
+          : parseDouble(map['y']),
+      lat: parseDouble(map['lat']),
+      lng: parseDouble(map['lon']),
       allDots: parsedDots, // Assign parsed list
     );
   }
 }
 
 class MapLine {
-  final String lineId; 
+  final String lineId;
   final String pathD;
   final Color color;
 
   MapLine({required this.lineId, required this.pathD, required this.color});
 
   factory MapLine.fromMap(Map<String, dynamic> map) {
-    final hexString = map['color_hex']?.toString().replaceAll('#', '') ?? 'FFFFFF';
+    final hexString =
+        map['color_hex']?.toString().replaceAll('#', '') ?? 'FFFFFF';
     return MapLine(
       lineId: map['route_id']?.toString() ?? map['line_id']?.toString() ?? '',
       pathD: map['path_d']?.toString() ?? '',
@@ -81,6 +86,6 @@ class MapLine {
 
 class MetroMapData {
   final List<MapStation> stations;
-  final List<MapLine> lines; 
+  final List<MapLine> lines;
   MetroMapData({required this.stations, required this.lines});
 }

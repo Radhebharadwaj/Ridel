@@ -124,7 +124,7 @@ class _LoginApprovalSheetState extends State<LoginApprovalSheet> {
     final subTextColor = isDark ? Colors.grey : Colors.grey.shade600;
 
     final deviceName = widget.requestData['device_name'] ?? 'Unknown Device';
-    final location = widget.requestData['location'] ?? 'Unknown Location';
+    final location = widget.requestData['location'] ?? 'Current Location';
     final time = widget.requestData['time'] ?? 'Just now';
 
     return Container(

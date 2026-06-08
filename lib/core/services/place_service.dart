@@ -87,37 +87,4 @@ class PlaceService {
     return null;
   }
 
-  // ==========================================================
-  // 4. REVERSE GEOCODING (Lat/Lng to City Name via OSM Free)
-  // ==========================================================
-  static Future<String?> getCityFromCoordinates(double lat, double lon) async {
-    try {
-      final url = Uri.parse("https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lon&format=json");
-      
-      // 🚀 FIX: Added email to User-Agent (OSM strict policy requirement)
-      final response = await http.get(url, headers: {
-        'User-Agent': 'Ridel_App_v1.0 (contact@ridelapp.com)' 
-      });
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        
-        if (data['address'] != null) {
-          final address = data['address'];
-          
-          // Accuracy Fallback
-          final String? cityName = address['city'] ?? 
-                                   address['town'] ?? 
-                                   address['village'] ?? 
-                                   address['state_district'] ?? 
-                                   address['county'];
-                                   
-          return cityName;
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) print("⚠️ Reverse Geocode Error: $e");
-    }
-    return null;
-  }
 }
