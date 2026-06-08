@@ -7,6 +7,7 @@ import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/services/notification_service.dart';
 
 import 'package:ridel/core/widgets/notification_sheet.dart';
+import 'package:ridel/core/services/weather_service.dart';
 
 
 import '../../features/profile/services/profile_repository.dart';
@@ -227,18 +228,41 @@ class _AppHeaderState extends State<AppHeader> {
                               );
                             },
                             behavior: HitTestBehavior.opaque,
-                            child: Text(
-                              displayTitle,
-                              textAlign: TextAlign.left,
-                              style: GoogleFonts.inter(
-                                fontSize: isFake ? 22 : 32,
-                                fontWeight: FontWeight.w800,
-                                color: isFake ? Colors.redAccent : textColor,
-                                letterSpacing: -1.0,
-                                height: 1.0,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    displayTitle,
+                                    textAlign: TextAlign.left,
+                                    style: GoogleFonts.inter(
+                                      fontSize: isFake ? 22 : 32,
+                                      fontWeight: FontWeight.w800,
+                                      color: isFake ? Colors.redAccent : textColor,
+                                      letterSpacing: -1.0,
+                                      height: 1.0,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                ValueListenableBuilder<WeatherModel?>(
+                                  valueListenable: WeatherService.currentWeather,
+                                  builder: (context, weather, child) {
+                                    if (weather == null) return const SizedBox.shrink();
+                                    final isNight = DateTime.now().hour > 18 || DateTime.now().hour < 6;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(left: 8.0),
+                                      child: Icon(
+                                        WeatherService.getWeatherIcon(weather.weatherCode, isDay: !isNight),
+                                        size: 28,
+                                        color: textColor.withValues(alpha: 0.8),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
                           ),
                         ),

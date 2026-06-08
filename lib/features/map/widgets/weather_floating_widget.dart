@@ -58,7 +58,34 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
   }
 
   final WeatherCacheService _weatherCache = WeatherCacheService();
+  final ScrollController _hourlyScrollController = ScrollController();
   
+  void _scrollToNow() {
+    if (_weather == null || _weather!.hourly.isEmpty) return;
+    int nowIndex = 0;
+    DateTime now = DateTime.now();
+    for (int i = 0; i < _weather!.hourly.length; i++) {
+      try {
+        if (_weather!.hourly[i].time.isNotEmpty) {
+          DateTime dt = DateTime.parse(_weather!.hourly[i].time);
+          if (!dt.isBefore(DateTime(now.year, now.month, now.day, now.hour))) {
+            nowIndex = i;
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+    
+    if (nowIndex > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_hourlyScrollController.hasClients) {
+          double offset = nowIndex * 65.0; // item width
+          _hourlyScrollController.jumpTo(offset);
+        }
+      });
+    }
+  }
+
   double? _dragHeight;
   final double _compactHeight = 68;
   final double _compactWidth = 82;
@@ -66,9 +93,11 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
   final double _fullHeight = 550;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _resolveLocationAndFetchWeather();
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _resolveLocationAndFetchWeather();
+    });
   }
 
   Future<void> _resolveLocationAndFetchWeather() async {
@@ -135,6 +164,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
         if (data != null) {
           _weather = data;
           _hasError = false;
+          _scrollToNow();
         } else {
           _hasError = true;
         }
@@ -166,6 +196,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
         _dragHeight = null;
         if (_currentState == WeatherState.compact) {
           _currentState = WeatherState.expanded;
+          _scrollToNow();
         } else if (_currentState == WeatherState.expanded) {
           _currentState = WeatherState.full;
         } else {
@@ -733,6 +764,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                   child: SizedBox(
                     height: 100,
                     child: ListView(
+                      controller: _hourlyScrollController,
                       padding: const EdgeInsets.symmetric(horizontal: 5),
                       scrollDirection: Axis.horizontal,
                       physics: const BouncingScrollPhysics(),
@@ -776,11 +808,19 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     return _weather!.hourly.map((hourData) {
       String displayTime = "Now";
       bool isHourNight = false;
+      bool isPast = false;
 
       try {
         if (hourData.time.isNotEmpty) {
-          int h = int.parse(hourData.time.split(':')[0]);
-          if (h != DateTime.now().hour) {
+          DateTime dt = DateTime.parse(hourData.time);
+          DateTime now = DateTime.now();
+          
+          if (dt.isBefore(DateTime(now.year, now.month, now.day, now.hour))) {
+            isPast = true;
+          }
+
+          int h = dt.hour;
+          if (h != now.hour || isPast) {
             String ampm = h >= 12 ? "PM" : "AM";
             int displayH = h % 12 == 0 ? 12 : h % 12;
             displayTime = "$displayH $ampm";
@@ -792,26 +832,43 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
       }
 
       return _buildHourlyItem(
-          displayTime, hourData.temp.toInt(), hourData.code, isHourNight, isLightMode);
+          displayTime, hourData.temp.toInt(), hourData.code, isHourNight, isLightMode, isPast);
     }).toList();
   }
 
-  Widget _buildHourlyItem(String time, int temp, int code, bool isNight, bool isLightMode) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 24),
+  Widget _buildHourlyItem(String time, int temp, int code, bool isNight, bool isLightMode, bool isPast) {
+    Color textColor = isPast 
+        ? (isLightMode ? Colors.black38 : Colors.white38) 
+        : (isLightMode ? Colors.black87 : Colors.white);
+    Color tempColor = isPast 
+        ? (isLightMode ? Colors.black38 : Colors.white38) 
+        : (isLightMode ? Colors.black54 : Colors.white70);
+
+    return SizedBox(
+      width: 65,
       child: Column(
         children: [
           Text(time,
               style: GoogleFonts.inter(
-                  color: isLightMode ? Colors.black87 : Colors.white,
+                  color: textColor,
                   fontSize: 13,
                   fontWeight: FontWeight.w600)),
           const SizedBox(height: 10),
-          PremiumWeatherIcon(code: code, size: 24, isNight: isNight),
+          isPast 
+            ? ColorFiltered(
+                colorFilter: const ColorFilter.matrix([
+                  0.2126, 0.7152, 0.0722, 0, 0,
+                  0.2126, 0.7152, 0.0722, 0, 0,
+                  0.2126, 0.7152, 0.0722, 0, 0,
+                  0,      0,      0,      0.6, 0,
+                ]),
+                child: PremiumWeatherIcon(code: code, size: 24, isNight: isNight),
+              )
+            : PremiumWeatherIcon(code: code, size: 24, isNight: isNight),
           const SizedBox(height: 10),
           Text("$temp°",
               style: GoogleFonts.inter(
-                  color: isLightMode ? Colors.black54 : Colors.white70,
+                  color: tempColor,
                   fontSize: 16,
                   fontWeight: FontWeight.w500)),
         ],

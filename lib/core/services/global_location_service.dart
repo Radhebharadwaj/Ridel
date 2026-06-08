@@ -97,6 +97,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
         _isUsingIpFallback = false;
         _currentCity = "Delhi"; // Prompt manual entry
         ProfileRepository.userCity.value = "Delhi";
+        WeatherService.getWeatherByCity(_currentCity);
         notifyListeners();
         return;
       }
@@ -488,6 +489,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
         currentCityName.value = _currentCity;
         _isUsingIpFallback = true;
         ProfileRepository.userCity.value = _currentCity;
+        WeatherService.getWeatherByCity(_currentCity);
         notifyListeners();
         debugPrint(
             "IP Fallback Success: $_currentCity, $_currentState");
@@ -512,6 +514,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     currentCityName.value = _currentCity;
     _isUsingIpFallback = true;
     ProfileRepository.userCity.value = _currentCity;
+    WeatherService.getWeatherByCity(_currentCity);
     notifyListeners();
   }
 

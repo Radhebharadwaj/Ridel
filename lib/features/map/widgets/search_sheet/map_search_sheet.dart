@@ -1209,10 +1209,13 @@ class _MapSearchSheetState extends State<MapSearchSheet>
             right: 0,
             top: provider.isActiveNavigation
                 ? null
-                : ((isKeyboardOpen || _searchFocus.hasFocus)
-                    ? MediaQuery.paddingOf(context).top
-                    : 0),
-            child: SlideTransition(
+                : 0.0,
+            child: SafeArea(
+              top: true,
+              bottom: false,
+              left: false,
+              right: false,
+              child: SlideTransition(
                   position: _slideAnimation,
                   child: provider.isActiveNavigation
                       ? _buildNavigationDashboardOverlay(isDark)
@@ -1332,9 +1335,11 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                       constraints: BoxConstraints(
                                         maxWidth: isDesktop ? 800 : 450,
                                       ),
-                                      child: Stack(
-                                        clipBehavior: Clip.none,
-                                        children: [
+                                      child: Padding(
+                                        padding: isExpanded ? const EdgeInsets.only(top: 12.0) : EdgeInsets.zero,
+                                        child: Stack(
+                                          clipBehavior: Clip.none,
+                                          children: [
                                           // 🎨 PERFORMANCE FIX: RepaintBoundary around Blur
                                           RepaintBoundary(
                                             child: AnimatedContainer(
@@ -1518,16 +1523,18 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                       ),
                                     ],
                                   ),
-                                );
-                              },
-                            ),
+                                ),
+                              );
+                            },
                           ),
-                        );
-                      },
-                    );
-                  },
+                        ),
+                      );
+                    },
+                  );
+                },
                ),
               ),
+             ),
             )),
         // 🗺️ FLOATING MAP PIN OVERLAY (visible only when picking a location)
         ValueListenableBuilder<SheetState>(
