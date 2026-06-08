@@ -11,7 +11,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
   }) {
     // 🚀 PREMIUM MATTE CARD FOR LISTS & MENUS (Refined Alpha for true Glassmorphism)
     return Material(
-      color: isDark ? const Color(0xFF1C1F26) : Colors.white,
+      color: bgColor,
       borderRadius: BorderRadius.circular(borderRadius),
       clipBehavior: Clip.antiAlias,
       child: Container(
@@ -1168,10 +1168,10 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     final card = _buildProfileStyleCard(
       context,
       isDark: isDark,
-      bgColor: isDark ? const Color(0xFF1C1F26) : Colors.white,
+      bgColor: isDark ? const Color(0xFF0B0E17) : Colors.white,
       borderRadius: dynamicRadius,
       child: ListView(
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.only(bottom: 16),
         shrinkWrap: !isExpanded,
         physics: const ClampingScrollPhysics(),
         children: combinedResults.asMap().entries.map((entry) {
@@ -1245,7 +1245,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
       child: card,
     );
 
-    return isExpanded ? Expanded(child: content) : content;
+    return content;
   }
 
   Widget _buildSheetContent(bool isDark, double progress,
