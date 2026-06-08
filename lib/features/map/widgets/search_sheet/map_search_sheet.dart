@@ -205,6 +205,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     if (widget.isMapTabActive) unawaited(_slideController.forward());
 
     _searchFocus.addListener(() {
+      setState(() {});
       if (_searchFocus.hasFocus) {
         if (_sheetController.isAttached) {
           _safeAnimateSheet(1.0);
@@ -1174,10 +1175,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     snaps.sort();
     snaps = snaps.toSet().toList();
 
-    // 🚨 Dynamic Height Calculation
-    final double expandedHeight = screenSize.height - MediaQuery.paddingOf(context).top;
-    final double defaultIdleHeight = screenSize.height;
-
     return Stack(
       children: [
         AnimatedOpacity(
@@ -1197,14 +1194,18 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                 )
               : const SizedBox.shrink(),
         ),
-        Align(
-            alignment: Alignment.bottomCenter,
-            child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutQuart,
-                height: provider.isActiveNavigation ? null : (isKeyboardOpen ? expandedHeight : defaultIdleHeight),
-                padding: EdgeInsets.zero,
-                child: SlideTransition(
+        AnimatedPositioned(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutQuart,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            top: provider.isActiveNavigation
+                ? null
+                : ((isKeyboardOpen || _searchFocus.hasFocus)
+                    ? MediaQuery.paddingOf(context).top
+                    : 0),
+            child: SlideTransition(
                   position: _slideAnimation,
                   child: provider.isActiveNavigation
                       ? _buildNavigationDashboardOverlay(isDark)
@@ -1288,9 +1289,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                     },
                     child: DraggableScrollableSheet(
                       controller: _sheetController,
-                      initialChildSize: (isKeyboardOpen && !isNav) ? 1.0 : midS,
+                      initialChildSize: ((isKeyboardOpen || _searchFocus.hasFocus) && !isNav) ? 1.0 : midS,
                       minChildSize: minS,
-                      maxChildSize: (isKeyboardOpen && !isNav) ? 1.0 : maxS,
+                      maxChildSize: ((isKeyboardOpen || _searchFocus.hasFocus) && !isNav) ? 1.0 : maxS,
                       snap: true,
                       snapAnimationDuration: const Duration(milliseconds: 350),
                       snapSizes: snaps,
@@ -1514,7 +1515,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                   },
                ),
               ),
-            ))),
+            )),
         // 🗺️ FLOATING MAP PIN OVERLAY (visible only when picking a location)
         ValueListenableBuilder<SheetState>(
           valueListenable: _locationPickerController.sheetState,
