@@ -112,8 +112,7 @@ class WeatherService {
         url,
         headers: {
           'Content-Type': 'application/json',
-          'admin-secret': AppConfig
-              .appSecretPasskey, // Updated to match Cloudflare expectation
+          'admin-secret': AppConfig.appSecretPasskey,
         },
       ).timeout(_apiTimeout);
 
@@ -149,7 +148,8 @@ class WeatherService {
         url,
         headers: {
           'Content-Type': 'application/json',
-          'ADMIN-SECRET': AppConfig.appSecretPasskey,
+          'admin-secret':
+              AppConfig.appSecretPasskey, // 🔒 Wapas secure path lag gaya
         },
       ).timeout(_apiTimeout);
 
