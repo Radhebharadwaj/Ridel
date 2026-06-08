@@ -1495,6 +1495,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                           ),
                                         ),
                                       ),
+                                    ),
                                       Positioned(
                                         top: -8,
                                         left: 0,
