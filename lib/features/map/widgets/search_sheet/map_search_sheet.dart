@@ -1311,8 +1311,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
                             final Color sheetBgColor = isDark
                                 ? const Color(0xFF0B0E17)
-                                    .withValues(alpha: 0.80)
-                                : Colors.white.withValues(alpha: 0.65);
+                                    .withValues(alpha: isExpanded ? 1.0 : 0.80)
+                                : Colors.white.withValues(alpha: isExpanded ? 1.0 : 0.65);
                             const double blurAmount = 30.0;
 
                             return PointerInterceptor(
@@ -1461,7 +1461,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                           ),
                                                         ),
                                                       ),
-                                                      SliverToBoxAdapter(
+                                                      SliverFillRemaining(
+                                                        hasScrollBody: false,
                                                         child: AnimatedOpacity(
                                                           duration:
                                                               const Duration(

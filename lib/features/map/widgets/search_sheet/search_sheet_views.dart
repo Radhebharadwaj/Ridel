@@ -1171,7 +1171,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
       bgColor: isDark ? const Color(0xFF0B0E17) : Colors.white,
       borderRadius: dynamicRadius,
       child: ListView(
-        padding: const EdgeInsets.only(bottom: 16),
+        padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20),
         shrinkWrap: !isExpanded,
         physics: const ClampingScrollPhysics(),
         children: combinedResults.asMap().entries.map((entry) {
@@ -1242,7 +1243,11 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
 
     Widget content = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: card,
+      child: Column(
+        children: [
+          Expanded(child: card),
+        ],
+      ),
     );
 
     return content;

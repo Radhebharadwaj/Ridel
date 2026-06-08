@@ -1,0 +1,24 @@
+name = "ridel"
+main = "cloudflare_fcm_worker.js"
+compatibility_date = "2026-06-07"
+
+[vars]
+admin-secret = "{@*##!/*--GiT*@}{@*##!/*pAsSkEy*@}"
+OLA_MAPS_API_KEY = "LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs"
+WEATHER_API_KEY = "35a975baea9c49c996c190519260706"
+
+[[r2_buckets]]
+binding = "MAPS"
+bucket_name = "ridel-vector-maps"
+
+[[r2_buckets]]
+binding = "STORAGE"
+bucket_name = "ridel-storage-master"
+
+[[d1_databases]]
+binding = "DB"
+database_id = "13ebfec1-398c-40da-99f4-d509a3731512"
+
+[[d1_databases]]
+binding = "METRO_DB"
+database_id = "cd9bbcab-a481-4ffe-9465-cbc76193fe3d"
