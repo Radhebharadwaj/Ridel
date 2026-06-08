@@ -3,10 +3,12 @@ main = "cloudflare_fcm_worker.js"
 compatibility_date = "2026-06-07"
 
 [vars]
-admin-secret = "{@*##!/*--GiT*@}{@*##!/*pAsSkEy*@}"
-OLA_MAPS_API_KEY = "" # Add this securely using `npx wrangler secret put OLA_MAPS_API_KEY`
-WEATHER_API_KEY = "" # Add this securely using `npx wrangler secret put WEATHER_API_KEY`
+# Ise ADMIN_SECRET kar de (Capital with underscore)
+ADMIN_SECRET = "{@*##!/*--GiT*@}{@*##!/*pAsSkEy*@}"
+OLA_MAPS_API_KEY = "LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs"
+WEATHER_API_KEY = "35a975baea9c49c996c190519260706"
 
+# ... (baaki tere databases waise hi rahenge)
 [[r2_buckets]]
 binding = "MAPS"
 bucket_name = "ridel-vector-maps"

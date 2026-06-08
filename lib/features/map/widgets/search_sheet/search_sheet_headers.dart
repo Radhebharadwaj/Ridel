@@ -1119,7 +1119,11 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                                 onTap: () {
                                   AppHaptics.lightImpact();
                                   _searchCtrl.clear();
-                                  rebuildState(() {});
+                                  rebuildState(() {
+                                    _selectedPlace = null;
+                                    _showSearchList = true;
+                                    _isSearching = false;
+                                  });
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.all(4),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AppConfig {
@@ -28,5 +29,13 @@ class AppConfig {
   static String get storageBucket =>
       dotenv.env['STORAGE_BUCKET'] ?? 'ridel-storage-master';
 
-  static String get appSecretPasskey => "{@*##!/*--GiT*@}{@*##!/*pAsSkEy*@}";
+  static String get appSecretPasskey {
+    // Agar app Localhost (Debug mode) mein run ho rahi hai, toh direct key bhej do
+    if (kDebugMode) {
+      return "{@*##!/*--GiT*@}{@*##!/*pAsSkEy*@}";
+    }
+    // Agar app live (Production/Pages.dev) par hai, toh .env use karo
+    return dotenv.env['APP_SECRET_PASSKEY'] ??
+        "{@*##!/*--GiT*@}{@*##!/*pAsSkEy*@}";
+  }
 }

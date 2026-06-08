@@ -7,13 +7,13 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:path_drawing/path_drawing.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/features/commute/shared/screens/route_result_screen.dart';
 import 'package:ridel/features/commute/metro/services/metro_service.dart';
 import 'package:ridel/features/commute/shared/services/database_helper.dart';
+import 'package:ridel/features/commute/shared/widgets/commute_search_card.dart';
 import 'package:ridel/features/commute/metro/map/metro_data_provider.dart';
 import 'package:ridel/features/commute/metro/map/map_models.dart';
 import 'package:ridel/core/services/global_location_service.dart';
@@ -56,6 +56,16 @@ class _MetroMapScreenState extends State<MetroMapScreen>
   bool _isFullScreenUI = false;
   AnimationController? _animController;
   Timer? _zoomTimer;
+
+  final TextEditingController fromCtrl = TextEditingController();
+  final TextEditingController toCtrl = TextEditingController();
+  final FocusNode fromFocus = FocusNode();
+  final FocusNode toFocus = FocusNode();
+
+  void _updateControllers() {
+    fromCtrl.text = fromStation?.name ?? "";
+    toCtrl.text = toStation?.name ?? "";
+  }
 
   @override
   void initState() {
@@ -221,6 +231,7 @@ class _MetroMapScreenState extends State<MetroMapScreen>
               closestStation!.id != fromStation!.id) {
             toStation = closestStation;
           }
+          _updateControllers();
           _isZoomedToLocation = true;
           _isFullScreenUI = false;
         });
@@ -378,6 +389,7 @@ class _MetroMapScreenState extends State<MetroMapScreen>
           fromStation = clickedStation;
           toStation = null;
         }
+        _updateControllers();
       });
     }
   }
@@ -389,6 +401,7 @@ class _MetroMapScreenState extends State<MetroMapScreen>
         final temp = fromStation;
         fromStation = toStation;
         toStation = temp;
+        _updateControllers();
       });
     }
   }
@@ -421,48 +434,6 @@ class _MetroMapScreenState extends State<MetroMapScreen>
     }
   }
 
-  Widget _buildMapSelectionCapsule(
-      {required IconData leftIcon,
-      required Color leftIconColor,
-      required String title,
-      required bool isPlaceholder,
-      required VoidCallback onClear}) {
-    return Container(
-      height: 50,
-      padding: const EdgeInsets.only(left: 12, right: 8),
-      decoration: BoxDecoration(
-          color: const Color(0xFF000000).withValues(alpha: 0.65),
-          borderRadius: BorderRadius.circular(100)),
-      child: Row(
-        children: [
-          Container(
-              padding: const EdgeInsets.all(6),
-              child: Icon(leftIcon, color: leftIconColor, size: 20)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(title,
-                style: GoogleFonts.inter(
-                    color: isPlaceholder ? Colors.grey.shade500 : Colors.white,
-                    fontWeight:
-                        isPlaceholder ? FontWeight.normal : FontWeight.w600,
-                    fontSize: 15),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-          ),
-          if (!isPlaceholder)
-            GestureDetector(
-                onTap: () {
-                  AppHaptics.lightImpact();
-                  onClear();
-                },
-                child: const Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: Icon(Icons.close_rounded,
-                        color: Colors.white38, size: 22)))
-        ],
-      ),
-    );
-  }
 
   // 🚀 UPDATED: Premium Diagonal Shine Map Button
   Widget _buildGlassMapButton({
@@ -808,137 +779,15 @@ class _MetroMapScreenState extends State<MetroMapScreen>
                     right: 20,
                     child: (fromStation == null && toStation == null)
                         ? const SizedBox()
-                        : ClipRRect(
-                            borderRadius: BorderRadius.circular(35),
-                            child: BackdropFilter(
-                              filter: ui.ImageFilter.blur(
-                                  sigmaX: 20.0, sigmaY: 20.0),
-                              child: Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                    color: const Color(0xFF1E1E1E)
-                                        .withValues(alpha: 0.95),
-                                    borderRadius: BorderRadius.circular(35),
-                                    border: Border.all(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.1),
-                                        width: 1.5)),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    SizedBox(
-                                      height: 108,
-                                      child: Stack(
-                                        children: [
-                                          Column(
-                                            children: [
-                                              _buildMapSelectionCapsule(
-                                                  leftIcon:
-                                                      Icons.my_location_rounded,
-                                                  leftIconColor:
-                                                      const Color(0xFF00E5FF),
-                                                  title: fromStation?.name ??
-                                                      "Select From Station",
-                                                  isPlaceholder:
-                                                      fromStation == null,
-                                                  onClear: () => setState(() =>
-                                                      fromStation = null)),
-                                              const SizedBox(height: 8),
-                                              _buildMapSelectionCapsule(
-                                                  leftIcon:
-                                                      Icons.location_on_rounded,
-                                                  leftIconColor:
-                                                      const Color(0xFFFF3B30),
-                                                  title: toStation?.name ??
-                                                      "Select To Station",
-                                                  isPlaceholder:
-                                                      toStation == null,
-                                                  onClear: () => setState(
-                                                      () => toStation = null)),
-                                            ],
-                                          ),
-                                          Positioned(
-                                            right: 48,
-                                            top: 0,
-                                            bottom: 0,
-                                            child: Center(
-                                              child: GestureDetector(
-                                                onTap: _swapStations,
-                                                child: Container(
-                                                    height: 28,
-                                                    width: 28,
-                                                    decoration: BoxDecoration(
-                                                        color: const Color(
-                                                            0xFF1E1E1E),
-                                                        shape: BoxShape.circle,
-                                                        border: Border.all(
-                                                            color:
-                                                                Colors.white24),
-                                                        boxShadow: const [
-                                                          BoxShadow(
-                                                              color: Colors
-                                                                  .black26,
-                                                              blurRadius: 4)
-                                                        ]),
-                                                    child: const Icon(
-                                                        Icons.swap_vert_rounded,
-                                                        size: 16,
-                                                        color: Colors.white70)),
-                                              ),
-                                            ),
-                                          )
-                                        ],
-                                      ),
-                                    ),
-                                    AnimatedContainer(
-                                      duration:
-                                          const Duration(milliseconds: 250),
-                                      curve: Curves.easeInOutCubic,
-                                      height: (fromStation != null &&
-                                              toStation != null)
-                                          ? 50
-                                          : 0,
-                                      margin: EdgeInsets.only(
-                                          top: (fromStation != null &&
-                                                  toStation != null)
-                                              ? 20
-                                              : 0),
-                                      child: ClipRect(
-                                        child: SizedBox(
-                                          width: double.infinity,
-                                          child: ElevatedButton(
-                                            onPressed: _handleFindRoute,
-                                            style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.white,
-                                                foregroundColor: Colors.black,
-                                                elevation: 0,
-                                                shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            100))),
-                                            child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: [
-                                                  Text("Find Route",
-                                                      style: GoogleFonts.inter(
-                                                          fontWeight:
-                                                              FontWeight.w800,
-                                                          fontSize: 16)),
-                                                  const SizedBox(width: 8),
-                                                  const Icon(
-                                                      Icons
-                                                          .directions_transit_filled_rounded,
-                                                      size: 18)
-                                                ]),
-                                          ),
-                                        ),
-                                      ),
-                                    )
-                                  ],
-                                ),
-                              ),
-                            ),
+                        : CommuteSearchCard(
+                            isDark: true,
+                            selectedMode: 0,
+                            fromController: fromCtrl,
+                            toController: toCtrl,
+                            fromFocus: fromFocus,
+                            toFocus: toFocus,
+                            onSwapTap: _swapStations,
+                            onSubmit: _handleFindRoute,
                           ),
                   ),
               ],

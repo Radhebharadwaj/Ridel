@@ -2126,6 +2126,9 @@ class MapProvider extends ChangeNotifier {
 
     isFlying = true;
     try {
+      await engine.layers?.removeSearchPin();
+      await engine.layers?.showSearchPin(target);
+      
       await controller?.animateCamera(CameraUpdate.newLatLngZoom(target, 16.0));
 
       AppHaptics.mediumImpact();

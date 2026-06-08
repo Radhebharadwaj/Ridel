@@ -109,8 +109,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
               ],
             ),
           if (showRecentSearches)
-            buildHiddenExtra(
-              Material(
+            Builder(builder: (context) {
+              Widget card = Material(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.05)
                     : Colors.black.withValues(alpha: 0.03),
@@ -423,9 +423,12 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                                   await safeProvider.flyToPlace(
                                                       lat, lng);
                                                 } else {
-                                                  safeProvider.engine
-                                                      .setUIState(
-                                                          MapUIState.idle);
+                                                  safeProvider.setTargetDestination(null);
+                                                  safeProvider.setDestinationSelected(false);
+                                                  safeProvider.engine.setUIState(MapUIState.idle);
+                                                  if (context.mounted) {
+                                                    ToastService.showError(context, "Location coordinates not found.");
+                                                  }
                                                 }
                                               } catch (e) {
                                                 debugPrint(
@@ -516,8 +519,17 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                     ],
                   ),
                 ),
-              ),
-            ),
+              );
+              return isExpandedList
+                  ? Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                            bottom: MediaQuery.of(context).viewInsets.bottom),
+                        child: card,
+                      ),
+                    )
+                  : buildHiddenExtra(card);
+            }),
           if (showRecentSearches && !isSelected) const SizedBox(height: 16),
           if (!isSelected && !isFocused && isEmpty)
             Material(

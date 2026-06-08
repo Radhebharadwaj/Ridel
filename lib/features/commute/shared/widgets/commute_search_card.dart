@@ -26,20 +26,38 @@ class CommuteSearchCard extends StatefulWidget {
   final String? activeTicketingMode;
   final Function(String?)? onTicketingModeChanged;
 
-  const CommuteSearchCard(
-      {super.key,
-      required this.isDark,
-      required this.selectedMode,
-      this.activeTicketingMode,
-      this.onTicketingModeChanged});
+  final TextEditingController? fromController;
+  final TextEditingController? toController;
+  final FocusNode? fromFocus;
+  final FocusNode? toFocus;
+  final VoidCallback? onSwapTap;
+  final VoidCallback? onSubmit;
+  final Function(String)? onOriginChanged;
+  final Function(String)? onDestinationChanged;
+
+  const CommuteSearchCard({
+    super.key,
+    required this.isDark,
+    required this.selectedMode,
+    this.activeTicketingMode,
+    this.onTicketingModeChanged,
+    this.fromController,
+    this.toController,
+    this.fromFocus,
+    this.toFocus,
+    this.onSwapTap,
+    this.onSubmit,
+    this.onOriginChanged,
+    this.onDestinationChanged,
+  });
 
   @override
   State<CommuteSearchCard> createState() => _CommuteSearchCardState();
 }
 
 class _CommuteSearchCardState extends State<CommuteSearchCard> {
-  final TextEditingController _fromCtrl = TextEditingController();
-  final TextEditingController _toCtrl = TextEditingController();
+  late TextEditingController _fromCtrl;
+  late TextEditingController _toCtrl;
 
   String _metroFrom = "";
   String _metroTo = "";
@@ -80,6 +98,9 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
   @override
   void initState() {
     super.initState();
+    _fromCtrl = widget.fromController ?? TextEditingController();
+    _toCtrl = widget.toController ?? TextEditingController();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAllStationsForFuzzySearch()
           .then((_) => _calculateNearestLocationsInBackground());
@@ -413,6 +434,10 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
   }
 
   void _swapLocations() {
+    if (widget.onSwapTap != null) {
+      widget.onSwapTap!();
+      return;
+    }
     AppHaptics.lightImpact();
     final temp = _fromCtrl.text;
     setState(() {
@@ -479,6 +504,10 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
   }
 
   void _handleMainButton() async {
+    if (widget.onSubmit != null) {
+      widget.onSubmit!();
+      return;
+    }
     if (_fromCtrl.text.isEmpty && _toCtrl.text.isEmpty) {
       _openStationSheet(isFrom: true);
     } else if (_fromCtrl.text.isNotEmpty && _toCtrl.text.isEmpty) {

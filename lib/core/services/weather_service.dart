@@ -138,6 +138,10 @@ class WeatherService {
   }
 
   static Future<WeatherModel?> getWeatherByCity(String city) async {
+    if (city.isEmpty || city == 'Select City') {
+      debugPrint('⚠️ Weather Fetch Skipped: Invalid City Name');
+      return null;
+    }
     try {
       final url =
           Uri.parse('https://ridel.ridel.workers.dev/api/weather?city=$city');

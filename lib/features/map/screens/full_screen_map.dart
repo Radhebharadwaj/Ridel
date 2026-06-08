@@ -150,6 +150,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           Positioned.fill(

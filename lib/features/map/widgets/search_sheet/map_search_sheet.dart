@@ -325,6 +325,13 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         debugPrint('Auth Check Failed: $e');
       }
     }
+
+    // Ensure the local search history is loaded async in initState and updates UI
+    if (mounted) {
+      final provider = Provider.of<MapProvider>(context, listen: false);
+      await provider.loadSearchHistory();
+      if (mounted) setState(() {});
+    }
   }
 
   @override
@@ -1336,15 +1343,18 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                               height: provider.isActiveNavigation
                                                    ? (_isNavSheetExpanded ? navExpandedHeight : navCollapsedHeight)
                                                    : constraints.maxHeight,
-                                              margin: EdgeInsets.only(
-                                                left: currentSideMargin,
-                                                right: currentSideMargin,
-                                                bottom: currentBottomMargin +
-                                                    MediaQuery.paddingOf(context).bottom,
-                                              ),
+                                              margin: isExpanded
+                                                  ? EdgeInsets.zero
+                                                  : EdgeInsets.only(
+                                                      left: currentSideMargin,
+                                                      right: currentSideMargin,
+                                                      bottom: currentBottomMargin +
+                                                          MediaQuery.paddingOf(context).bottom,
+                                                    ),
                                           decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(
-                                                sheetRadius),
+                                            borderRadius: isExpanded
+                                                ? BorderRadius.zero
+                                                : BorderRadius.circular(sheetRadius),
                                             boxShadow: progress < 0.2
                                                 ? [
                                                     BoxShadow(
@@ -1373,8 +1383,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                   ],
                                           ),
                                           child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                                sheetRadius),
+                                            borderRadius: isExpanded
+                                                ? BorderRadius.zero
+                                                : BorderRadius.circular(sheetRadius),
                                             child: BackdropFilter(
                                               filter: ImageFilter.blur(
                                                   sigmaX: blurAmount,

@@ -822,17 +822,30 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
   String _formatDayName(DateTime targetDate) {
     DateTime now = DateTime.now();
     DateTime today = DateTime(now.year, now.month, now.day);
-    DateTime tomorrow = today.add(const Duration(days: 1));
     DateTime target = DateTime(targetDate.year, targetDate.month, targetDate.day);
+    int diff = target.difference(today).inDays;
 
-    if (target == today) return "Today";
-    if (target == tomorrow) return "Tomorrow";
+    if (diff == 0) return "Today";
+    if (diff == 1) return "Tomorrow";
+    if (diff == -1) return "Yesterday";
     return DateFormat('EEEE').format(targetDate);
   }
 
   // 🚀 COMPLETELY FIXED: REAL DAILY 7-DAY DATA PARSING
   List<Widget> _generate7Days(bool isLightMode) {
-    if (_weather!.daily.isEmpty) return [const Text("No forecast available")];
+    if (_weather!.daily.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.only(top: 20),
+          child: Center(
+            child: Text("Data unavailable",
+                style: GoogleFonts.inter(
+                    color: isLightMode ? Colors.black54 : Colors.white54,
+                    fontSize: 14)),
+          ),
+        )
+      ];
+    }
 
     return _weather!.daily.map((dayData) {
       String dayName = dayData.date; // Fallback
@@ -870,15 +883,18 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                       color: isLightMode ? Colors.black87 : Colors.white,
                       fontSize: 14,
                       fontWeight: FontWeight.w500))),
-          PremiumWeatherIcon(
-              code: code,
+          Icon(
+              WeatherService.getWeatherIcon(code),
               size: 22,
-              isNight: false), // Forecast icon usually daytime
+              color: isLightMode ? Colors.black87 : Colors.white),
           Row(
             children: [
-              Text("$minT°",
-                  style:
-                      GoogleFonts.inter(color: isLightMode ? Colors.black54 : Colors.white54, fontSize: 15)),
+              SizedBox(
+                width: 35,
+                child: Text("$minT°",
+                    textAlign: TextAlign.start,
+                    style: GoogleFonts.inter(color: isLightMode ? Colors.black54 : Colors.white54, fontSize: 15)),
+              ),
               const SizedBox(width: 10),
               Stack(
                 alignment: Alignment.centerLeft,
@@ -901,11 +917,15 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                 ]
               ),
               const SizedBox(width: 10),
-              Text("$maxT°",
-                  style: GoogleFonts.inter(
-                      color: isLightMode ? Colors.black87 : Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500)),
+              SizedBox(
+                width: 35,
+                child: Text("$maxT°",
+                    textAlign: TextAlign.end,
+                    style: GoogleFonts.inter(
+                        color: isLightMode ? Colors.black87 : Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500)),
+              ),
             ],
           )
         ],
