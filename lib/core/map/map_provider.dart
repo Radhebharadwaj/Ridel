@@ -40,6 +40,10 @@ class MapProvider extends ChangeNotifier {
   LatLng? currentLocation;
 
   void updateCurrentLocation(LatLng loc) {
+    if (currentLocation?.latitude == loc.latitude &&
+        currentLocation?.longitude == loc.longitude) {
+      return;
+    }
     currentLocation = loc;
     // Yahan notifyListeners() mat lagana warna map lag karega
   }
@@ -59,25 +63,34 @@ class MapProvider extends ChangeNotifier {
   LatLng _lastPuckLocation = const LatLng(0, 0);
   double _lastPuckBearing = 0.0;
 
-  bool get showNativeBlueDot => engine.mapUIState.value == MapUIState.idle || engine.mapUIState.value == MapUIState.placeSelected;
-  double get customPuckOpacity => (engine.mapUIState.value == MapUIState.navigating || engine.mapUIState.value == MapUIState.routeDrawn) ? 1.0 : 0.0;
+  bool get showNativeBlueDot =>
+      engine.mapUIState.value == MapUIState.idle ||
+      engine.mapUIState.value == MapUIState.placeSelected;
+  double get customPuckOpacity =>
+      (engine.mapUIState.value == MapUIState.navigating ||
+              engine.mapUIState.value == MapUIState.routeDrawn)
+          ? 1.0
+          : 0.0;
 
-  Future<void> _updatePuckGeoJson(LatLng location, double bearing, double opacity) async {
+  Future<void> _updatePuckGeoJson(
+      LatLng location, double bearing, double opacity) async {
     if (controller == null) return;
     try {
       final bool isVisible = opacity > 0.0;
       await controller!.setGeoJsonSource('nav_puck_source', {
         "type": "FeatureCollection",
-        "features": isVisible ? [{
-          "type": "Feature",
-          "geometry": {
-            "type": "Point",
-            "coordinates": [location.longitude, location.latitude]
-          },
-          "properties": {
-            "bearing": bearing
-          }
-        }] : []
+        "features": isVisible
+            ? [
+                {
+                  "type": "Feature",
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [location.longitude, location.latitude]
+                  },
+                  "properties": {"bearing": bearing}
+                }
+              ]
+            : []
       });
       _lastPuckLocation = location;
       _lastPuckBearing = bearing;
@@ -85,7 +98,8 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<void> updatePuckVisibility() async {
-    await _updatePuckGeoJson(_lastPuckLocation, _lastPuckBearing, customPuckOpacity);
+    await _updatePuckGeoJson(
+        _lastPuckLocation, _lastPuckBearing, customPuckOpacity);
     engine.camera?.setBlueDotOpacity(showNativeBlueDot ? 1.0 : 0.0);
     notifyListeners();
   }
@@ -100,22 +114,23 @@ class MapProvider extends ChangeNotifier {
       await updatePuckVisibility(); // Ensure it hides gracefully
       return;
     }
-    
+
     // 1. ALWAYS update Puck Position & Rotation if visible (Route Overview & Navigating)
     await _updatePuckGeoJson(location, bearing, customPuckOpacity);
 
     // 2. Animate Camera to Follow User & Rotate Map ONLY if actively navigating
-    if (engine.mapUIState.value == MapUIState.navigating && controller != null && isAutoTracking) {
+    if (engine.mapUIState.value == MapUIState.navigating &&
+        controller != null &&
+        isAutoTracking) {
       controller!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: location,
-            bearing: bearing, // THIS ROTATES THE MAP WITH THE USER
-            tilt: 50.0,       // Keep the 3D perspective
-            zoom: 18.0,       // Zoomed in for navigation
-          )
-        ),
-        duration: const Duration(seconds: 1), // Smooth 1-second animation between GPS ticks
+        CameraUpdate.newCameraPosition(CameraPosition(
+          target: location,
+          bearing: bearing, // THIS ROTATES THE MAP WITH THE USER
+          tilt: 50.0, // Keep the 3D perspective
+          zoom: 18.0, // Zoomed in for navigation
+        )),
+        duration: const Duration(
+            seconds: 1), // Smooth 1-second animation between GPS ticks
       );
     }
   }
@@ -306,7 +321,8 @@ class MapProvider extends ChangeNotifier {
     isAutoTracking = true;
 
     if (_currentRouteResult != null && targetDestination != null) {
-      await engine.startActiveNavigation(_currentRouteResult!, targetDestination!);
+      await engine.startActiveNavigation(
+          _currentRouteResult!, targetDestination!, currentNavMode);
     } else {
       engine.setUIState(MapUIState.navigating);
     }
@@ -316,13 +332,14 @@ class MapProvider extends ChangeNotifier {
 
     // 1. Get current user location with robust fallback
     final pos = engine.locService?.currentPosition;
-    
+
     LatLng? targetLoc;
     if (pos != null) {
       targetLoc = LatLng(pos.latitude, pos.longitude);
     } else if (currentLocation != null) {
       targetLoc = currentLocation;
-    } else if (_currentRouteResult != null && _currentRouteResult!.coordinates.isNotEmpty) {
+    } else if (_currentRouteResult != null &&
+        _currentRouteResult!.coordinates.isNotEmpty) {
       targetLoc = _currentRouteResult!.coordinates.first;
     }
 
@@ -362,7 +379,7 @@ class MapProvider extends ChangeNotifier {
     notifyListeners();
 
     final pos = engine.locService?.currentPosition;
-    
+
     LatLng? targetLoc;
     if (pos != null) {
       targetLoc = LatLng(pos.latitude, pos.longitude);
@@ -775,10 +792,10 @@ class MapProvider extends ChangeNotifier {
     // Ensure destination pin and nav puck render strictly on top
     if (targetDestination != null) {
       await clearNativeDestinationPin();
-      
+
       // Enforce rendering sequence for WebGL
       await Future.delayed(const Duration(milliseconds: 150));
-      
+
       try {
         // Step 2: Add/Update Destination Pin Layer
         await controller!.addGeoJsonSource('destination_pin_source', {
@@ -788,7 +805,10 @@ class MapProvider extends ChangeNotifier {
               "type": "Feature",
               "geometry": {
                 "type": "Point",
-                "coordinates": [targetDestination!.longitude, targetDestination!.latitude]
+                "coordinates": [
+                  targetDestination!.longitude,
+                  targetDestination!.latitude
+                ]
               }
             }
           ]
@@ -1175,7 +1195,6 @@ class MapProvider extends ChangeNotifier {
 
       // Remove the manual dropped pin or search symbol layer
       await engine.layers?.removeSearchPin();
-
     }
 
     // 2. Reset all routing state variables to null/empty
@@ -1273,12 +1292,14 @@ class MapProvider extends ChangeNotifier {
   MapThemeType _currentTheme = MapThemeType.dark;
   MapThemeType get currentTheme => _currentTheme;
   void setTheme(MapThemeType theme) {
-    _currentTheme = theme;
-    if (isNavigatingToStation &&
-        targetStationLocation != null &&
-        _lastRouteData != null) {
-      if (controller != null) {
-        drawNativeRoute(_lastRouteData!.allRoutesCoordinates);
+    if (_currentTheme != theme) {
+      _currentTheme = theme;
+      if (isNavigatingToStation &&
+          targetStationLocation != null &&
+          _lastRouteData != null) {
+        if (controller != null) {
+          drawNativeRoute(_lastRouteData!.allRoutesCoordinates);
+        }
       }
     }
   }
@@ -1290,8 +1311,10 @@ class MapProvider extends ChangeNotifier {
   bool get isDestinationSelected => _isDestinationSelected;
 
   void setTargetDestination(LatLng? target) {
-    targetDestination = target;
-    notifyListeners();
+    if (targetDestination != target) {
+      targetDestination = target;
+      notifyListeners();
+    }
   }
 
   bool isFlying = false;
@@ -1299,8 +1322,10 @@ class MapProvider extends ChangeNotifier {
   String? mapSelectionPlaceType;
 
   void setMapSelectionMode(String? type) {
-    mapSelectionPlaceType = type;
-    notifyListeners();
+    if (mapSelectionPlaceType != type) {
+      mapSelectionPlaceType = type;
+      notifyListeners();
+    }
   }
 
   bool _isEditingHistory = false;
@@ -1452,7 +1477,7 @@ class MapProvider extends ChangeNotifier {
   void startTurnByTurnNavigation() {
     if (_lastRouteData != null) {
       engine.navigation.startNavigation(_lastRouteData!);
-      
+
       _liveLocationSub?.cancel();
       _liveLocationSub = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
@@ -1485,10 +1510,10 @@ class MapProvider extends ChangeNotifier {
       if (text != null) {
         isSpeaking.value = true;
         debugPrint("🗣️ TTS Triggered: $text");
-        
+
         final int wordCount = text.split(' ').length;
         final int speakDurationMs = (wordCount * 400) + 800;
-        
+
         _glowTimer?.cancel();
         _glowTimer = Timer(Duration(milliseconds: speakDurationMs), () {
           isSpeaking.value = false;
@@ -1518,9 +1543,11 @@ class MapProvider extends ChangeNotifier {
     engine.mapUIState.addListener(() {
       final state = engine.mapUIState.value;
       _toggleFuelStationsVisibility(state == MapUIState.navigating);
-      if ((state == MapUIState.navigating || state == MapUIState.routeDrawn) && currentLocation != null) {
+      if ((state == MapUIState.navigating || state == MapUIState.routeDrawn) &&
+          currentLocation != null) {
         // Show initial puck before the first native location update fires
-        updateNavigationPuck(currentLocation!, engine.locService?.currentPosition?.heading ?? 0.0);
+        updateNavigationPuck(currentLocation!,
+            engine.locService?.currentPosition?.heading ?? 0.0);
       }
       notifyListeners();
     });
@@ -1873,15 +1900,19 @@ class MapProvider extends ChangeNotifier {
   void updateMapCenter(LatLng center, double zoom) {
     if (!_isMapReady) return;
     bool hasChanged = false;
-    if (_currentMapCenter?.latitude != center.latitude ||
-        _currentMapCenter?.longitude != center.longitude) {
+
+    if (_currentMapCenter == null ||
+        (_currentMapCenter!.latitude - center.latitude).abs() > 0.0001 ||
+        (_currentMapCenter!.longitude - center.longitude).abs() > 0.0001) {
       _currentMapCenter = center;
       hasChanged = true;
     }
-    if (_currentZoomLevel != zoom) {
+
+    if ((_currentZoomLevel - zoom).abs() > 0.1) {
       _currentZoomLevel = zoom;
       hasChanged = true;
     }
+
     if (hasChanged) {
       notifyListeners();
     }
@@ -2128,7 +2159,7 @@ class MapProvider extends ChangeNotifier {
     try {
       await engine.layers?.removeSearchPin();
       await engine.layers?.showSearchPin(target);
-      
+
       await controller?.animateCamera(CameraUpdate.newLatLngZoom(target, 16.0));
 
       AppHaptics.mediumImpact();
@@ -2285,15 +2316,21 @@ class MapProvider extends ChangeNotifier {
     AppHaptics.heavyImpact();
 
     // 🚀 Delegate to MapEngine's active navigation lifecycle
-    await engine.startActiveNavigation(_currentRouteResult!, targetDestination!);
+    await engine.startActiveNavigation(
+        _currentRouteResult!, targetDestination!, currentNavMode);
   }
 
-  void endActiveNavigation() {
+  Future<void> endActiveNavigation() async {
     if (!isActiveNavigation) return;
 
     engine.navigation.stopNavigation();
     isActiveNavigation = false;
     _currentRouteResult = null;
+
+    // 🚨 STRICT GARBAGE COLLECTION: Explicitly teardown WebGL layers & sources
+    await clearNativeRoute();
+    await clearNativeDestinationPin();
+
     engine.camera?.setCameraForMode(CameraMode.explore);
     engine.layers?.resetAllLayers(); // Clear navigation styling if needed
     notifyListeners();
@@ -2342,7 +2379,7 @@ class MapProvider extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   String? get lastError => _lastError;
-  
+
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();

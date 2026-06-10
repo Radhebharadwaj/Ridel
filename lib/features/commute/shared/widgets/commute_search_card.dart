@@ -19,6 +19,8 @@ import 'package:ridel/features/commute/shared/widgets/station_selector_sheet.dar
 import 'package:ridel/core/widgets/ridel_liquid_button.dart'; // 🚀 MASTER BUTTON IMPORT
 import 'package:ridel/core/widgets/ridel_premium_loader.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:ridel/core/map/map_provider.dart';
+import 'package:ridel/core/providers/app_navigation_provider.dart';
 
 class CommuteSearchCard extends StatefulWidget {
   final bool isDark;
@@ -34,6 +36,7 @@ class CommuteSearchCard extends StatefulWidget {
   final VoidCallback? onSubmit;
   final Function(String)? onOriginChanged;
   final Function(String)? onDestinationChanged;
+  final VoidCallback? onDismiss;
 
   const CommuteSearchCard({
     super.key,
@@ -49,6 +52,7 @@ class CommuteSearchCard extends StatefulWidget {
     this.onSubmit,
     this.onOriginChanged,
     this.onDestinationChanged,
+    this.onDismiss,
   });
 
   @override
@@ -56,8 +60,11 @@ class CommuteSearchCard extends StatefulWidget {
 }
 
 class _CommuteSearchCardState extends State<CommuteSearchCard> {
+  double _dragOffset = 0.0;
   late TextEditingController _fromCtrl;
   late TextEditingController _toCtrl;
+  late FocusNode _fromFocus;
+  late FocusNode _toFocus;
 
   String _metroFrom = "";
   String _metroTo = "";
@@ -95,11 +102,26 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
     }).join(' ');
   }
 
+  void _onFocusChange() {
+    if (_fromFocus.hasFocus) {
+      _isSearchingFrom = true;
+      _onSearchChanged(_fromCtrl.text, true);
+    } else if (_toFocus.hasFocus) {
+      _isSearchingFrom = false;
+      _onSearchChanged(_toCtrl.text, false);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _fromCtrl = widget.fromController ?? TextEditingController();
     _toCtrl = widget.toController ?? TextEditingController();
+    _fromFocus = widget.fromFocus ?? FocusNode();
+    _toFocus = widget.toFocus ?? FocusNode();
+
+    _fromFocus.addListener(_onFocusChange);
+    _toFocus.addListener(_onFocusChange);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAllStationsForFuzzySearch()
@@ -253,15 +275,22 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
           _nearestLocationsCache = uniqueLocations;
         });
 
-        if (_fromCtrl.text.isEmpty) {
-          ToastService.showSuccess(
+        final navProvider = Provider.of<AppNavigationProvider>(context, listen: false);
+        
+        // Save to global provider for toast morphing
+        if (widget.selectedMode == 0) {
+          navProvider.setNearestMetroStation(uniqueLocations.first);
+        } else {
+          navProvider.setNearestBusStop(uniqueLocations.first);
+        }
+
+        if (_fromCtrl.text.isEmpty && !navProvider.hasSeenNearestStopToast) {
+          navProvider.markNearestStopToastSeen();
+          ToastService.showNearestTransportToast(
             context,
-            _toTitleCase(uniqueLocations.first['stop_name']),
-            title: "Nearest $_locationTerm",
-            onTap: () {
+            onTapUpdateOrigin: (String name) {
               AppHaptics.heavyImpact();
-              setState(() => _fromCtrl.text =
-                  _toTitleCase(uniqueLocations.first['stop_name']));
+              setState(() => _fromCtrl.text = name);
             },
           );
         }
@@ -274,8 +303,16 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
   @override
   void dispose() {
     _removeOverlay();
-    _fromCtrl.dispose();
-    _toCtrl.dispose();
+
+    _fromFocus.removeListener(_onFocusChange);
+    _toFocus.removeListener(_onFocusChange);
+
+    if (widget.fromFocus == null) _fromFocus.dispose();
+    if (widget.toFocus == null) _toFocus.dispose();
+
+    if (widget.fromController == null) _fromCtrl.dispose();
+    if (widget.toController == null) _toCtrl.dispose();
+
     super.dispose();
   }
 
@@ -613,27 +650,42 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
             ),
           );
         },
-        child: Row(
-          key: ValueKey<bool>(isReady),
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                fontWeight: FontWeight.w800,
-                fontSize: 16,
-                color: isReady ? Colors.white : const Color(0xFF121419),
-                letterSpacing: -0.3,
+        child: LayoutBuilder(builder: (context, constraints) {
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.center,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: constraints.maxWidth < 160 ? 160 : constraints.maxWidth,
+              ),
+              child: Row(
+                key: ValueKey<bool>(isReady),
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                        color: isReady ? Colors.white : const Color(0xFF121419),
+                        letterSpacing: -0.3,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    icon,
+                    size: 20,
+                    color: isReady ? Colors.white : const Color(0xFF121419),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 8),
-            Icon(
-              icon,
-              size: 20,
-              color: isReady ? Colors.white : const Color(0xFF121419),
-            ),
-          ],
-        ),
+          );
+        }),
       ),
     );
   }
@@ -659,7 +711,12 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
           width: 1.0,
         ),
         boxShadow: isLightMode
-            ? [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 2))]
+            ? [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2))
+              ]
             : null,
       ),
       child: child,
@@ -678,15 +735,20 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              RidelPremiumLoader(size: 28, isDark: widget.isDark, primaryColor: _accentColor),
+              RidelPremiumLoader(
+                  size: 28, isDark: widget.isDark, primaryColor: _accentColor),
               const SizedBox(width: 16),
-              Text(
-                "Finding best route...",
-                style: GoogleFonts.inter(
-                  color: widget.isDark ? Colors.white70 : Colors.black54,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                  letterSpacing: 0.2,
+              Flexible(
+                child: Text(
+                  "Finding best route...",
+                  style: GoogleFonts.inter(
+                    color: widget.isDark ? Colors.white70 : Colors.black54,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    letterSpacing: 0.2,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -717,12 +779,16 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
             _buildInfoCapsule(
                 child: Row(
               children: [
-                Text('Ticket Count',
-                    style: GoogleFonts.inter(
-                        color: widget.isDark ? Colors.white70 : Colors.black54,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600)),
-                const Spacer(), // Baaki ki space ko push karne ke liye
+                Expanded(
+                  child: Text('Ticket Count',
+                      style: GoogleFonts.inter(
+                          color:
+                              widget.isDark ? Colors.white70 : Colors.black54,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ),
 
                 // 🌟 SLIDE INDICATOR (Left)
                 Icon(Icons.chevron_left_rounded,
@@ -775,7 +841,9 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
                                   style: GoogleFonts.inter(
                                     // 🚀 FIX: Neon hatakar pure white aur deeply faded colors
                                     color: isSelected
-                                        ? (widget.isDark ? Colors.white : Colors.black87)
+                                        ? (widget.isDark
+                                            ? Colors.white
+                                            : Colors.black87)
                                         : (widget.isDark
                                             ? Colors.white38
                                             : Colors.black38),
@@ -843,12 +911,16 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Total Fare',
-                      style: GoogleFonts.inter(
-                          color:
-                              widget.isDark ? Colors.white70 : Colors.black54,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600)),
+                  Flexible(
+                    child: Text('Total Fare',
+                        style: GoogleFonts.inter(
+                            color:
+                                widget.isDark ? Colors.white70 : Colors.black54,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ),
                   _isCalculatingFare
                       ? const SizedBox(
                           width: 16,
@@ -859,7 +931,9 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
                           style: GoogleFonts.inter(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
-                              color: widget.isDark ? Colors.cyanAccent : Colors.cyan.shade700)),
+                              color: widget.isDark
+                                  ? Colors.cyanAccent
+                                  : Colors.cyan.shade700)),
                 ],
               ),
             ),
@@ -917,185 +991,226 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
     final hintColor = isLightMode ? Colors.grey.shade500 : Colors.grey.shade400;
 
     return TapRegion(
-      groupId: 'search_card',
-      onTapOutside: (event) {
-        FocusManager.instance.primaryFocus?.unfocus();
-        _removeOverlay();
-      },
-      child: CompositedTransformTarget(
-        link: _layerLink,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 450),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(35),
-                    boxShadow: isLightMode
-                        ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 24, offset: const Offset(0, 8))]
-                        : [
-                            ...AppShadows.cardFloating,
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.8),
-                              blurRadius: 40,
-                              spreadRadius: 8,
-                              offset: const Offset(0, 15),
+        groupId: 'search_card',
+        onTapOutside: (event) {
+          FocusManager.instance.primaryFocus?.unfocus();
+          _removeOverlay();
+        },
+        child: CompositedTransformTarget(
+          link: _layerLink,
+          child: Center(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onVerticalDragStart: (_) {
+                _dragOffset = 0.0;
+              },
+              onVerticalDragUpdate: (details) {
+                _dragOffset += details.primaryDelta ?? 0.0;
+              },
+              onVerticalDragEnd: (details) {
+                if ((details.primaryVelocity != null &&
+                        details.primaryVelocity! > 300) ||
+                    _dragOffset > 80.0) {
+                  widget.onDismiss?.call();
+                }
+                _dragOffset = 0.0;
+              },
+              child: Container(
+                width: double.infinity,
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(35),
+                        boxShadow: isLightMode
+                            ? [
+                                BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.08),
+                                    blurRadius: 24,
+                                    offset: const Offset(0, 8))
+                              ]
+                            : [
+                                ...AppShadows.cardFloating,
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.8),
+                                  blurRadius: 40,
+                                  spreadRadius: 8,
+                                  offset: const Offset(0, 15),
+                                ),
+                              ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(35),
+                        clipBehavior: Clip.antiAliasWithSaveLayer,
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: glassColor,
+                              borderRadius: BorderRadius.circular(35),
+                              border: Border.all(
+                                color: isLightMode
+                                    ? Colors.black.withValues(alpha: 0.04)
+                                    : Colors.white.withValues(alpha: 0.12),
+                                width: 1.0,
+                              ),
                             ),
-                          ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(35),
-                    clipBehavior: Clip.antiAliasWithSaveLayer,
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: glassColor,
-                          borderRadius: BorderRadius.circular(35),
-                          border: Border.all(
-                            color: isLightMode
-                                ? Colors.black.withValues(alpha: 0.04)
-                                : Colors.white.withValues(alpha: 0.12),
-                            width: 1.0,
-                          ),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            children: [
-                              SizedBox(
-                                height: 108,
-                                child: Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    Column(
-                                      children: [
-                                        _buildSlimCapsule(
-                                          leftIcon: Icons.my_location_rounded,
-                                          leftIconColor: _accentColor,
-                                          hint: "From $_locationTerm",
-                                          controller: _fromCtrl,
-                                          bgColor: inputBg,
-                                          textColor: textColor,
-                                          hintColor: hintColor,
-                                          onLeftIconTap: _detectNearestStation,
-                                          isDark: widget.isDark,
-                                          onChanged: (val) =>
-                                              _onSearchChanged(val, true),
-                                          isFrom: true,
-                                        ),
-                                        const SizedBox(height: 8),
-                                        _buildSlimCapsule(
-                                          leftIcon: Icons.location_on_rounded,
-                                          leftIconColor: Colors.redAccent,
-                                          hint: "To $_locationTerm",
-                                          controller: _toCtrl,
-                                          bgColor: inputBg,
-                                          textColor: textColor,
-                                          hintColor: hintColor,
-                                          onLeftIconTap: () {},
-                                          isDark: widget.isDark,
-                                          onChanged: (val) =>
-                                              _onSearchChanged(val, false),
-                                          isFrom: false,
-                                        ),
-                                      ],
-                                    ),
-                                    Positioned(
-                                      right: 42,
-                                      top: 0,
-                                      bottom: 0,
-                                      child: Center(
-                                        child: GestureDetector(
-                                          onTapDown: (_) => setState(
-                                              () => _isSwapPressed = true),
-                                          onTapUp: (_) {
-                                            setState(() {
-                                              _isSwapPressed = false;
-                                              _swapTurns += 0.5;
-                                            });
-                                            _swapLocations();
-                                          },
-                                          onTapCancel: () => setState(
-                                              () => _isSwapPressed = false),
-                                          child: AnimatedScale(
-                                            scale: _isSwapPressed ? 0.85 : 1.0,
-                                            duration: const Duration(
-                                                milliseconds: 150),
-                                            curve: Curves.easeOutQuart,
-                                            child: AnimatedRotation(
-                                              turns: _swapTurns,
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                children: [
+                                  Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      Column(
+                                        children: [
+                                          _buildSlimCapsule(
+                                            leftIcon: Icons.my_location_rounded,
+                                            leftIconColor: _accentColor,
+                                            hint: "From $_locationTerm",
+                                            controller: _fromCtrl,
+                                            focusNode: _fromFocus,
+                                            bgColor: inputBg,
+                                            textColor: textColor,
+                                            hintColor: hintColor,
+                                            onLeftIconTap:
+                                                _detectNearestStation,
+                                            isDark: widget.isDark,
+                                            onChanged: (val) =>
+                                                _onSearchChanged(val, true),
+                                            isFrom: true,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          _buildSlimCapsule(
+                                            leftIcon: Icons.location_on_rounded,
+                                            leftIconColor: Colors.redAccent,
+                                            hint: "To $_locationTerm",
+                                            controller: _toCtrl,
+                                            focusNode: _toFocus,
+                                            bgColor: inputBg,
+                                            textColor: textColor,
+                                            hintColor: hintColor,
+                                            onLeftIconTap: () {},
+                                            isDark: widget.isDark,
+                                            onChanged: (val) =>
+                                                _onSearchChanged(val, false),
+                                            isFrom: false,
+                                          ),
+                                        ],
+                                      ),
+                                      Positioned(
+                                        right: 42,
+                                        top: 0,
+                                        bottom: 0,
+                                        child: Center(
+                                          child: GestureDetector(
+                                            onTapDown: (_) => setState(
+                                                () => _isSwapPressed = true),
+                                            onTapUp: (_) {
+                                              setState(() {
+                                                _isSwapPressed = false;
+                                                _swapTurns += 0.5;
+                                              });
+                                              _swapLocations();
+                                            },
+                                            onTapCancel: () => setState(
+                                                () => _isSwapPressed = false),
+                                            child: AnimatedScale(
+                                              scale:
+                                                  _isSwapPressed ? 0.85 : 1.0,
                                               duration: const Duration(
-                                                  milliseconds: 600),
-                                              curve: Curves.elasticOut,
-                                              child: Container(
-                                                height: 36,
-                                                width: 36,
-                                                decoration: BoxDecoration(
-                                                  color: isLightMode
-                                                      ? Colors.white
-                                                      : const Color(0xFF1C1F26),
-                                                  shape: BoxShape.circle,
-                                                  border: Border.all(
+                                                  milliseconds: 150),
+                                              curve: Curves.easeOutQuart,
+                                              child: AnimatedRotation(
+                                                turns: _swapTurns,
+                                                duration: const Duration(
+                                                    milliseconds: 600),
+                                                curve: Curves.elasticOut,
+                                                child: Container(
+                                                  height: 36,
+                                                  width: 36,
+                                                  decoration: BoxDecoration(
                                                     color: isLightMode
-                                                        ? Colors.black.withValues(alpha: 0.04)
-                                                        : Colors.white.withValues(alpha: 0.15),
-                                                    width: 1,
+                                                        ? Colors.white
+                                                        : const Color(
+                                                            0xFF1C1F26),
+                                                    shape: BoxShape.circle,
+                                                    border: Border.all(
+                                                      color: isLightMode
+                                                          ? Colors.black
+                                                              .withValues(
+                                                                  alpha: 0.04)
+                                                          : Colors.white
+                                                              .withValues(
+                                                                  alpha: 0.15),
+                                                      width: 1,
+                                                    ),
+                                                    boxShadow: isLightMode
+                                                        ? [
+                                                            BoxShadow(
+                                                                color: Colors
+                                                                    .black
+                                                                    .withValues(
+                                                                        alpha:
+                                                                            0.06),
+                                                                blurRadius: 12,
+                                                                offset:
+                                                                    const Offset(
+                                                                        0, 4))
+                                                          ]
+                                                        : AppShadows
+                                                            .cardFloating,
                                                   ),
-                                                  boxShadow: isLightMode
-                                                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 4))]
-                                                      : AppShadows.cardFloating,
-                                                ),
-                                                child: Icon(
-                                                  Icons.swap_vert_rounded,
-                                                  size: 20,
-                                                  color: isLightMode
-                                                      ? Colors.black87
-                                                      : Colors.white,
+                                                  child: Icon(
+                                                    Icons.swap_vert_rounded,
+                                                    size: 20,
+                                                    color: isLightMode
+                                                        ? Colors.black87
+                                                        : Colors.white,
+                                                  ),
                                                 ),
                                               ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                    )
-                                  ],
-                                ),
-                              ),
-                              // 🚀 Morphing Animation here
-                              AnimatedSize(
-                                duration: const Duration(milliseconds: 400),
-                                curve: Curves.easeOutCubic,
-                                child: AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 300),
-                                  transitionBuilder: (child, anim) =>
-                                      FadeTransition(
-                                    opacity: anim,
-                                    child: SizeTransition(
-                                        sizeFactor: anim, child: child),
+                                      )
+                                    ],
                                   ),
-                                  child: _buildMorphedActionUI(
-                                      widget.activeTicketingMode,
-                                      isReady,
-                                      btnLabel,
-                                      btnIcon),
-                                ),
+                                  // 🚀 Morphing Animation here
+                                  AnimatedSize(
+                                    duration: const Duration(milliseconds: 400),
+                                    curve: Curves.easeOutCubic,
+                                    child: AnimatedSwitcher(
+                                      duration:
+                                          const Duration(milliseconds: 300),
+                                      transitionBuilder: (child, anim) =>
+                                          FadeTransition(
+                                        opacity: anim,
+                                        child: SizeTransition(
+                                            sizeFactor: anim, child: child),
+                                      ),
+                                      child: _buildMorphedActionUI(
+                                          widget.activeTicketingMode,
+                                          isReady,
+                                          btnLabel,
+                                          btnIcon),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
-    );
+        ));
   }
 
   Widget _buildMatteSuggestions() {
@@ -1114,7 +1229,8 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: ClipRRect(
+      child: RepaintBoundary(
+        child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -1133,23 +1249,23 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
                     padding:
                         const EdgeInsets.only(top: 14, bottom: 8, left: 20),
                     alignment: Alignment.centerLeft,
-                    child: Text("Nearest ${_locationTerm}s",
-                        style: GoogleFonts.inter(
-                            color: _accentColor,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5)),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text("Nearest ${_locationTerm}s",
+                          maxLines: 1,
+                          style: GoogleFonts.inter(
+                              color: _accentColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5)),
+                    ),
                   ),
                 Flexible(
-                  child: ListView.separated(
+                  child: ListView.builder(
                     padding: EdgeInsets.zero,
                     shrinkWrap: true,
                     itemCount: _suggestions.length,
-                    separatorBuilder: (_, __) => Divider(
-                        height: 1,
-                        color: isLightMode
-                            ? Colors.grey.shade200
-                            : Colors.white.withValues(alpha: 0.05)),
                     itemBuilder: (context, index) {
                       final station = _suggestions[index];
                       final bool hasDistance = station.containsKey('distance');
@@ -1172,58 +1288,86 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
                         itemBorderRadius = BorderRadius.zero;
                       }
 
-                      return Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: itemBorderRadius,
-                          onTap: () => _onSuggestionTap(station),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 14, horizontal: 20),
-                            child: Row(
-                              children: [
-                                if (hasDistance)
-                                  Icon(
-                                      widget.selectedMode == 0
-                                          ? Icons.train_rounded
-                                          : Icons.directions_bus_rounded,
-                                      color: _accentColor,
-                                      size: 18)
-                                else
-                                  Container(
-                                    width: 12,
-                                    height: 12,
-                                    decoration: BoxDecoration(
-                                        color: isInterchange
-                                            ? Colors.white
-                                            : mainColor,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                            color: isInterchange
-                                                ? Colors.transparent
-                                                : Colors.white
-                                                    .withValues(alpha: 0.2),
-                                            width: 1.5)),
-                                  ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                    child:
-                                        Text(_toTitleCase(station['stop_name']),
-                                            style: GoogleFonts.inter(
-                                              color: textColor,
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 15,
-                                            ))),
-                                if (hasDistance)
-                                  Text(_formatDistance(station['distance']),
-                                      style: GoogleFonts.inter(
-                                          color: _accentColor,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold)),
-                              ],
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (index > 0)
+                            Divider(
+                                height: 1,
+                                color: isLightMode
+                                    ? Colors.grey.shade200
+                                    : Colors.white.withValues(alpha: 0.05)),
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: itemBorderRadius,
+                              onTap: () => _onSuggestionTap(station),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 14, horizontal: 20),
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    return FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                          maxWidth: constraints.maxWidth < 240
+                                              ? 240
+                                              : constraints.maxWidth,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            if (hasDistance)
+                                              Icon(
+                                                  widget.selectedMode == 0
+                                                      ? Icons.train_rounded
+                                                      : Icons.directions_bus_rounded,
+                                                  color: _accentColor,
+                                                  size: 18)
+                                            else
+                                              Container(
+                                                width: 12,
+                                                height: 12,
+                                                decoration: BoxDecoration(
+                                                    color: isInterchange
+                                                        ? Colors.white
+                                                        : mainColor,
+                                                    shape: BoxShape.circle,
+                                                    border: Border.all(
+                                                        color: isInterchange
+                                                            ? Colors.transparent
+                                                            : Colors.white
+                                                                .withValues(alpha: 0.2),
+                                                        width: 1.5)),
+                                              ),
+                                            const SizedBox(width: 14),
+                                            Expanded(
+                                                child: Text(
+                                                    _toTitleCase(station['stop_name']),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: GoogleFonts.inter(
+                                                      color: textColor,
+                                                      fontWeight: FontWeight.w600,
+                                                      fontSize: 15,
+                                                    ))),
+                                            if (hasDistance)
+                                              Text(_formatDistance(station['distance']),
+                                                  style: GoogleFonts.inter(
+                                                      color: _accentColor,
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
+                          )
+                        ],
                       );
                     },
                   ),
@@ -1231,6 +1375,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );
@@ -1241,6 +1386,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
     required Color leftIconColor,
     required String hint,
     required TextEditingController controller,
+    FocusNode? focusNode,
     required Color bgColor,
     required Color textColor,
     required Color hintColor,
@@ -1253,7 +1399,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
     final bool isLightMode = !isDark;
 
     return Container(
-      height: 50,
+      constraints: const BoxConstraints(minHeight: 48, maxHeight: 56),
       padding: const EdgeInsets.only(left: 12, right: 8),
       decoration: BoxDecoration(
         color: isLightMode ? Colors.white : bgColor,
@@ -1265,67 +1411,102 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
           width: 1.0,
         ),
         boxShadow: isLightMode
-            ? [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 2))]
+            ? [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2))
+              ]
             : null,
       ),
-      child: Row(
-        children: [
-          GestureDetector(
-              onTap: onLeftIconTap,
-              child: Container(
-                  padding: const EdgeInsets.all(6),
-                  color: Colors.transparent,
-                  child: Icon(leftIcon, color: leftIconColor, size: 20))),
-          const SizedBox(width: 8),
-          Expanded(
-              child: TextField(
-            controller: controller,
-            onChanged: onChanged,
-            onTap: () {
-              _isSearchingFrom = isFrom;
-              if (controller.text.isEmpty) {
-                onChanged("");
-              } else {
-                onChanged(controller.text);
-              }
-            },
-            style: GoogleFonts.inter(
-                color: textColor, fontWeight: FontWeight.w600, fontSize: 15),
-            cursorColor: _accentColor,
-            decoration: InputDecoration(
-                hintText: hint,
-                hintStyle:
-                    TextStyle(color: hintColor, fontWeight: FontWeight.normal),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero),
-          )),
-          const SizedBox(width: 5),
-          if (isTyping)
-            GestureDetector(
-              onTap: () {
-                AppHaptics.lightImpact();
-                controller.clear();
-                onChanged("");
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Icon(Icons.close_rounded,
-                    color: isDark ? Colors.white38 : Colors.black38, size: 22),
-              ),
-            )
-          else
-            UniversalMicButton(
-              isDark: isDark,
-              activeColor: _accentColor,
-              onTextRecognized: (text) {
-                controller.text = text;
-                onChanged(text);
-                setState(() {});
-              },
+      child: LayoutBuilder(builder: (context, constraints) {
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: constraints.maxWidth < 200 ? 200 : constraints.maxWidth,
             ),
-        ],
-      ),
+            child: Row(
+              children: [
+                GestureDetector(
+                    onTap: onLeftIconTap,
+                    child: Container(
+                        padding: const EdgeInsets.all(6),
+                        color: Colors.transparent,
+                        child: Icon(leftIcon, color: leftIconColor, size: 20))),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  onChanged: onChanged,
+                  onTap: () {
+                    _isSearchingFrom = isFrom;
+                    if (controller.text.isEmpty) {
+                      onChanged("");
+                    } else {
+                      onChanged(controller.text);
+                    }
+                  },
+                  style: GoogleFonts.inter(
+                      color: textColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15),
+                  cursorColor: _accentColor,
+                  decoration: InputDecoration(
+                      hintText: hint,
+                      hintStyle: TextStyle(
+                          color: hintColor, fontWeight: FontWeight.normal),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero),
+                )),
+                const SizedBox(width: 5),
+                if (isTyping)
+                  GestureDetector(
+                    onTap: () {
+                      AppHaptics.lightImpact();
+                      controller.clear();
+                      onChanged("");
+                      
+                      try {
+                        final mapProv = Provider.of<MapProvider>(context, listen: false);
+                        if (!isFrom) {
+                          mapProv.clearNativeDestinationPin();
+                        }
+                        mapProv.stopStationNavigation();
+                        mapProv.clearNativeRoute();
+                      } catch (_) {}
+
+                      if (isFrom) {
+                        widget.onOriginChanged?.call("");
+                      } else {
+                        widget.onDestinationChanged?.call("");
+                      }
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Icon(Icons.close_rounded,
+                          color: isDark ? Colors.white38 : Colors.black38,
+                          size: 22),
+                    ),
+                  )
+                else
+                  UniversalMicButton(
+                    isDark: isDark,
+                    activeColor: _accentColor,
+                    onTextRecognized: (text) {
+                      controller.text = text;
+                      onChanged(text);
+                      setState(() {});
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      }),
     );
   }
 }

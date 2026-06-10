@@ -83,7 +83,7 @@ class _AuthHeaderState extends State<AuthHeader> {
     const Color glassTint = Color(0x1AFFFFFF);
 
     return SizedBox(
-      height: 100,
+      height: MediaQuery.of(context).size.height * 0.12, // Responsive height instead of hardcoded 100
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -96,6 +96,8 @@ class _AuthHeaderState extends State<AuthHeader> {
                   Text(
                     _displayedText,
                     textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
@@ -117,6 +119,8 @@ class _AuthHeaderState extends State<AuthHeader> {
                     child: Text(
                       _displayedText,
                       textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
@@ -130,6 +134,8 @@ class _AuthHeaderState extends State<AuthHeader> {
                   Text(
                     _displayedText,
                     textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
@@ -155,6 +161,8 @@ class _AuthHeaderState extends State<AuthHeader> {
                     child: Text(
                       _displayedText,
                       textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,

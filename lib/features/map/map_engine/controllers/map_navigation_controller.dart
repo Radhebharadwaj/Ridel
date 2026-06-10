@@ -119,8 +119,8 @@ class MapNavigationController {
     final List<Map<String, dynamic>> rawSteps =
         List<Map<String, dynamic>>.from(route.steps);
 
-    // 🚀 Execute synchronously (Isolate.run crashes on Flutter Web)
-    final parsed = _parseStepsSync(rawSteps);
+    // 🚀 Execute asynchronously with micro-yields
+    final parsed = await _parseStepsAsync(rawSteps);
 
     _parsedInstructions = parsed.instructions;
     _maneuverIcons = parsed.maneuverIcons;
@@ -212,7 +212,13 @@ class MapNavigationController {
     // ─────────────────────────────────────────────────────────────────────
     // 🎯 STEP 2: Update snapped position for UI pointer
     // ─────────────────────────────────────────────────────────────────────
-    snappedPosition.value = _snapResult.snappedLatLng;
+    if (isOffRoute.value || _isRerouting) {
+      // Release the snap, let the user wander freely
+      snappedPosition.value = LatLng(userPos.latitude, userPos.longitude);
+    } else {
+      // Lock to route
+      snappedPosition.value = _snapResult.snappedLatLng;
+    }
 
     // ─────────────────────────────────────────────────────────────────────
     // 🎯 STEP 3: Cross-Track Distance → Off-Route Detection
@@ -279,7 +285,7 @@ class MapNavigationController {
       _smoothedSpeed = (currentSpeed * alpha) + (_smoothedSpeed * (1 - alpha));
     }
 
-    final double effectiveSpeedForEta = max(_smoothedSpeed, 2.0); // 2.0 m/s is ~7.2 km/h (slow walking/crawling traffic).
+    final double effectiveSpeedForEta = max(_smoothedSpeed, 0.8); // 0.8 m/s gracefully handles slow walking without breaking ETA
 
     remainingDuration.value = RoutingService.estimateRemainingTime(
       remDist,
@@ -506,7 +512,7 @@ class MapNavigationController {
   // 🧵 STATIC ISOLATE LOGIC (Primitive Friendly)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  static _ParsedSteps _parseStepsSync(List<Map<String, dynamic>> steps) {
+  static Future<_ParsedSteps> _parseStepsAsync(List<Map<String, dynamic>> steps) async {
     final instructions = <String>[];
     final icons = <String>[];
 
@@ -517,7 +523,8 @@ class MapNavigationController {
 
     final stepDistances = <double>[];
 
-    for (final step in steps) {
+    for (int i = 0; i < steps.length; i++) {
+      final step = steps[i];
       final raw = step['html_instructions'] as String? ?? 'Continue';
       final clean = raw.replaceAll(RegExp(r'<[^>]*>'), '');
       instructions.add(clean.trim());
@@ -536,6 +543,10 @@ class MapNavigationController {
 
       stepDistances
           .add((step['distance']?['value'] as num?)?.toDouble() ?? 0.0);
+          
+      if (i % 25 == 0) {
+        await Future.delayed(Duration.zero); // Yield to event loop
+      }
     }
 
     return _ParsedSteps(instructions, icons, startLats, startLngs, endLats,

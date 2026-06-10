@@ -7,8 +7,6 @@ import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/services/notification_service.dart';
 
 import 'package:ridel/core/widgets/notification_sheet.dart';
-import 'package:ridel/core/services/weather_service.dart';
-
 
 import '../../features/profile/services/profile_repository.dart';
 import '../utils/app_haptics.dart';
@@ -95,8 +93,6 @@ class _AppHeaderState extends State<AppHeader> {
     });
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -154,14 +150,18 @@ class _AppHeaderState extends State<AppHeader> {
         children: [
           Expanded(
             child: ValueListenableBuilder<String>(
-              valueListenable: context.read<GlobalLocationService>().currentCityName,
+              valueListenable:
+                  context.read<GlobalLocationService>().currentCityName,
               builder: (context, cityName, child) {
                 // Determine the primary display city from GlobalLocationService
-                String displayCity = cityName.isNotEmpty ? cityName : "Detecting...";
+                String displayCity =
+                    cityName.isNotEmpty ? cityName : "Detecting...";
 
                 // Title Case
                 displayCity = displayCity.split(' ').map((word) {
-                   return word.isEmpty ? "" : word[0].toUpperCase() + word.substring(1).toLowerCase();
+                  return word.isEmpty
+                      ? ""
+                      : word[0].toUpperCase() + word.substring(1).toLowerCase();
                 }).join(' ');
 
                 final displayTitle = displayCity;
@@ -223,7 +223,8 @@ class _AppHeaderState extends State<AppHeader> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => const AdminBroadcastScreen(),
+                                  builder: (context) =>
+                                      const AdminBroadcastScreen(),
                                 ),
                               );
                             },
@@ -239,28 +240,14 @@ class _AppHeaderState extends State<AppHeader> {
                                     style: GoogleFonts.inter(
                                       fontSize: isFake ? 22 : 32,
                                       fontWeight: FontWeight.w800,
-                                      color: isFake ? Colors.redAccent : textColor,
+                                      color:
+                                          isFake ? Colors.redAccent : textColor,
                                       letterSpacing: -1.0,
                                       height: 1.0,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
-                                ValueListenableBuilder<WeatherModel?>(
-                                  valueListenable: WeatherService.currentWeather,
-                                  builder: (context, weather, child) {
-                                    if (weather == null) return const SizedBox.shrink();
-                                    final isNight = DateTime.now().hour > 18 || DateTime.now().hour < 6;
-                                    return Padding(
-                                      padding: const EdgeInsets.only(left: 8.0),
-                                      child: Icon(
-                                        WeatherService.getWeatherIcon(weather.weatherCode, isDay: !isNight),
-                                        size: 28,
-                                        color: textColor.withValues(alpha: 0.8),
-                                      ),
-                                    );
-                                  },
                                 ),
                               ],
                             ),
@@ -270,69 +257,76 @@ class _AppHeaderState extends State<AppHeader> {
               },
             ),
           ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.actionWidget != null) widget.actionWidget!,
-              if (widget.showProfile && widget.actionWidget == null)
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onLongPress: _showNotificationSettings,
-                  child: RidelBounceButton(
-                    scaleFactor: 0.88,
-                    onTap: () {
-                      RidelSheet.show(
-                        context,
-                        title: "Notifications",
-                        showCloseButton: true,
-                        child: const NotificationSheetContent(),
-                      );
-                    },
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      color: Colors.transparent,
-                      alignment: Alignment.centerRight,
-                      child: ValueListenableBuilder<List<RidelNotification>>(
-                        valueListenable:
-                            NotificationService().notificationsNotifier,
-                        builder: (context, notifs, child) {
-                          return Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Icon(bellIcon, color: bellColor, size: 28),
-                              if (NotificationService()
-                                      .hasUnreadNotifications() &&
-                                  _notificationMode == 'Active')
-                                Positioned(
-                                  top: 2,
-                                  right: -2,
-                                  child: Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF00E5FF),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                          color: bgColor, width: 2.0),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(0xFF00E5FF)
-                                              .withValues(alpha: 0.5),
-                                          blurRadius: 6,
-                                        )
-                                      ],
-                                    ),
-                                  ),
-                                )
-                            ],
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+
+                  if (widget.actionWidget != null) widget.actionWidget!,
+                  if (widget.showProfile && widget.actionWidget == null)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onLongPress: _showNotificationSettings,
+                      child: RidelBounceButton(
+                        scaleFactor: 0.88,
+                        onTap: () {
+                          RidelSheet.show(
+                            context,
+                            title: "Notifications",
+                            showCloseButton: true,
+                            child: const NotificationSheetContent(),
                           );
                         },
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          color: Colors.transparent,
+                          alignment: Alignment.centerRight,
+                          child:
+                              ValueListenableBuilder<List<RidelNotification>>(
+                            valueListenable:
+                                NotificationService().notificationsNotifier,
+                            builder: (context, notifs, child) {
+                              return Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  Icon(bellIcon, color: bellColor, size: 28),
+                                  if (NotificationService()
+                                          .hasUnreadNotifications() &&
+                                      _notificationMode == 'Active')
+                                    Positioned(
+                                      top: 2,
+                                      right: -2,
+                                      child: Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF00E5FF),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                              color: bgColor, width: 2.0),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFF00E5FF)
+                                                  .withValues(alpha: 0.5),
+                                              blurRadius: 6,
+                                            )
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                ],
+                              );
+                            },
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-            ],
+                    )
+                ],
+              ),
+            ),
           ),
         ],
       ),

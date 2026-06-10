@@ -11,12 +11,14 @@ class MetroMapPainter extends CustomPainter {
   final List<String> activeLineIds;
   final List<MapStation> routeStations;
   final MapCamera? camera;
+  final bool shouldDrawLines;
 
   MetroMapPainter({
     required this.allLines,
     this.activeLineIds = const [],
     this.routeStations = const [],
     this.camera,
+    this.shouldDrawLines = false,
   });
 
   @override
@@ -32,50 +34,52 @@ class MetroMapPainter extends CustomPainter {
       canvas.scale(scale, scale);
     }
 
-    for (var line in allLines) {
-      // 🔥 ZERO-ERROR FIX: Agar koi route select nahi hai, to SAARI lines dikhao!
-      bool isActive =
-          activeLineIds.isEmpty || activeLineIds.contains(line.lineId);
+    if (shouldDrawLines) {
+      for (var line in allLines) {
+        // 🔥 ZERO-ERROR FIX: Agar koi route select nahi hai, to SAARI lines dikhao!
+        bool isActive =
+            activeLineIds.isEmpty || activeLineIds.contains(line.lineId);
 
-      if (line.lineId == 'LN3' && activeLineIds.contains('LN4')) {
-        isActive = true;
-      }
-      if (line.lineId == 'LN5' && activeLineIds.contains('LN14')) {
-        isActive = true;
-      }
+        if (line.lineId == 'LN3' && activeLineIds.contains('LN4')) {
+          isActive = true;
+        }
+        if (line.lineId == 'LN5' && activeLineIds.contains('LN14')) {
+          isActive = true;
+        }
 
-      if (isActive) {
-        final ui.Path path = parseSvgPathData(line.pathD);
+        if (isActive) {
+          final ui.Path path = parseSvgPathData(line.pathD);
 
-        final glowPaint = Paint()
-          ..color = line.color.withValues(alpha: 0.6)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 30.0
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 15.0);
+          final glowPaint = Paint()
+            ..color = Colors.transparent
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 30.0
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 15.0);
 
-        final corePaint = Paint()
-          ..color = line.color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 15.0
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round;
+          final corePaint = Paint()
+            ..color = Colors.transparent
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 15.0
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round;
 
-        canvas.drawPath(path, glowPaint);
-        canvas.drawPath(path, corePaint);
+          canvas.drawPath(path, glowPaint);
+          canvas.drawPath(path, corePaint);
+        }
       }
     }
 
     if (routeStations.isNotEmpty) {
       const double radius = 15.0;
-      final centerPaint = Paint()..color = Colors.white;
+      final centerPaint = Paint()..color = Colors.transparent;
 
       for (var station in routeStations) {
         final center = Offset(station.x, station.y);
 
         final shadowPaint = Paint()
-          ..color = Colors.black.withValues(alpha: 0.8)
+          ..color = Colors.transparent
           ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 8.0);
 
         canvas.drawCircle(center, radius * 1.5, shadowPaint);

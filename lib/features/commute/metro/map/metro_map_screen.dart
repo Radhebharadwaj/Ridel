@@ -700,6 +700,7 @@ class _MetroMapScreenState extends State<MetroMapScreen>
                                     allStations: provider.mapData!.stations,
                                     activeLineIds: widget.highlightedLineIds,
                                     camera: MapCamera.of(mapContext),
+                                    shouldDrawLines: false,
                                   ),
                                 ),
                               ),
@@ -788,6 +789,25 @@ class _MetroMapScreenState extends State<MetroMapScreen>
                             toFocus: toFocus,
                             onSwapTap: _swapStations,
                             onSubmit: _handleFindRoute,
+                            onDismiss: () {
+                              setState(() => _isFullScreenUI = true);
+                            },
+                            onOriginChanged: (val) {
+                              if (val.isEmpty) {
+                                setState(() {
+                                  fromStation = null;
+                                  _isFullScreenUI = false;
+                                });
+                              }
+                            },
+                            onDestinationChanged: (val) {
+                              if (val.isEmpty) {
+                                setState(() {
+                                  toStation = null;
+                                  _isFullScreenUI = false;
+                                });
+                              }
+                            },
                           ),
                   ),
               ],
@@ -866,12 +886,14 @@ class MultiDotIllusionPainter extends CustomPainter {
   final List<MapStation> allStations;
   final List<String> activeLineIds;
   final MapCamera? camera;
+  final bool shouldDrawLines;
 
   MultiDotIllusionPainter({
     required this.allLines,
     required this.allStations,
     this.activeLineIds = const [],
     this.camera,
+    this.shouldDrawLines = false,
   });
 
   @override
@@ -886,30 +908,32 @@ class MultiDotIllusionPainter extends CustomPainter {
     canvas.translate(pos.dx + (tweakX * scale), pos.dy + (tweakY * scale));
     canvas.scale(scale, scale);
 
-    final linesToDraw = activeLineIds.isEmpty
-        ? allLines
-        : allLines.where((l) => activeLineIds.contains(l.lineId)).toList();
+    if (shouldDrawLines) {
+      final linesToDraw = activeLineIds.isEmpty
+          ? allLines
+          : allLines.where((l) => activeLineIds.contains(l.lineId)).toList();
 
-    for (var line in linesToDraw) {
-      try {
-        final ui.Path path = parseSvgPathData(line.pathD);
-        final glowPaint = Paint()
-          ..color = line.color.withValues(alpha: 0.8)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 25.0
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 12.0);
-        final corePaint = Paint()
-          ..color = line.color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 8.0
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round;
-        canvas.drawPath(path, glowPaint);
-        canvas.drawPath(path, corePaint);
-      } catch (e) {
-        debugPrint('Error: $e');
+      for (var line in linesToDraw) {
+        try {
+          final ui.Path path = parseSvgPathData(line.pathD);
+          final glowPaint = Paint()
+            ..color = Colors.transparent
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 25.0
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 12.0);
+          final corePaint = Paint()
+            ..color = Colors.transparent
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 8.0
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round;
+          canvas.drawPath(path, glowPaint);
+          canvas.drawPath(path, corePaint);
+        } catch (e) {
+          debugPrint('Error: $e');
+        }
       }
     }
 

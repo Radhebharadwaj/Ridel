@@ -69,9 +69,9 @@ class _TurnByTurnBannerState extends State<TurnByTurnBanner> {
 
     double bannerWidth = MediaQuery.sizeOf(context).width - 32;
 
-    return Consumer<MapProvider>(
-        builder: (context, mapProvider, child) {
-          final bool show = mapProvider.isActiveNavigation;
+    return Selector<MapProvider, bool>(
+        selector: (context, provider) => provider.isActiveNavigation,
+        builder: (context, show, child) {
           return IgnorePointer(
             ignoring: !show,
             child: AnimatedOpacity(
@@ -249,16 +249,22 @@ class _TurnByTurnBannerState extends State<TurnByTurnBanner> {
                   : Colors.white.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Text(
-              '12 min',
-              style: GoogleFonts.inter(
-                color: isLight
-                    ? Colors.black.withValues(alpha: 0.45)
-                    : Colors.white.withValues(alpha: 0.50),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.2,
-              ),
+            child: ValueListenableBuilder<double>(
+              valueListenable: mapProvider.engine.navigation.remainingDuration,
+              builder: (context, duration, child) {
+                final mins = (duration / 60).floor();
+                return Text(
+                  '$mins min',
+                  style: GoogleFonts.inter(
+                    color: isLight
+                        ? Colors.black.withValues(alpha: 0.45)
+                        : Colors.white.withValues(alpha: 0.50),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.2,
+                  ),
+                );
+              },
             ),
           ),
         ],

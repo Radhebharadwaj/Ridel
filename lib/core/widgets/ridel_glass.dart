@@ -46,7 +46,8 @@ class RidelGlass extends StatelessWidget {
           ),
         ],
       ),
-      child: ClipRRect(
+      child: RepaintBoundary(
+        child: ClipRRect(
         borderRadius: br,
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
@@ -72,6 +73,7 @@ class RidelGlass extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }

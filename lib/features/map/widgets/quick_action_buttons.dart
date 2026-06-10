@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +9,7 @@ import 'package:ridel/features/map/map_engine/map_engine.dart';
 import 'package:ridel/features/map/models/place_model.dart';
 import 'package:ridel/core/services/saved_places_service.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
+
 class QuickActionButtons extends StatefulWidget {
   final bool isDark;
   final Function(String actionType) onRequestSearch;
@@ -242,14 +242,26 @@ class QuickActionButtonsState extends State<QuickActionButtons>
                                 children: [
                                   _buildPremiumCircleButton(
                                     icon: CupertinoIcons.house_fill,
-                                    iconColor: _homePlace != null ? const Color(0xFF00E5FF) : (isDark ? Colors.white70 : Colors.black87),
-                                    bgColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                                    iconColor: _homePlace != null
+                                        ? const Color(0xFF00E5FF)
+                                        : (isDark
+                                            ? Colors.white70
+                                            : Colors.black87),
+                                    bgColor: isDark
+                                        ? Colors.white.withValues(alpha: 0.08)
+                                        : Colors.black.withValues(alpha: 0.05),
                                     size: 52.0,
                                     iconSize: 24.0,
                                     onTap: _handleHomeTap,
                                   ),
                                   const SizedBox(height: 8),
-                                  Text("Home", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.w500)),
+                                  Text("Home",
+                                      style: TextStyle(
+                                          color: isDark
+                                              ? Colors.white70
+                                              : Colors.black54,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500)),
                                 ],
                               ),
                             ),
@@ -262,14 +274,26 @@ class QuickActionButtonsState extends State<QuickActionButtons>
                                 children: [
                                   _buildPremiumCircleButton(
                                     icon: CupertinoIcons.briefcase_fill,
-                                    iconColor: _workPlace != null ? const Color(0xFF00E5FF) : (isDark ? Colors.white70 : Colors.black87),
-                                    bgColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                                    iconColor: _workPlace != null
+                                        ? const Color(0xFF00E5FF)
+                                        : (isDark
+                                            ? Colors.white70
+                                            : Colors.black87),
+                                    bgColor: isDark
+                                        ? Colors.white.withValues(alpha: 0.08)
+                                        : Colors.black.withValues(alpha: 0.05),
                                     size: 52.0,
                                     iconSize: 24.0,
                                     onTap: _handleWorkTap,
                                   ),
                                   const SizedBox(height: 8),
-                                  Text("Work", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.w500)),
+                                  Text("Work",
+                                      style: TextStyle(
+                                          color: isDark
+                                              ? Colors.white70
+                                              : Colors.black54,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500)),
                                 ],
                               ),
                             ),
@@ -278,14 +302,23 @@ class QuickActionButtonsState extends State<QuickActionButtons>
                               children: [
                                 _buildPremiumCircleButton(
                                   icon: CupertinoIcons.add,
-                                  iconColor: isDark ? Colors.white : Colors.black87,
-                                  bgColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                                  iconColor:
+                                      isDark ? Colors.white : Colors.black87,
+                                  bgColor: isDark
+                                      ? Colors.white.withValues(alpha: 0.08)
+                                      : Colors.black.withValues(alpha: 0.05),
                                   size: 52.0,
                                   iconSize: 26.0,
                                   onTap: _handleAddPlaceTap,
                                 ),
                                 const SizedBox(height: 8),
-                                Text("Add Place", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.w500)),
+                                Text("Add Place",
+                                    style: TextStyle(
+                                        color: isDark
+                                            ? Colors.white70
+                                            : Colors.black54,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500)),
                               ],
                             ),
                           ],
@@ -429,7 +462,8 @@ class QuickActionButtonsState extends State<QuickActionButtons>
               Colors.white.withValues(alpha: 0.06),
             ],
           ),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
+          border:
+              Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.35),

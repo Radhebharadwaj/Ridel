@@ -1,50 +1,63 @@
-import 'dart:math' as math;
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:ridel/core/map/map_style_helper.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
-import 'package:ridel/core/widgets/ridel_glass.dart';
 
 /// 🚀 ULTRA-MINIMALIST FLOATING GLASS MAP THEME SELECTOR
 /// This ONLY changes the map's render style (Dark/Light tiles).
 /// It does NOT trigger any global app theme change.
 class MapThemeSelector {
   static void show(
-    BuildContext anchorContext, {
+    BuildContext context, {
     required MapThemeType currentTheme,
-    required ValueChanged<MapThemeType> onThemeSelected,
+    required Function(MapThemeType) onThemeSelected,
   }) {
-    final RenderBox renderBox = anchorContext.findRenderObject()! as RenderBox;
-    final Offset offset = renderBox.localToGlobal(Offset.zero);
-    final Size anchorSize = renderBox.size;
+    // 1. Get exact button coordinates
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
+    final offset = renderBox.localToGlobal(Offset.zero);
 
-    // Adjusted dimensions since the header is removed
-    const double popupWidth = 150.0;
-    const double estimatedHeight = 100.0;
+    final size = renderBox.size;
 
-    // Position the popup to the LEFT of the anchor, vertically centered
-    final double top =
-        offset.dy + (anchorSize.height / 2) - (estimatedHeight / 2);
-    final double left = math.max(16.0, offset.dx - popupWidth - 12);
+    // 2. Calculate offsets so card appears to the left of the pill
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final screenHeight = MediaQuery.sizeOf(context).height;
 
-    showDialog(
-      context: anchorContext,
-      barrierColor: Colors.transparent,
-      builder: (BuildContext context) {
+    // Right edge of card = distance from right screen edge to the left side of the button + 16px padding
+    final rightPosition = screenWidth - offset.dx + 16.0;
+
+    // Bottom edge of card = distance from bottom screen edge to the bottom of the button
+    final bottomPosition = screenHeight - (offset.dy + size.height);
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'DismissThemeSelector',
+      barrierColor:
+          Colors.transparent, // Invisible barrier so map is still visible
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
         return Stack(
           children: [
             Positioned(
-              top: top,
-              left: left,
-              width: popupWidth,
-              child: Material(
-                color: Colors.transparent,
-                child: _MapThemePopup(
-                  currentTheme: currentTheme,
-                  onThemeSelected: (theme) {
-                    Navigator.pop(context);
-                    onThemeSelected(theme);
-                  },
+              right: rightPosition,
+              bottom: bottomPosition,
+              child: ScaleTransition(
+                scale: CurvedAnimation(
+                    parent: animation, curve: Curves.easeOutCubic),
+                alignment: Alignment.bottomRight, // Scales out from the button
+                child: FadeTransition(
+                  opacity: animation,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: _MapThemePopup(
+                      currentTheme: currentTheme,
+                      onThemeSelected: (theme) {
+                        onThemeSelected(theme);
+                        Navigator.of(dialogContext).pop();
+                      },
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -66,66 +79,57 @@ class _MapThemePopup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isLightMode = Theme.of(context).brightness == Brightness.light;
-    const Color darkBgColor = Color(0xFF0F1118);
-
-    final content = Padding(
-      padding: const EdgeInsets.all(6.0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Dark Mode Option
-          _ThemeOption(
-            icon: Icons.dark_mode_rounded,
-            label: 'Dark',
-            isSelected: currentTheme == MapThemeType.dark,
-            isLightMode: isLightMode,
-            onTap: () {
-              AppHaptics.selectionClick();
-              onThemeSelected(MapThemeType.dark);
-            },
-          ),
-
-          const SizedBox(height: 4),
-
-          // Light Mode Option
-          _ThemeOption(
-            icon: Icons.light_mode_rounded,
-            label: 'Light',
-            isSelected: currentTheme == MapThemeType.light,
-            isLightMode: isLightMode,
-            onTap: () {
-              AppHaptics.selectionClick();
-              onThemeSelected(MapThemeType.light);
-            },
-          ),
-        ],
-      ),
-    );
-
-    // Wrapping in GestureDetector with opaque behavior STOPS touch events
-    // from leaking through to the map underneath.
     return GestureDetector(
       onTap: () {}, // Swallows empty taps on the background
       behavior: HitTestBehavior.opaque,
-      child: Container(
-        decoration: BoxDecoration(
-          color: isLightMode ? Colors.white : null,
-          borderRadius: BorderRadius.circular(18),
-          border: isLightMode ? Border.all(color: Colors.grey.shade200) : null,
-          boxShadow: isLightMode
-              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, 4))]
-              : null,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+          child: Container(
+            width: 170, // Sleek, constrained width
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF0B0E17).withValues(alpha: 0.75)
+                    : Colors.white.withValues(alpha: 0.75),
+                borderRadius: BorderRadius.circular(24),
+                border: Theme.of(context).brightness == Brightness.dark
+                    ? Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1.0)
+                    : Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  )
+                ]),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ThemeOption(
+                  icon: Icons.dark_mode_rounded,
+                  label: 'Dark',
+                  isSelected: currentTheme == MapThemeType.dark,
+                  onTap: () {
+                    AppHaptics.selectionClick();
+                    onThemeSelected(MapThemeType.dark);
+                  },
+                ),
+                const SizedBox(height: 4),
+                _ThemeOption(
+                  icon: Icons.light_mode_rounded,
+                  label: 'Light',
+                  isSelected: currentTheme == MapThemeType.light,
+                  onTap: () {
+                    AppHaptics.selectionClick();
+                    onThemeSelected(MapThemeType.light);
+                  },
+                ),
+              ],
+            ),
+          ),
         ),
-        child: isLightMode
-            ? content
-            : RidelGlass(
-                borderRadius: BorderRadius.circular(18),
-                blurSigma: 30.0,
-                baseColor: darkBgColor.withValues(alpha: 0.85),
-                isVerticalCard: true,
-                child: content,
-              ),
       ),
     );
   }
@@ -136,22 +140,25 @@ class _ThemeOption extends StatelessWidget {
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
-  final bool isLightMode;
 
   const _ThemeOption({
     required this.icon,
     required this.label,
     required this.isSelected,
     required this.onTap,
-    required this.isLightMode,
   });
 
   @override
   Widget build(BuildContext context) {
-    final Color accentCyan = isLightMode ? Colors.cyan.shade700 : const Color(0xFF00E5FF);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color highlightColor =
+        isDark ? const Color(0xFF00E5FF) : const Color(0xFF0A84FF);
+    final Color textColor =
+        isSelected ? highlightColor : (isDark ? Colors.white : Colors.black87);
+    final Color iconColor = isSelected
+        ? highlightColor
+        : (isDark ? Colors.white70 : Colors.black54);
 
-    // Using GestureDetector instead of InkWell prevents visual ripple bleed
-    // and strictly enforces HitTestBehavior to block map touches.
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -161,7 +168,9 @@ class _ThemeOption extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
           color: isSelected
-              ? accentCyan.withValues(alpha: 0.15)
+              ? (isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.04))
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
@@ -170,16 +179,14 @@ class _ThemeOption extends StatelessWidget {
             Icon(
               icon,
               size: 18,
-              color: isSelected ? accentCyan : (isLightMode ? Colors.black54 : Colors.white60),
+              color: iconColor,
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 label,
                 style: GoogleFonts.inter(
-                  color: isSelected 
-                      ? (isLightMode ? Colors.black87 : Colors.white)
-                      : (isLightMode ? Colors.black87 : Colors.white70),
+                  color: textColor,
                   fontSize: 14,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 ),
@@ -188,7 +195,7 @@ class _ThemeOption extends StatelessWidget {
             if (isSelected)
               Icon(
                 Icons.check_circle_rounded,
-                color: accentCyan,
+                color: highlightColor,
                 size: 18,
               ),
           ],

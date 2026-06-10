@@ -10,7 +10,7 @@ import 'package:ridel/core/services/global_location_service.dart';
 
 enum MapCameraState { free, follow, heading }
 
-enum CameraMode { explore, driving, transit }
+enum CameraMode { explore, driving, transit, walking, cycling }
 
 class MapCameraController {
   final MapLibreMapController map;
@@ -25,6 +25,7 @@ class MapCameraController {
   double _currentBearing = 0.0;
   double _currentZoom = 18.0; // Base zoom
   double _currentPitch = 45.0;
+  bool _userCustomizedCamera = false;
 
   String? _lastError;
 
@@ -84,6 +85,15 @@ class MapCameraController {
       _recenterTimer = Timer(const Duration(seconds: 10), () {
         isUserPanning.value = false;
         state = MapCameraState.heading;
+        
+        // Learn the user's custom pitch and zoom before snapping back to the route
+        final cam = map.cameraPosition;
+        if (cam != null) {
+          _currentZoom = cam.zoom;
+          _currentPitch = cam.tilt;
+          _userCustomizedCamera = true; // Lock the user's preference
+        }
+        
         if (currentMode == CameraMode.driving && locService.currentPosition != null) {
           final pos = locService.currentPosition!;
           animateCameraCinematic(
@@ -313,6 +323,7 @@ class MapCameraController {
 
   Future<void> setCameraForMode(CameraMode mode) async {
     currentMode = mode;
+    _userCustomizedCamera = false;
     
     if (mode == CameraMode.explore || mode == CameraMode.transit) {
       if (_userLocationPuck != null) {
@@ -372,6 +383,33 @@ class MapCameraController {
           }
         } catch (_) {}
         break;
+
+      case CameraMode.walking:
+      case CameraMode.cycling:
+        state = MapCameraState.heading;
+
+        if (!kIsWeb) {
+          map.updateMyLocationTrackingMode(
+              MyLocationTrackingMode.trackingCompass);
+        }
+
+        try {
+          if (!locService.isLiveTracking) {
+            locService.startLiveTracking();
+          }
+          Position? pos = locService.currentPosition;
+          if (pos != null) {
+            await animateCameraCinematic(
+                center: LatLng(pos.latitude, pos.longitude),
+                zoom: 18.0,
+                pitch: 0.0,
+                bearing: pos.heading);
+          } else if (cam != null) {
+            await animateCameraCinematic(
+                center: cam.target, zoom: 18.0, pitch: 0.0);
+          }
+        } catch (_) {}
+        break;
     }
   }
 
@@ -397,19 +435,28 @@ class MapCameraController {
       await _drawOrUpdateCustomBlueDot(latLng, isSimulated: isSimulated, heading: _currentBearing);
     }
 
-    if (currentMode != CameraMode.driving) {
+    if (currentMode != CameraMode.driving && currentMode != CameraMode.walking && currentMode != CameraMode.cycling) {
       return;
     }
 
-    double speedKmh = newPos.speed >= 0 ? newPos.speed * 3.6 : 0.0;
-    double targetZoom = (18.5 - (speedKmh / 100) * 4.5).clamp(14.0, 18.5);
-    _currentZoom += (targetZoom - _currentZoom) * 0.025;
+    if (currentMode == CameraMode.driving) {
+      if (!_userCustomizedCamera) {
+        double speedKmh = newPos.speed >= 0 ? newPos.speed * 3.6 : 0.0;
+        double targetZoom = (18.5 - (speedKmh / 100) * 4.5).clamp(14.0, 18.5);
+        _currentZoom += (targetZoom - _currentZoom) * 0.025;
 
-    double targetPitch = (35.0 + (speedKmh / 80) * 35.0).clamp(35.0, 70.0);
-    _currentPitch += (targetPitch - _currentPitch) * 0.025;
+        double targetPitch = (35.0 + (speedKmh / 80) * 35.0).clamp(35.0, 70.0);
+        _currentPitch += (targetPitch - _currentPitch) * 0.025;
+      }
+    } else {
+      _currentZoom = 18.0;
+      _currentPitch = 0.0;
+    }
 
     if (!isUserPanning.value && state == MapCameraState.heading) {
-      final targetCenter = _calculateLookAhead(_currentDotPos ?? latLng, _currentBearing, _currentZoom);
+      final targetCenter = currentMode == CameraMode.driving
+          ? _calculateLookAhead(_currentDotPos ?? latLng, _currentBearing, _currentZoom)
+          : latLng; // Center directly on user for walking/cycling
 
       // Smooth camera follow update
       await animateCameraCinematic(
@@ -447,13 +494,14 @@ class MapCameraController {
           LatLng(target.latitude - southOffset, target.longitude);
 
       await animateCameraCinematic(
-          center: adjustedTarget, zoom: 17.5, pitch: 60.0, bearing: 0.0);
+          center: adjustedTarget, zoom: 16.5, pitch: 0.0, bearing: 0.0);
     } catch (e) {
       _setError("Search flight failed: $e");
     }
   }
 
   void onLocateMeTapped(bool is3DMode, bool isDrivingMode) async {
+    _userCustomizedCamera = false;
     if (locService.currentPosition == null) {
       debugPrint("Location not available yet.");
       return;
@@ -500,7 +548,7 @@ class MapCameraController {
 
   Future<void> _drawOrUpdateCustomBlueDot(LatLng pos,
       {bool ignoreThrottle = false, bool isSimulated = false, double heading = 0.0}) async {
-    if (currentMode != CameraMode.driving && !isSimulated && !ignoreThrottle) {
+    if (currentMode != CameraMode.driving && currentMode != CameraMode.walking && currentMode != CameraMode.cycling && !isSimulated && !ignoreThrottle) {
       return;
     }
 

@@ -3,12 +3,14 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:ui';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
 import 'package:ridel/core/utils/app_haptics.dart';
-
-
+import 'package:ridel/main.dart';
+import 'package:ridel/core/providers/app_navigation_provider.dart';
 enum ToastType { success, error, info, warning }
 
 class ToastService {
@@ -63,6 +65,20 @@ class ToastService {
     );
   }
 
+  static void showNearestTransportToast(
+    BuildContext context, {
+    required Function(String) onTapUpdateOrigin,
+  }) {
+    _showApplePill(
+      context,
+      type: ToastType.success,
+      title: "",
+      message: "",
+      isDynamicTransportToast: true,
+      onTapUpdateOrigin: onTapUpdateOrigin,
+    );
+  }
+
   static void _showApplePill(
     BuildContext context, {
     required ToastType type,
@@ -71,6 +87,8 @@ class ToastService {
     VoidCallback? onTap,
     String? actionLabel,
     VoidCallback? onActionTap,
+    bool isDynamicTransportToast = false,
+    Function(String)? onTapUpdateOrigin,
   }) {
     _queue.add({
       'context': context,
@@ -80,6 +98,8 @@ class ToastService {
       'onTap': onTap,
       'actionLabel': actionLabel,
       'onActionTap': onActionTap,
+      'isDynamicTransportToast': isDynamicTransportToast,
+      'onTapUpdateOrigin': onTapUpdateOrigin,
     });
     
     _processQueue();
@@ -96,6 +116,9 @@ class ToastService {
     final onTap = request['onTap'] as VoidCallback?;
     final actionLabel = request['actionLabel'] as String?;
     final onActionTap = request['onActionTap'] as VoidCallback?;
+
+    final isDynamicTransportToast = request['isDynamicTransportToast'] as bool? ?? false;
+    final onTapUpdateOrigin = request['onTapUpdateOrigin'] as Function(String)?;
 
     final overlayState = navigatorKey.currentState?.overlay;
 
@@ -128,6 +151,8 @@ class ToastService {
         onTap: onTap,
         actionLabel: actionLabel,
         onActionTap: onActionTap,
+        isDynamicTransportToast: isDynamicTransportToast,
+        onTapUpdateOrigin: onTapUpdateOrigin,
         onDismiss: () {
           _overlayEntry?.remove();
           _overlayEntry = null;
@@ -148,6 +173,8 @@ class _ApplePillWidget extends StatefulWidget {
   final String? actionLabel;
   final VoidCallback? onActionTap;
   final VoidCallback onDismiss;
+  final bool isDynamicTransportToast;
+  final Function(String)? onTapUpdateOrigin;
 
   const _ApplePillWidget({
     required this.type,
@@ -157,6 +184,8 @@ class _ApplePillWidget extends StatefulWidget {
     this.actionLabel,
     this.onActionTap,
     required this.onDismiss,
+    this.isDynamicTransportToast = false,
+    this.onTapUpdateOrigin,
   });
 
   @override
@@ -170,6 +199,14 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
   double _scale = 1.0;
   Timer? _timer;
 
+  String _toTitleCase(String text) {
+    if (text.isEmpty) return text;
+    return text.split(' ').map((word) {
+      if (word.isEmpty) return word;
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -178,6 +215,13 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
       if (mounted) setState(() => _isEntering = false);
       _startTimer();
     });
+    globalTransportMode.addListener(_onTransportModeChanged);
+  }
+
+  void _onTransportModeChanged() {
+    if (!_isEntering && mounted) {
+      _startTimer();
+    }
   }
 
   void _startTimer() {
@@ -196,6 +240,7 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
 
   @override
   void dispose() {
+    globalTransportMode.removeListener(_onTransportModeChanged);
     _timer?.cancel();
     super.dispose();
   }
@@ -229,6 +274,9 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    final navProvider = context.watch<AppNavigationProvider>();
+    final isMapScreen = navProvider.currentIndex == 1;
 
     double targetTop = MediaQuery.of(context).padding.top + 16;
 
@@ -244,17 +292,36 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
       top: targetTop,
       left: 0,
       right: 0,
-      child: Align(
-        alignment: Alignment.topCenter,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 300),
+        opacity: isMapScreen ? 0.0 : 1.0,
         child: AnimatedScale(
-          scale: _scale,
+          scale: isMapScreen ? 0.8 : _scale,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
-          child: GestureDetector(
-            onTap: () {
-              if (widget.onTap != null) widget.onTap!();
-              _dismiss();
-            },
+          child: IgnorePointer(
+            ignoring: isMapScreen,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: GestureDetector(
+                onTap: () {
+                  if (widget.isDynamicTransportToast && widget.onTapUpdateOrigin != null) {
+                    final transportMode = globalTransportMode.value;
+                    final provider = context.read<AppNavigationProvider>();
+                    String? name;
+                    if (transportMode == 0) {
+                      name = provider.nearestMetroStation?['stop_name'];
+                    } else {
+                      name = provider.nearestBusStop?['stop_name'];
+                    }
+                    if (name != null) {
+                      widget.onTapUpdateOrigin!(_toTitleCase(name));
+                    }
+                  } else if (widget.onTap != null) {
+                    widget.onTap!();
+                  }
+                  _dismiss();
+                },
             onVerticalDragUpdate: (details) {
               if (details.delta.dy < 0) {
                 setState(() => _dragOffsetY += details.delta.dy);
@@ -272,11 +339,9 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
               color: Colors.transparent,
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
-                // 🌟 FIX: minWidth add kar diya taaki pill hamesha elegant aur lambi dikhe
                 constraints: const BoxConstraints(
                   maxWidth: 320,
-                  minWidth:
-                      240, // Ise 240-260 ke beech rakhoge toh best "Long Pill" look aayega
+                  minHeight: 44,
                 ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(100),
@@ -309,90 +374,167 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
                           width: 1.0,
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _getIconColor().withValues(alpha: 0.15),
-                            ),
-                            child: Icon(_getIcon(),
-                                color: _getIconColor(), size: 16),
-                          ),
-                          const SizedBox(width: 12),
-                          Flexible(
-                            child: Column(
+                      child: ValueListenableBuilder<int>(
+                        valueListenable: globalTransportMode,
+                        builder: (context, transportMode, _) {
+                          String dynamicTitle = widget.title;
+                          String dynamicMessage = widget.message;
+                          
+                          bool isLoading = false;
+                          
+                          if (widget.isDynamicTransportToast) {
+                            if (transportMode == 0) {
+                              dynamicTitle = "Nearest Station";
+                              final stopName = navProvider.nearestMetroStation?['stop_name'];
+                              if (stopName != null) {
+                                dynamicMessage = _toTitleCase(stopName);
+                              } else {
+                                isLoading = true;
+                              }
+                            } else {
+                              dynamicTitle = "Nearest Stop";
+                              final stopName = navProvider.nearestBusStop?['stop_name'];
+                              if (stopName != null) {
+                                dynamicMessage = _toTitleCase(stopName);
+                              } else {
+                                isLoading = true;
+                              }
+                            }
+                          } else if (widget.title.startsWith("Nearest")) {
+                            dynamicTitle = transportMode == 0 ? "Nearest Station" : "Nearest Stop";
+                          }
+
+                          Widget content;
+                          if (isLoading) {
+                            content = Row(
+                              key: const ValueKey<String>("loading_state"),
                               mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
+                                const CupertinoActivityIndicator(radius: 8),
+                                const SizedBox(width: 8),
                                 Text(
-                                  widget.title,
+                                  "Finding nearest stop...",
                                   style: GoogleFonts.inter(
-                                    color:
-                                        isDark ? Colors.white : Colors.black87,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -0.3,
-                                    height: 1.1,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  widget.message,
-                                  style: GoogleFonts.inter(
-                                    color: isDark
-                                        ? Colors.white.withValues(alpha: 0.7)
-                                        : Colors.black54,
-                                    fontSize: 12.5,
+                                    color: isDark ? Colors.white54 : Colors.black54,
+                                    fontSize: 13,
                                     fontWeight: FontWeight.w500,
-                                    height: 1.2,
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
-                            ),
-                          ),
-                          if (widget.actionLabel != null && widget.onActionTap != null) ...[
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: () {
-                                widget.onActionTap!();
-                                _dismiss();
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF0A84FF).withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(12),
+                            );
+                          } else {
+                            content = Row(
+                              key: ValueKey<String>("$dynamicTitle-$dynamicMessage"),
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: _getIconColor().withValues(alpha: 0.15),
+                                  ),
+                                  child: Icon(_getIcon(),
+                                      color: _getIconColor(), size: 16),
                                 ),
-                                child: Text(
-                                  widget.actionLabel!,
-                                  style: GoogleFonts.inter(
-                                    color: const Color(0xFF0A84FF),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
+                                const SizedBox(width: 12),
+                                Flexible(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        dynamicTitle,
+                                        style: GoogleFonts.inter(
+                                          color:
+                                              isDark ? Colors.white : Colors.black87,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: -0.3,
+                                          height: 1.1,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        dynamicMessage,
+                                        style: GoogleFonts.inter(
+                                          color: isDark
+                                              ? Colors.white.withValues(alpha: 0.7)
+                                              : Colors.black54,
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w500,
+                                          height: 1.2,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
                                   ),
                                 ),
+                                if (widget.actionLabel != null && widget.onActionTap != null) ...[
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () {
+                                      widget.onActionTap!();
+                                      _dismiss();
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0A84FF).withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        widget.actionLabel!,
+                                        style: GoogleFonts.inter(
+                                          color: const Color(0xFF0A84FF),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(width: 4),
+                              ],
+                            );
+                          }
+
+                          return AnimatedSize(
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeOutCubic,
+                            alignment: Alignment.center,
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeInCubic,
+                              layoutBuilder: (currentChild, previousChildren) => Stack(
+                                alignment: Alignment.center,
+                                children: <Widget>[
+                                  ...previousChildren,
+                                  if (currentChild != null) currentChild,
+                                ],
                               ),
+                              child: content,
                             ),
-                          ],
-                          const SizedBox(width: 4),
-                        ],
+                          );
+                        },
                       ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+                ), // Container
+              ), // BackdropFilter
+            ), // ClipRRect
+          ), // Container
+        ), // Material
+      ), // GestureDetector
+      ), // Align
+      ), // IgnorePointer
+      ), // AnimatedScale
+      ), // AnimatedOpacity
+    ); // AnimatedPositioned
   }
 }

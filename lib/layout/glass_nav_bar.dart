@@ -114,10 +114,14 @@ class _GlassNavBarState extends State<GlassNavBar> {
                 child: Container(
                   height: elementHeight,
                   decoration: BoxDecoration(
-                    color: isDark ? Colors.black.withValues(alpha: 0.42) : Colors.black.withValues(alpha: 0.05),
+                    color: isDark
+                        ? Colors.black.withValues(alpha: 0.42)
+                        : Colors.black.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(100),
                     border: Border.all(
-                      color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.transparent,
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.03)
+                          : Colors.transparent,
                       width: 1,
                     ),
                   ),
@@ -146,19 +150,29 @@ class _GlassNavBarState extends State<GlassNavBar> {
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(100),
                                     color: isDark ? null : Colors.white,
-                                    gradient: isDark ? LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        Colors.white.withValues(alpha: 0.11),
-                                        Colors.white.withValues(alpha: 0.05),
-                                      ],
-                                    ) : null,
+                                    gradient: isDark
+                                        ? LinearGradient(
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                            colors: [
+                                              Colors.white
+                                                  .withValues(alpha: 0.11),
+                                              Colors.white
+                                                  .withValues(alpha: 0.05),
+                                            ],
+                                          )
+                                        : null,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: isDark ? Colors.black.withValues(alpha: 0.22) : Colors.black.withValues(alpha: 0.04),
+                                        color: isDark
+                                            ? Colors.black
+                                                .withValues(alpha: 0.22)
+                                            : Colors.black
+                                                .withValues(alpha: 0.04),
                                         blurRadius: isDark ? 8 : 18.0,
-                                        offset: isDark ? const Offset(0, 2) : const Offset(0, 1),
+                                        offset: isDark
+                                            ? const Offset(0, 2)
+                                            : const Offset(0, 1),
                                       ),
                                     ],
                                   ),
@@ -173,7 +187,8 @@ class _GlassNavBarState extends State<GlassNavBar> {
                               _buildToggleTab(
                                 title: "Metro",
                                 active: _activeSlabIndex == 0,
-                                activeColor: isDark ? metroColor : Colors.black87,
+                                activeColor:
+                                    isDark ? metroColor : Colors.black87,
                                 isDark: isDark,
                                 onTap: () => _onSegmentTapped(0),
                               ),
@@ -212,8 +227,8 @@ class _GlassNavBarState extends State<GlassNavBar> {
           _CircularIconButton(
             size: elementHeight,
             icon: CupertinoIcons.search,
-            iconColor: widget.currentIndex == 1 
-                ? (isDark ? metroColor : Colors.black87) 
+            iconColor: widget.currentIndex == 1
+                ? (isDark ? metroColor : Colors.black87)
                 : (isDark ? inactiveColor : Colors.grey.shade800),
             isActive: widget.currentIndex == 1,
             onTabSelected: widget.onTabSelected,
@@ -223,65 +238,73 @@ class _GlassNavBarState extends State<GlassNavBar> {
     );
 
     return SafeArea(
-      bottom: true,
-      child: AnimatedSlide(
-        offset: widget.currentIndex == 1 ? const Offset(0, 1.5) : Offset.zero,
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeOutCubic,
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 12, left: 16, right: 16),
-              // 🚀 MASTER LIQUID GLASS WITH 20232C TINT
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(100),
-                  boxShadow: [
-                    BoxShadow(
-                      color: isDark ? Colors.black.withValues(alpha: 0.40) : Colors.black.withValues(alpha: 0.08),
-                      blurRadius: isDark ? 30 : 32,
-                      spreadRadius: isDark ? -2 : 8,
-                      offset: isDark ? const Offset(0, 15) : const Offset(0, 12),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(100),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(100),
-                        color: isDark ? null : Colors.white.withValues(alpha: 0.7),
-                        gradient: isDark
-                            ? LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  const Color(0xFF20232C).withValues(alpha: 0.85),
-                                  const Color(0xFF20232C).withValues(alpha: 0.65),
-                                ],
-                              )
-                            : null,
-                        border: Border.all(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.1)
-                              : Colors.black.withValues(alpha: 0.04),
-                          width: 1.0,
+        bottom: true,
+        child: AnimatedSlide(
+          offset: widget.currentIndex == 1 ? const Offset(0, 1.5) : Offset.zero,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOutCubic,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 12, left: 16, right: 16),
+                // 🚀 MASTER LIQUID GLASS WITH 20232C TINT
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(100),
+                    boxShadow: [
+                      BoxShadow(
+                        color: isDark
+                            ? Colors.black.withValues(alpha: 0.40)
+                            : Colors.black.withValues(alpha: 0.08),
+                        blurRadius: isDark ? 30 : 32,
+                        spreadRadius: isDark ? -2 : 8,
+                        offset:
+                            isDark ? const Offset(0, 15) : const Offset(0, 12),
+                      ),
+                    ],
+                  ),
+                  child: RepaintBoundary(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(100),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(100),
+                            color: isDark
+                                ? null
+                                : Colors.white.withValues(alpha: 0.7),
+                            gradient: isDark
+                                ? LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      const Color(0xFF20232C)
+                                          .withValues(alpha: 0.85),
+                                      const Color(0xFF20232C)
+                                          .withValues(alpha: 0.65),
+                                    ],
+                                  )
+                                : null,
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.1)
+                                  : Colors.black.withValues(alpha: 0.04),
+                              width: 1.0,
+                            ),
+                          ),
+                          child: navBarContent,
                         ),
                       ),
-                      child: navBarContent,
                     ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
-    );
+        ));
   }
 
   // 🚀 CLEAN TEXT STYLE ANIMATION (NO SIZE POP)
@@ -292,7 +315,8 @@ class _GlassNavBarState extends State<GlassNavBar> {
     required bool isDark,
     required VoidCallback onTap,
   }) {
-    final inactiveColor = isDark ? Colors.white.withValues(alpha: 0.48) : Colors.black54;
+    final inactiveColor =
+        isDark ? Colors.white.withValues(alpha: 0.48) : Colors.black54;
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
@@ -379,20 +403,24 @@ class _CircularIconButtonState extends State<_CircularIconButton> {
           height: widget.size,
           decoration: BoxDecoration(
             color: widget.isActive
-                ? (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05))
+                ? (isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.05))
                 : Colors.transparent,
             shape: BoxShape.circle,
             border: widget.isActive
                 ? Border.all(
-                    color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.05),
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : Colors.black.withValues(alpha: 0.05),
                     width: 1.0,
                   )
                 : null,
             boxShadow: widget.isActive
                 ? [
                     BoxShadow(
-                      color: isDark 
-                          ? widget.iconColor.withValues(alpha: 0.15) 
+                      color: isDark
+                          ? widget.iconColor.withValues(alpha: 0.15)
                           : Colors.black.withValues(alpha: 0.04),
                       blurRadius: isDark ? 8 : 18.0,
                       offset: isDark ? Offset.zero : const Offset(0, 1),

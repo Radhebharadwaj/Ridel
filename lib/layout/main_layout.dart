@@ -13,7 +13,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../features/profile/services/profile_repository.dart';
 import '../core/utils/toast_service.dart';
 
-import '../core/map/map_provider.dart';
+
 import '../core/providers/app_navigation_provider.dart';
 import '../core/utils/app_haptics.dart';
 import '../core/widgets/notification_sheet.dart';
@@ -25,7 +25,7 @@ import '../features/commute/metro/widgets/metro_services_grid.dart';
 import '../features/commute/shared/screens/commute_screen.dart';
 import '../features/commute/shared/widgets/commute_search_card.dart';
 import '../features/map/screens/full_screen_map.dart';
-import '../features/map/widgets/search_sheet/map_search_sheet.dart';
+
 import '../features/profile/screens/profile_screen.dart';
 import 'glass_nav_bar.dart';
 
@@ -37,7 +37,7 @@ class MainLayout extends StatefulWidget {
 }
 
 class _MainLayoutState extends State<MainLayout> {
-  bool _isSearchMode = false;
+
   final ValueNotifier<double> _searchSheetProgressNotifier = ValueNotifier(0.0);
 
   double _railWidth = 70.0;
@@ -87,8 +87,6 @@ class _MainLayoutState extends State<MainLayout> {
     final bool isDesktop = MediaQuery.of(context).size.width > 600;
 
     const double desktopMargin = 32.0;
-
-
 
     final double statusBarHeight = MediaQuery.of(context).padding.top;
 
@@ -339,42 +337,11 @@ class _MainLayoutState extends State<MainLayout> {
                   ),
                 ),
               ),
-              Positioned.fill(
-                child: IgnorePointer(
-                  ignoring: !isMapActive,
-                  child: MapSearchSheet(
-                    isMapTabActive: isMapActive,
-                    onProgressChanged: (progress) =>
-                        _searchSheetProgressNotifier.value = progress,
-                    onSearchModeChanged: (isSearching) {
-                      if (_isSearchMode != isSearching) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (mounted) {
-                            // 🚀 ADDED {
-                            setState(() => _isSearchMode = isSearching);
-                          } // 🚀 ADDED }
-                        });
-                      }
-                    },
-                    onSearchSubmitted: (query) {
-                      if (!isMapActive) {
-                        globalIsHome.value = false;
-                        navProvider.setTab(1);
-                      }
-                      Provider.of<MapProvider>(context, listen: false)
-                          .searchAndNavigate(query);
-                    },
-                    onBackToPreviousTab: () {
-                      globalIsHome.value = true;
-                      navProvider.setTab(0);
-                    },
-                  ),
-                ),
-              ),
+
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 350),
                 curve: Curves.easeOutCubic,
-                bottom: (isMapActive || _isSearchMode) ? -150 : 20,
+                bottom: (isMapActive) ? -150 : 20,
                 left: 0,
                 right: 0,
                 child: Align(
@@ -439,7 +406,7 @@ class _MainLayoutState extends State<MainLayout> {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          isDark 
+                          isDark
                               ? const Color(0xFF0B0E17).withValues(alpha: 0.85)
                               : Colors.white.withValues(alpha: 0.95),
                           isDark
@@ -575,83 +542,83 @@ class _WebNavigationRailState extends State<_WebNavigationRail> {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 350),
               curve: Curves.easeOutCubic,
-                height: _isHidden ? 48.0 : constraints.maxHeight,
-                width: _isHidden ? 48.0 : widget.currentWidth,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(currentRadius),
-                  border: Border.all(
-                      color: widget.isDark
-                          ? Colors.white.withValues(alpha: 0.12)
-                          : Colors.black.withValues(alpha: 0.08),
-                      width: 1),
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black
-                            .withValues(alpha: _isHidden ? 0.15 : 0.25),
-                        blurRadius: _isHidden ? 20 : 40,
-                        offset: const Offset(0, 5))
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(currentRadius),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 350),
-                      curve: Curves.easeOutCubic,
-                      color: widget.isDark
-                          ? const Color(0xFF1C1C1E).withValues(alpha: 0.85)
-                          : const Color(0xFFF2F2F7).withValues(alpha: 0.90),
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Positioned(
-                            top: 0,
-                            bottom: 0,
-                            left: 0,
-                            width: 220.0,
-                            child: AnimatedOpacity(
-                              duration: const Duration(milliseconds: 250),
-                              opacity: _isHidden ? 0.0 : 1.0,
-                              child: IgnorePointer(
-                                  ignoring: _isHidden,
-                                  child: _buildSidebarContent(
-                                      isExpanded, context)),
-                            ),
+              height: _isHidden ? 48.0 : constraints.maxHeight,
+              width: _isHidden ? 48.0 : widget.currentWidth,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(currentRadius),
+                border: Border.all(
+                    color: widget.isDark
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : Colors.black.withValues(alpha: 0.08),
+                    width: 1),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black
+                          .withValues(alpha: _isHidden ? 0.15 : 0.25),
+                      blurRadius: _isHidden ? 20 : 40,
+                      offset: const Offset(0, 5))
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(currentRadius),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeOutCubic,
+                    color: widget.isDark
+                        ? const Color(0xFF1C1C1E).withValues(alpha: 0.85)
+                        : const Color(0xFFF2F2F7).withValues(alpha: 0.90),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Positioned(
+                          top: 0,
+                          bottom: 0,
+                          left: 0,
+                          width: 220.0,
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 250),
+                            opacity: _isHidden ? 0.0 : 1.0,
+                            child: IgnorePointer(
+                                ignoring: _isHidden,
+                                child:
+                                    _buildSidebarContent(isExpanded, context)),
                           ),
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            child: AnimatedOpacity(
-                              duration: const Duration(milliseconds: 250),
-                              opacity: _isHidden ? 1.0 : 0.0,
-                              child: IgnorePointer(
-                                ignoring: !_isHidden,
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () {
-                                    AppHaptics.heavyImpact();
-                                    setState(() => _isHidden = false);
-                                    widget.onWidthChanged(70.0);
-                                  },
-                                  child: Container(
-                                      width: 48,
-                                      height: 48,
-                                      color: Colors.transparent,
-                                      child: Center(
-                                          child: Icon(Icons.menu_rounded,
-                                              color: widget.isDark
-                                                  ? Colors.white
-                                                      .withValues(alpha: 0.9)
-                                                  : Colors.black87,
-                                              size: 22))),
-                                ),
+                        ),
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 250),
+                            opacity: _isHidden ? 1.0 : 0.0,
+                            child: IgnorePointer(
+                              ignoring: !_isHidden,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () {
+                                  AppHaptics.heavyImpact();
+                                  setState(() => _isHidden = false);
+                                  widget.onWidthChanged(70.0);
+                                },
+                                child: Container(
+                                    width: 48,
+                                    height: 48,
+                                    color: Colors.transparent,
+                                    child: Center(
+                                        child: Icon(Icons.menu_rounded,
+                                            color: widget.isDark
+                                                ? Colors.white
+                                                    .withValues(alpha: 0.9)
+                                                : Colors.black87,
+                                            size: 22))),
                               ),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
+                  ),
                 ),
               ),
             ),
@@ -1218,6 +1185,68 @@ class _HoverFeatureCardState extends State<_HoverFeatureCard> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class DelayedOffstage extends StatefulWidget {
+  final bool offstage;
+  final Duration delay;
+  final Widget child;
+
+  const DelayedOffstage({
+    super.key,
+    required this.offstage,
+    required this.delay,
+    required this.child,
+  });
+
+  @override
+  State<DelayedOffstage> createState() => _DelayedOffstageState();
+}
+
+class _DelayedOffstageState extends State<DelayedOffstage> {
+  bool _offstage = false;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _offstage = widget.offstage;
+  }
+
+  @override
+  void didUpdateWidget(DelayedOffstage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.offstage != oldWidget.offstage) {
+      _timer?.cancel();
+      if (widget.offstage) {
+        _timer = Timer(widget.delay, () {
+          if (mounted) {
+            setState(() {
+              _offstage = true;
+            });
+          }
+        });
+      } else {
+        setState(() {
+          _offstage = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Offstage(
+      offstage: _offstage,
+      child: widget.child,
     );
   }
 }

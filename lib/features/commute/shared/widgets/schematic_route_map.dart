@@ -66,7 +66,6 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
     final hasError = widget.trackingError != null;
 
     return Container(
-      height: _mapHeight,
       width: double.infinity,
       decoration: BoxDecoration(
         color: hasError ? const Color(0xFF2A0808) : (isLightMode ? Colors.white : const Color(0xFF0B0D12)),
@@ -134,44 +133,47 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
 
             // 🚨 DETAILED ERROR WARNING OVERLAY WITH 2 BUTTONS
             if (hasError)
-              Positioned.fill(
-                child: ColoredBox(
-                  color: Colors.black.withValues(
-                    alpha: 0.4,
-                  ), // Darken background to make buttons pop
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.redAccent.withValues(alpha: 0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.location_off_rounded,
-                            color: Colors.redAccent,
-                            size: 28,
+              Container(
+                width: double.infinity,
+                color: Colors.black.withValues(
+                  alpha: 0.4,
+                ), // Darken background to make buttons pop
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.location_off_rounded,
+                          color: Colors.redAccent,
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Text(
+                          widget.trackingError!,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            height: 1.4,
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Text(
-                            widget.trackingError!,
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.inter(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              height: 1.4,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        // 🚀 NEW: Two sleek buttons for map options
-                        Row(
+                      ),
+                      const SizedBox(height: 16),
+                      // 🚀 NEW: Two sleek buttons for map options wrapped in FittedBox
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             _buildMapButton(
@@ -187,8 +189,8 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
                             ),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),

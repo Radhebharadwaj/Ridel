@@ -11,7 +11,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
   }) {
     // 🚀 PREMIUM MATTE CARD FOR LISTS & MENUS (Refined Alpha for true Glassmorphism)
     return Material(
-      color: bgColor,
+      color: isDark ? const Color(0xFF1C1F26) : Colors.white,
       borderRadius: BorderRadius.circular(borderRadius),
       clipBehavior: Clip.antiAlias,
       child: Container(
@@ -28,7 +28,62 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     );
   }
 
-
+  Widget _buildCircularQuickAction({
+    required IconData icon,
+    required String label,
+    required bool isDark,
+    required Color iconColor,
+    required VoidCallback onTap,
+  }) {
+    return RidelBounceButton(
+      onTap: () {
+        AppHaptics.lightImpact();
+        onTap();
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.20),
+                  Colors.white.withValues(alpha: 0.10),
+                  Colors.white.withValues(alpha: 0.06),
+                ],
+              ),
+              border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.18), width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 20,
+                  spreadRadius: -2,
+                  offset: const Offset(0, 14),
+                ),
+              ],
+            ),
+            child: Icon(icon, size: 24, color: iconColor),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: isDark ? Colors.white70 : Colors.black87,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildUnifiedExploreView(bool isDark, double progress,
       {bool isExpandedList = false}) {
@@ -109,8 +164,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
               ],
             ),
           if (showRecentSearches)
-            Builder(builder: (context) {
-              Widget card = Material(
+            buildHiddenExtra(
+              Material(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.05)
                     : Colors.black.withValues(alpha: 0.03),
@@ -278,7 +333,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                 final listView = ListView.builder(
                                   padding: EdgeInsets.zero,
                                   shrinkWrap: !isExpandedList,
-                                  physics: const BouncingScrollPhysics(),
+                                  physics: const ClampingScrollPhysics(),
                                   itemCount: provider.recentSearches.length,
                                   itemBuilder: (context, index) {
                                     final place =
@@ -423,12 +478,9 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                                   await safeProvider.flyToPlace(
                                                       lat, lng);
                                                 } else {
-                                                  safeProvider.setTargetDestination(null);
-                                                  safeProvider.setDestinationSelected(false);
-                                                  safeProvider.engine.setUIState(MapUIState.idle);
-                                                  if (context.mounted) {
-                                                    ToastService.showError(context, "Location coordinates not found.");
-                                                  }
+                                                  safeProvider.engine
+                                                      .setUIState(
+                                                          MapUIState.idle);
                                                 }
                                               } catch (e) {
                                                 debugPrint(
@@ -513,23 +565,18 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                 );
                                 return isExpandedList
                                     ? Expanded(child: listView)
-                                    : listView;
+                                    : ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                            maxHeight: 320),
+                                        child: listView,
+                                      );
                               },
                             ),
                     ],
                   ),
                 ),
-              );
-              return isExpandedList
-                  ? Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                            bottom: MediaQuery.of(context).viewInsets.bottom),
-                        child: card,
-                      ),
-                    )
-                  : buildHiddenExtra(card);
-            }),
+              ),
+            ),
           if (showRecentSearches && !isSelected) const SizedBox(height: 16),
           if (!isSelected && !isFocused && isEmpty)
             Material(
@@ -730,17 +777,42 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
   }
 
   Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
-    return SavedPlacesRow(
+    return SingleChildScrollView(
       key: const ValueKey('default_actions_row'),
-      isDark: isDark,
-      pickerController: _locationPickerController,
-      repository: _placesRepository,
-      onPlaceTapped: () {
-        _searchFocus.unfocus();
-        if (_sheetController.isAttached) {
-          _safeAnimateSheet(_safeMinSize);
-        }
-      },
+      scrollDirection: Axis.horizontal,
+      physics:
+          const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildCircularQuickAction(
+            icon: CupertinoIcons.house_fill,
+            label: 'Home',
+            isDark: isDark,
+            iconColor: Colors.blueAccent,
+            onTap: () => _handleSmartQuickAction('HOME'),
+          ),
+          const SizedBox(width: 24),
+          _buildCircularQuickAction(
+            icon: CupertinoIcons.briefcase_fill,
+            label: 'Work',
+            isDark: isDark,
+            iconColor: Colors.blueAccent,
+            onTap: () => _handleSmartQuickAction('WORK'),
+          ),
+          const SizedBox(width: 24),
+          _buildCircularQuickAction(
+            icon: CupertinoIcons.add,
+            label: 'Add Place',
+            isDark: isDark,
+            iconColor: Colors.blueAccent,
+            onTap: () {
+              AppHaptics.mediumImpact();
+              // Logic for adding custom place
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -1180,11 +1252,10 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     final card = _buildProfileStyleCard(
       context,
       isDark: isDark,
-      bgColor: isDark ? const Color(0xFF0B0E17) : Colors.white,
+      bgColor: isDark ? const Color(0xFF1C1F26) : Colors.white,
       borderRadius: dynamicRadius,
       child: ListView(
-        padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+        padding: EdgeInsets.zero,
         shrinkWrap: !isExpanded,
         physics: const ClampingScrollPhysics(),
         children: combinedResults.asMap().entries.map((entry) {
@@ -1255,14 +1326,10 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
 
     Widget content = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          Expanded(child: card),
-        ],
-      ),
+      child: card,
     );
 
-    return content;
+    return isExpanded ? Expanded(child: content) : content;
   }
 
   Widget _buildSheetContent(bool isDark, double progress,

@@ -11,7 +11,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/features/map/map_engine/map_engine.dart';
@@ -30,15 +29,10 @@ import 'package:ridel/features/map/services/route_visualizer.dart';
 import 'package:ridel/features/map/services/route_engine_service.dart';
 import 'package:ridel/core/widgets/ridel_liquid_button.dart';
 import 'package:ridel/features/map/widgets/quick_action_buttons.dart';
-import 'package:ridel/core/utils/route_utils.dart';
 
 // 🚀 IMPORT YOUR NOTIFICATION SERVICE HERE
 import 'package:ridel/core/services/notification_service.dart';
 import 'package:ridel/core/utils/toast_service.dart';
-
-// 🏠 SAVED PLACES LOCATION PICKER
-import 'saved_places/location_picker_sheet.dart';
-import 'saved_places/places_repository.dart' as saved;
 
 // YE DONO FILES ISI KA HISSA HAIN (Do not change structure)
 part 'search_sheet_headers.dart';
@@ -116,16 +110,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   final ValueNotifier<double> _sheetProgress = ValueNotifier(0);
   Timer? _debounce;
 
-  bool _isDashVisible = true;
-  Timer? _hideDashTimer;
-
-  // Navigation Dashboard expansion state
-  bool _isNavSheetExpanded = false;
-  bool _wasKeyboardOpen = false;
-
-  // 🏠 Saved Places Location Picker
-  late final saved.PlacesRepository _placesRepository;
-  late final LocationPickerController _locationPickerController;
+  bool _showDragHandle = true;
+  Timer? _dragHandleTimer;
 
   late AnimationController _slideController;
   late Animation<Offset> _slideAnimation;
@@ -176,18 +162,67 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     }
   }
 
+  Future<void> _handleSmartQuickAction(String type) async {
+    AppHaptics.mediumImpact();
+    try {
+      final supabase = Supabase.instance.client;
+      final user = supabase.auth.currentUser;
+
+      Map<String, dynamic>? data;
+      if (user != null) {
+        data = await supabase
+            .from('user_profiles')
+            .select('home_place, work_place')
+            .eq('id', user.id)
+            .maybeSingle();
+      }
+
+      if (!mounted) return; // 🛡️ CRITICAL ASYNC SAFETY
+
+      final column = type == 'HOME' ? 'home_place' : 'work_place';
+      final savedPlace = data?[column];
+
+      if (savedPlace != null && savedPlace['latitude'] != null) {
+        _searchFocus.unfocus();
+        if (_sheetController.isAttached) {
+          // 🍏 APPLE CURVE (easeOutCubic for natural snap)
+          _safeAnimateSheet(_safeMinSize);
+        }
+
+        final lat = (savedPlace['latitude'] as num).toDouble();
+        final lng = (savedPlace['longitude'] as num).toDouble();
+
+        final mapProvider = Provider.of<MapProvider>(context, listen: false);
+        await mapProvider.flyToPlace(lat, lng);
+        if (!mounted) return;
+        mapProvider.setDestinationSelected(true);
+        await mapProvider.calculateAndDrawNativeRoute(
+            context, mapProvider.currentNavMode);
+        AppHaptics.success();
+      } else {
+        setState(() => _selectedActionType = type);
+
+        final mapProvider = Provider.of<MapProvider>(context, listen: false);
+        mapProvider.setMapSelectionMode(type);
+
+        // Collapse sheet to show the full map
+        if (_sheetController.isAttached) {
+          _safeAnimateSheet(_safeMinSize);
+        }
+
+        _showPremiumNotification('Tap anywhere on the map to set $type');
+      }
+    } catch (e) {
+      debugPrint("Smart Quick Action Error: $e");
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _isSearchMode = widget.isMapTabActive;
 
-    // 🏠 Init Saved Places Location Picker
-    _placesRepository = saved.PlacesRepository();
-    _locationPickerController = LocationPickerController(_placesRepository);
-    _locationPickerController.sheetState.addListener(_onLocationPickerStateChanged);
-
-    _pokeDash();
+    _wakeUpDragHandle();
 
     _slideController = AnimationController(
       vsync: this,
@@ -205,16 +240,28 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     if (widget.isMapTabActive) unawaited(_slideController.forward());
 
     _searchFocus.addListener(() {
-      setState(() {});
+      /* 🚀 CANCELLED THE FOCUS ASSASSIN
+      _wakeUpDragHandle();
       if (_searchFocus.hasFocus) {
-        if (_sheetController.isAttached) {
-          _safeAnimateSheet(1.0);
-        }
+        if (!_showSearchList) setState(() => _showSearchList = true);
+
+        try {
+          _nearbyTileCtrl.expand();
+        } catch (_) {}
       } else {
-        if (_sheetController.isAttached && _sheetController.size > _safeMidSize) {
-          _safeAnimateSheet(_safeMidSize);
+
+        try {
+          _nearbyTileCtrl.collapse();
+        } catch (_) {}
+        
+        final provider = Provider.of<MapProvider>(context, listen: false);
+        // ONLY revert to idle if we aren't actively looking at a selected place
+        if (provider.engine.mapUIState.value != MapUIState.placeSelected) {
+          provider.engine.setUIState(MapUIState.idle);
         }
       }
+      setState(() {});
+      */
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -226,46 +273,19 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     unawaited(_handleGuestSessionHistory());
   }
 
-  void _pokeDash() {
+  void _wakeUpDragHandle() {
     if (!mounted) return;
-    if (!_isDashVisible) {
-      setState(() => _isDashVisible = true);
+    if (!_showDragHandle) {
+      setState(() => _showDragHandle = true);
     }
-    _hideDashTimer?.cancel();
-    _hideDashTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _isDashVisible = false);
+    _dragHandleTimer?.cancel();
+    _dragHandleTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) setState(() => _showDragHandle = false);
     });
   }
 
-  void _onLocationPickerStateChanged() {
-    if (!mounted) return;
-    final state = _locationPickerController.sheetState.value;
-    final provider = Provider.of<MapProvider>(context, listen: false);
-    
-    if (state == SheetState.selectingLocation) {
-      provider.controller?.addListener(_onCameraMove);
-      // Trigger an initial reverse geocode
-      _onCameraMove();
-      // Shrink sheet to show more map
-      if (_sheetController.isAttached) {
-        _safeAnimateSheet(_safeMinSize);
-      }
-    } else {
-      provider.controller?.removeListener(_onCameraMove);
-    }
-  }
-
-  void _onCameraMove() {
-    final provider = Provider.of<MapProvider>(context, listen: false);
-    final pos = provider.controller?.cameraPosition;
-    if (pos != null) {
-      _locationPickerController.onCameraMove(pos.target);
-    }
-  }
-
-
   void _onSearchChanged() {
-    _pokeDash();
+    _wakeUpDragHandle();
 
     final currentQuery = _searchCtrl.text.trim();
 
@@ -325,20 +345,13 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         debugPrint('Auth Check Failed: $e');
       }
     }
-
-    // Ensure the local search history is loaded async in initState and updates UI
-    if (mounted) {
-      final provider = Provider.of<MapProvider>(context, listen: false);
-      await provider.loadSearchHistory();
-      if (mounted) setState(() {});
-    }
   }
 
   @override
   void didUpdateWidget(MapSearchSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isMapTabActive && !oldWidget.isMapTabActive) {
-      _pokeDash();
+      _wakeUpDragHandle();
       unawaited(_slideController.forward());
       if (!_isSearchMode) {
         setState(() => _isSearchMode = true);
@@ -365,7 +378,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   void _handleCancelRoute(BuildContext context, MapProvider provider) {
-    FocusScope.of(context).unfocus();
     // 1. Cache the ENTIRE necessary state BEFORE clearing it
     final cachedPlace = _selectedPlace;
     final cachedCoords = provider.targetDestination;
@@ -697,7 +709,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         _activeRoutingField = null;
         _currentRoute = null;
         _showSearchList = true;
-        _isNavSheetExpanded = false;
       });
       // 🚀 FIX: Sheet should NOT collapse here! It should retain current size
       // if (_sheetController.isAttached && !_searchFocus.hasFocus) {
@@ -819,9 +830,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         debugPrint(
             "🛑 DEBUG ROUTE COORDS: Count = ${route.coordinates.length}");
       } else {
-        if (_routeErrorMessage != null) {
-          debugPrint("🛑 DEBUG ROUTE ERROR: $_routeErrorMessage");
-        }
+        debugPrint("🛑 DEBUG ROUTE ERROR: $_routeErrorMessage");
       }
 
       if (route != null) {
@@ -916,7 +925,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   void _expandToFull() {
-    _pokeDash();
+    _wakeUpDragHandle();
     if (!_sheetController.isAttached) return;
     if (_sheetController.size < (_safeMaxSize - 0.02)) {
       _safeAnimateSheet(_safeMaxSize);
@@ -1029,7 +1038,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   void _handleManualDragUpdate(DragUpdateDetails details) {
-    _pokeDash();
+    _wakeUpDragHandle();
     if (!_sheetController.isAttached) return;
     final screenHeight = MediaQuery.sizeOf(context).height;
     if (screenHeight == 0) return;
@@ -1040,7 +1049,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   void _handleManualDragEnd(DragEndDetails details) {
-    _pokeDash();
+    _wakeUpDragHandle();
     if (!_sheetController.isAttached) return;
     final velocity = details.primaryVelocity ?? 0;
     final size = _sheetController.size;
@@ -1079,7 +1088,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   @override
   void dispose() {
-    _hideDashTimer?.cancel();
+    _dragHandleTimer?.cancel();
     _debounce?.cancel();
     _sheetController.dispose();
     _searchCtrl.dispose();
@@ -1090,23 +1099,21 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     _searchFocus.dispose();
     _sheetProgress.dispose();
     _slideController.dispose();
-    _locationPickerController.sheetState.removeListener(_onLocationPickerStateChanged);
-    _locationPickerController.dispose();
     super.dispose();
   }
 
   Widget _buildDynamicDragHandle(bool isDark) {
     return MouseRegion(
-      onEnter: (_) => _pokeDash(),
-      onHover: (_) => _pokeDash(),
+      onEnter: (_) => _wakeUpDragHandle(),
+      onHover: (_) => _wakeUpDragHandle(),
       child: GestureDetector(
-        onTapDown: (_) => _pokeDash(),
+        onTapDown: (_) => _wakeUpDragHandle(),
         onVerticalDragUpdate: _handleManualDragUpdate,
         onVerticalDragEnd: _handleManualDragEnd,
         behavior: HitTestBehavior.translucent,
         child: AnimatedOpacity(
           duration: const Duration(milliseconds: 300),
-          opacity: _isDashVisible ? 1.0 : 0.0,
+          opacity: _showDragHandle ? 1.0 : 0.0,
           child: Container(
             height: 32,
             alignment: Alignment.center,
@@ -1129,33 +1136,17 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<MapProvider>(context);
     final screenSize = MediaQuery.sizeOf(context);
     final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final bool isKeyboardOpen = keyboardHeight > 0;
-    
-    if (isKeyboardOpen && !_wasKeyboardOpen) {
-      _wasKeyboardOpen = true;
-      AppHaptics.lightImpact();
-    } else if (!isKeyboardOpen && _wasKeyboardOpen) {
-      _wasKeyboardOpen = false;
-    }
-    
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isDesktop = screenSize.width > 600;
 
     // Header height is computed inside the builder where progress is available
 
-    final isNav = provider.isActiveNavigation;
-    final navCollapsedHeight = 110.0 + MediaQuery.paddingOf(context).bottom;
-    final navExpandedHeight = screenSize.height * 0.55;
-
-    final navExpandedS = (navExpandedHeight / screenSize.height).clamp(0.0, 1.0);
-    final navCollapsedS = (navCollapsedHeight / screenSize.height).clamp(0.0, 1.0);
-
-    final minS = isNav ? navCollapsedS : _safeMinSize;
-    final midS = isNav ? navExpandedS : _safeMidSize;
-    final maxS = isNav ? navExpandedS : _safeMaxSize;
+    final minS = _safeMinSize;
+    final midS = _safeMidSize;
+    final maxS = _safeMaxSize;
 
     if ((_lastScreenHeight != 0 &&
             (_lastScreenHeight - screenSize.height).abs() > 20) ||
@@ -1182,44 +1173,35 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     snaps.sort();
     snaps = snaps.toSet().toList();
 
+    // 🚨 Dynamic Height Calculation
+    final double expandedHeight = screenSize.height -
+        keyboardHeight -
+        MediaQuery.paddingOf(context).top -
+        20;
+    final double defaultIdleHeight = screenSize.height;
+
     return Stack(
       children: [
         AnimatedOpacity(
           opacity: (isKeyboardOpen && widget.isMapTabActive) ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 300),
           child: (isKeyboardOpen && widget.isMapTabActive)
-              ? GestureDetector(
-                  onTap: () {
-                    _searchFocus.unfocus();
-                    _originFocus.unfocus();
-                    _destFocus.unfocus();
-                  },
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                    child: Container(color: Colors.black.withValues(alpha: 0.3)),
-                  ),
+              ? BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                  child: Container(color: Colors.black.withValues(alpha: 0.3)),
                 )
               : const SizedBox.shrink(),
         ),
-        AnimatedPositioned(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutQuart,
-            bottom: 0,
-            left: 0,
-            right: 0,
-            top: provider.isActiveNavigation
-                ? null
-                : 0.0,
-            child: SafeArea(
-              top: true,
-              bottom: false,
-              left: false,
-              right: false,
-              child: SlideTransition(
+        Align(
+            alignment: Alignment.bottomCenter,
+            child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+                height: isKeyboardOpen ? expandedHeight : defaultIdleHeight,
+                padding: EdgeInsets.only(bottom: keyboardHeight > 0 ? 0 : 0),
+                child: SlideTransition(
                   position: _slideAnimation,
-                  child: provider.isActiveNavigation
-                      ? _buildNavigationDashboardOverlay(isDark)
-                      : NotificationListener<Notification>(
+                  child: NotificationListener<Notification>(
                     onNotification: (notification) {
                       if (notification is ScrollEndNotification &&
                           notification.dragDetails != null) {
@@ -1244,7 +1226,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                       }
 
                       if (notification is DraggableScrollableNotification) {
-                        _pokeDash();
+                        _wakeUpDragHandle();
 
                         final extent = notification.extent;
                         // ⌨️ KEYBOARD DISMISS FIX
@@ -1299,9 +1281,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                     },
                     child: DraggableScrollableSheet(
                       controller: _sheetController,
-                      initialChildSize: ((isKeyboardOpen || _searchFocus.hasFocus) && !isNav) ? 1.0 : midS,
+                      initialChildSize: isKeyboardOpen ? 1.0 : midS,
                       minChildSize: minS,
-                      maxChildSize: ((isKeyboardOpen || _searchFocus.hasFocus) && !isNav) ? 1.0 : maxS,
+                      maxChildSize: isKeyboardOpen ? 1.0 : maxS,
                       snap: true,
                       snapAnimationDuration: const Duration(milliseconds: 350),
                       snapSizes: snaps,
@@ -1309,57 +1291,44 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                         return ValueListenableBuilder<double>(
                           valueListenable: _sheetProgress,
                           builder: (context, progress, child) {
-                            final dynamicHeaderHeight = provider.isActiveNavigation
-                                ? (_isNavSheetExpanded ? navExpandedHeight - 40 : navCollapsedHeight)
-                                : (_showDirections
-                                    ? 190.0
-                                    : (lerpDouble(62.0, 76.0, progress) ?? 62.0));
+                            // 🚀 FIX: Lerp header height from 62 (closed) → 76 (open) so closed state matches original
+                            final dynamicHeaderHeight = _showDirections
+                                ? 190.0
+                                : (lerpDouble(62.0, 76.0, progress) ?? 62.0);
                             const currentSideMargin = 16.0;
                             final currentBottomMargin =
                                 24.0 - (14.0 * progress);
                             const sheetRadius = 50.0;
 
-                            final bool isExpanded = isKeyboardOpen || _searchFocus.hasFocus;
                             final Color sheetBgColor = isDark
                                 ? const Color(0xFF0B0E17)
-                                    .withValues(alpha: isExpanded ? 1.0 : 0.80)
-                                : Colors.white.withValues(alpha: isExpanded ? 1.0 : 0.65);
+                                    .withValues(alpha: 0.80)
+                                : Colors.white.withValues(alpha: 0.65);
                             const double blurAmount = 30.0;
 
                             return PointerInterceptor(
                               child: Align(
                                 alignment: Alignment.bottomCenter,
-                                child: LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    return ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        maxWidth: isDesktop ? 800 : 450,
-                                      ),
-                                      child: Padding(
-                                        padding: isExpanded ? const EdgeInsets.only(top: 12.0) : EdgeInsets.zero,
-                                        child: Stack(
-                                          clipBehavior: Clip.none,
-                                          children: [
-                                          // 🎨 PERFORMANCE FIX: RepaintBoundary around Blur
-                                          RepaintBoundary(
-                                            child: AnimatedContainer(
-                                              duration: const Duration(milliseconds: 200),
-                                              curve: Curves.easeOutCubic,
-                                              height: provider.isActiveNavigation
-                                                   ? (_isNavSheetExpanded ? navExpandedHeight : navCollapsedHeight)
-                                                   : constraints.maxHeight,
-                                              margin: isExpanded
-                                                  ? EdgeInsets.zero
-                                                  : EdgeInsets.only(
-                                                      left: currentSideMargin,
-                                                      right: currentSideMargin,
-                                                      bottom: currentBottomMargin +
-                                                          MediaQuery.paddingOf(context).bottom,
-                                                    ),
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxWidth: isDesktop ? 800 : 450,
+                                  ),
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      // 🎨 PERFORMANCE FIX: RepaintBoundary around Blur
+                                      RepaintBoundary(
+                                        child: Container(
+                                          margin: EdgeInsets.only(
+                                            left: currentSideMargin,
+                                            right: currentSideMargin,
+                                            bottom: currentBottomMargin +
+                                                MediaQuery.paddingOf(context)
+                                                    .bottom,
+                                          ),
                                           decoration: BoxDecoration(
-                                            borderRadius: isExpanded
-                                                ? BorderRadius.zero
-                                                : BorderRadius.circular(sheetRadius),
+                                            borderRadius: BorderRadius.circular(
+                                                sheetRadius),
                                             boxShadow: progress < 0.2
                                                 ? [
                                                     BoxShadow(
@@ -1388,9 +1357,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                   ],
                                           ),
                                           child: ClipRRect(
-                                            borderRadius: isExpanded
-                                                ? BorderRadius.zero
-                                                : BorderRadius.circular(sheetRadius),
+                                            borderRadius: BorderRadius.circular(
+                                                sheetRadius),
                                             child: BackdropFilter(
                                               filter: ImageFilter.blur(
                                                   sigmaX: blurAmount,
@@ -1405,29 +1373,29 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                     width: 1.0,
                                                   ),
                                                 ),
-                                                child: Padding(
-                                                  padding: EdgeInsets.only(bottom: keyboardHeight),
-                                                  child: ScrollConfiguration(
-                                                    behavior:
-                                                        ScrollConfiguration.of(
-                                                                context)
-                                                            .copyWith(
-                                                      scrollbars: false,
-                                                      dragDevices: {
-                                                        PointerDeviceKind.touch,
-                                                        PointerDeviceKind.mouse,
-                                                      },
-                                                    ),
-                                                    child: CustomScrollView(
-                                                      controller:
-                                                          scrollController,
-                                                      // 🚀 FIX: Prevent overscroll bouncing
-                                                      physics: const ClampingScrollPhysics(
-                                                              parent:
-                                                                  AlwaysScrollableScrollPhysics()),
-                                                      keyboardDismissBehavior:
-                                                          ScrollViewKeyboardDismissBehavior
-                                                              .onDrag,
+                                                child: ScrollConfiguration(
+                                                  behavior:
+                                                      ScrollConfiguration.of(
+                                                              context)
+                                                          .copyWith(
+                                                    scrollbars: false,
+                                                    dragDevices: {
+                                                      PointerDeviceKind.touch,
+                                                      PointerDeviceKind.mouse,
+                                                    },
+                                                  ),
+                                                  child: CustomScrollView(
+                                                    controller:
+                                                        scrollController,
+                                                    // 🚀 FIX: Prevent overscroll bouncing, disable scrolling when keyboard is open
+                                                    physics: isKeyboardOpen
+                                                        ? const NeverScrollableScrollPhysics()
+                                                        : const ClampingScrollPhysics(
+                                                            parent:
+                                                                AlwaysScrollableScrollPhysics()),
+                                                    keyboardDismissBehavior:
+                                                        ScrollViewKeyboardDismissBehavior
+                                                            .onDrag,
                                                     slivers: [
                                                       SliverAppBar(
                                                         pinned: true,
@@ -1459,42 +1427,41 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                 .easeInCubic,
                                                             switchOutCurve: Curves
                                                                 .easeOutCubic,
-                                                             child: (_showDirections
-                                                                    ? _buildDirectionsHeader(
+                                                            child: _showDirections
+                                                                ? _buildDirectionsHeader(
+                                                                    dynamicHeaderHeight,
+                                                                    isDark,
+                                                                  )
+                                                                : (_selectedPlace != null
+                                                                    ? _buildSelectedPlaceHeader(
                                                                         dynamicHeaderHeight,
+                                                                        progress,
                                                                         isDark,
                                                                       )
-                                                                    : (_selectedPlace != null
-                                                                        ? _buildSelectedPlaceHeader(
-                                                                            dynamicHeaderHeight,
-                                                                            progress,
-                                                                            isDark,
-                                                                          )
-                                                                        : _buildSearchHeader(
-                                                                            dynamicHeaderHeight,
-                                                                            progress,
-                                                                            isDark,
-                                                                          ))),
+                                                                    : _buildSearchHeader(
+                                                                        dynamicHeaderHeight,
+                                                                        progress,
+                                                                        isDark,
+                                                                      )),
                                                           ),
                                                         ),
                                                       ),
-                                                      SliverFillRemaining(
-                                                        hasScrollBody: false,
+                                                      SliverToBoxAdapter(
                                                         child: AnimatedOpacity(
                                                           duration:
                                                               const Duration(
                                                             milliseconds: 150,
                                                           ),
                                                           opacity:
-                                                              (!provider.isActiveNavigation && progress > 0.05)
+                                                              progress > 0.05
                                                                   ? 1.0
                                                                   : 0.0,
-                                                          child: (!provider.isActiveNavigation && progress > 0.05)
+                                                          child: progress > 0.05
                                                               ? _buildSheetContent(
                                                                   isDark,
                                                                   progress,
                                                                   isExpanded:
-                                                                      isKeyboardOpen,
+                                                                      isKeyboardOpen, // 🚀 Keep expanded content logic
                                                                 )
                                                               : const SizedBox(),
                                                         ),
@@ -1514,7 +1481,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                           ),
                                         ),
                                       ),
-                                    ),
                                       Positioned(
                                         top: -8,
                                         left: 0,
@@ -1524,39 +1490,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                     ],
                                   ),
                                 ),
-                              );
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-               ),
-              ),
-             ),
-            )),
-        // 🗺️ FLOATING MAP PIN OVERLAY (visible only when picking a location)
-        ValueListenableBuilder<SheetState>(
-          valueListenable: _locationPickerController.sheetState,
-          builder: (context, state, child) {
-            if (state != SheetState.selectingLocation) {
-              return const SizedBox.shrink();
-            }
-            return Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: screenSize.height * 0.45, // Pin sits above the sheet
-              child: IgnorePointer(
-                child: Center(
-                  child: child!,
-                ),
-              ),
-            );
-          },
-          child: const AnimatedMapPin(),
-        ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ))),
       ],
     );
   }

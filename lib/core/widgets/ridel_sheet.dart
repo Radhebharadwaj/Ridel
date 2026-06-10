@@ -109,15 +109,19 @@ class RidelSheet extends StatefulWidget {
                                   ),
                                 ),
                               Expanded(
-                                child: Text(
-                                  title,
-                                  style: GoogleFonts.inter(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: textColor),
-                                  textAlign: showBackButton
-                                      ? TextAlign.center
-                                      : TextAlign.left,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    title,
+                                    maxLines: 1,
+                                    style: GoogleFonts.inter(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: textColor),
+                                    textAlign: showBackButton
+                                        ? TextAlign.center
+                                        : TextAlign.left,
+                                  ),
                                 ),
                               ),
                               if (showCloseButton || showFullScreenButton)
@@ -249,7 +253,8 @@ class _RidelSheetState extends State<RidelSheet> {
               right: 0,
               height: headerHeight +
                   30, // 🚀 Extra height to allow the smooth blur fade
-              child: ClipRect(
+              child: RepaintBoundary(
+                child: ClipRect(
                 child: ShaderMask(
                   shaderCallback: (Rect bounds) {
                     // 🚀 The Mask that makes the bottom of the header transparent (fade out blur)
@@ -318,14 +323,18 @@ class _RidelSheetState extends State<RidelSheet> {
                                     )
                                   : null),
                           Expanded(
-                            child: Text(widget.title,
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.inter(
-                                    color: textColor,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing:
-                                        -0.3)), // 🚀 Refined typography
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(widget.title,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  style: GoogleFonts.inter(
+                                      color: textColor,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing:
+                                          -0.3)), // 🚀 Refined typography
+                            ),
                           ),
                           SizedBox(
                               width: 44,
@@ -360,9 +369,10 @@ class _RidelSheetState extends State<RidelSheet> {
                         ),
                       ),
                     ),
-                  ),
                 ),
               ),
+              ),
+            ),
             ),
         ],
       ),
@@ -395,8 +405,8 @@ class RidelGlassSearchBar extends StatelessWidget {
     final iconColor = accentColor ?? const Color(0xFF00E5FF);
 
     return Container(
-      height: 48,
-      padding: const EdgeInsets.only(left: 16, right: 6),
+      height: 48.0,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E2129) : const Color(0xFFF2F2F7),
         borderRadius: BorderRadius.circular(100),
@@ -414,48 +424,55 @@ class RidelGlassSearchBar extends StatelessWidget {
           )
         ],
       ),
-      child: Row(
-        children: [
-          Icon(Icons.search_rounded, size: 18, color: iconColor),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              onChanged: onChanged,
-              style: GoogleFonts.inter(
-                color: isDark ? Colors.white : Colors.black,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.center,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: constraints.maxWidth < 240 ? 240 : constraints.maxWidth,
               ),
-              cursorColor: iconColor,
-              decoration: InputDecoration(
-                hintText: hintText,
-                hintStyle: GoogleFonts.inter(
-                  color: isDark ? Colors.white54 : Colors.black54,
-                  fontSize: 14,
+              child: TextField(
+                controller: controller,
+                textAlignVertical: TextAlignVertical.center,
+                onChanged: onChanged,
+                style: GoogleFonts.inter(
+                  color: isDark ? Colors.white : Colors.black,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
                 ),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
+                cursorColor: iconColor,
+                decoration: InputDecoration(
+                  prefixIcon: Icon(Icons.search_rounded, size: 24.0, color: iconColor),
+                  prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                  suffixIcon: controller.text.isNotEmpty
+                      ? GestureDetector(
+                          onTap: onClear,
+                          child: Container(
+                            color: Colors.transparent,
+                            child: Icon(
+                              Icons.close_rounded,
+                              color: isDark ? Colors.white54 : Colors.black54,
+                              size: 18,
+                            ),
+                          ),
+                        )
+                      : trailing,
+                  suffixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                  hintText: hintText,
+                  hintStyle: GoogleFonts.inter(
+                    color: isDark ? Colors.white54 : Colors.black54,
+                    fontSize: 14,
+                  ),
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 0.0),
+                ),
               ),
             ),
-          ),
-          if (controller.text.isNotEmpty)
-            GestureDetector(
-              onTap: onClear,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                color: Colors.transparent,
-                child: Icon(
-                  Icons.close_rounded,
-                  color: isDark ? Colors.white54 : Colors.black54,
-                  size: 18,
-                ),
-              ),
-            )
-          else if (trailing != null)
-            trailing!,
-        ],
+          );
+        },
       ),
     );
   }

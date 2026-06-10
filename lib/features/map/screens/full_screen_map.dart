@@ -14,12 +14,11 @@ import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/features/map/widgets/search_sheet/map_search_sheet.dart';
+import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/features/map/widgets/map_theme_selector.dart';
 import 'package:ridel/features/map/widgets/weather_floating_widget.dart';
-import 'package:ridel/features/map/screens/custom_map_screen.dart';
 import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
 import 'package:ridel/core/utils/location_guard.dart';
-
 class FullScreenMapPage extends StatefulWidget {
   final ValueNotifier<double> searchSheetProgressNotifier;
   final bool isMapTabActive;
@@ -46,8 +45,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   MapThemeType? _currentTheme;
   bool _userOverrodeMapTheme = false;
-
-  final GlobalKey _searchSheetKey = GlobalKey();
 
   @override
   void initState() {
@@ -144,10 +141,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         isDesktop ? 32.0 : MediaQuery.of(context).padding.top + 24.0;
     final double sideMargin = isDesktop ? 32.0 : 20.0;
 
-    if (_isLoadingStyle || _resolvedStyleJson == null) {
-      return PremiumMapSkeleton(isDark: isDark);
-    }
-
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       resizeToAvoidBottomInset: false,
@@ -155,98 +148,182 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         children: [
           Positioned.fill(
             child: Listener(
-                behavior: HitTestBehavior.translucent,
-                onPointerMove: (event) {
-                  final mapProvider = Provider.of<MapProvider>(context, listen: false);
+              behavior: HitTestBehavior.translucent,
+              onPointerMove: (event) {
+                final mapProvider =
+                    Provider.of<MapProvider>(context, listen: false);
+                if (mapProvider.isActiveNavigation) {
+                  mapProvider.setUserPanning(true);
+                }
+              },
+              child: MapLibreMap(
+                styleString: _resolvedStyleJson ?? '{"version": 8, "sources": {}, "layers": []}',
+                onMapCreated: (controller) {
+                  if (_tempController != null) return;
+                  _tempController = controller;
+                },
+                onStyleLoadedCallback: () async {
+                  if (_tempController != null) {
+                    // Failsafe for missing required images that crash WebGL
+                    try {
+                      final Uint8List transparentPixel = Uint8List.fromList([
+                        137,
+                        80,
+                        78,
+                        71,
+                        13,
+                        10,
+                        26,
+                        10,
+                        0,
+                        0,
+                        0,
+                        13,
+                        73,
+                        72,
+                        68,
+                        82,
+                        0,
+                        0,
+                        0,
+                        1,
+                        0,
+                        0,
+                        0,
+                        1,
+                        8,
+                        6,
+                        0,
+                        0,
+                        0,
+                        31,
+                        21,
+                        196,
+                        137,
+                        0,
+                        0,
+                        0,
+                        11,
+                        73,
+                        68,
+                        65,
+                        84,
+                        8,
+                        215,
+                        99,
+                        96,
+                        0,
+                        2,
+                        0,
+                        0,
+                        5,
+                        0,
+                        1,
+                        226,
+                        38,
+                        5,
+                        155,
+                        0,
+                        0,
+                        0,
+                        0,
+                        73,
+                        69,
+                        78,
+                        68,
+                        174,
+                        66,
+                        96,
+                        130
+                      ]);
+                      await _tempController!
+                          .addImage('Arrow', transparentPixel);
+                      await _tempController!
+                          .addImage('arrow', transparentPixel);
+                      await _tempController!
+                          .addImage('custom-marker', transparentPixel);
+                    } catch (_) {}
+
+                    if (!context.mounted) return;
+                    Provider.of<MapProvider>(context, listen: false)
+                        .engine
+                        .onMapCreated(
+                            _tempController!,
+                            isDark,
+                            Provider.of<GlobalLocationService>(context,
+                                listen: false),
+                            this);
+                  }
+                },
+                onMapClick: (point, latLng) async {
+                  FocusScope.of(context).unfocus();
+                  final mapProvider =
+                      Provider.of<MapProvider>(context, listen: false);
+                  bool handled =
+                      await mapProvider.handleRouteClick(point, latLng);
+                  if (!handled) {
+                    mapProvider.clearTargetLocation();
+                  }
+                },
+                onMapLongClick: (point, latLng) {
+                  Provider.of<MapProvider>(context, listen: false)
+                      .handleMapTap(point, latLng);
+                },
+                initialCameraPosition: const CameraPosition(
+                    target: LatLng(28.6139, 77.2090), zoom: 12.0),
+                compassEnabled: false,
+                myLocationEnabled: kIsWeb ? false : Provider.of<MapProvider>(context, listen: false).showNativeBlueDot,
+                logoViewMargins: kIsWeb ? null : const Point(-100, -100),
+                attributionButtonMargins:
+                    kIsWeb ? null : const Point(-100, -100),
+                onCameraTrackingDismissed: () {
+                  final mapProvider =
+                      Provider.of<MapProvider>(context, listen: false);
+                  mapProvider.engine.onUserPannedMap();
                   if (mapProvider.isActiveNavigation) {
                     mapProvider.setUserPanning(true);
                   }
                 },
-                child: MapLibreMap(
-                  styleString: _resolvedStyleJson!,
-                  onMapCreated: (controller) {
-                    _tempController = controller;
-                  },
-                  onStyleLoadedCallback: () async {
-                    if (_tempController != null) {
-                      // Failsafe for missing required images that crash WebGL
-                      try {
-                        final Uint8List transparentPixel = Uint8List.fromList([
-                          137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
-                          1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65,
-                          84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73,
-                          69, 78, 68, 174, 66, 96, 130
-                        ]);
-                        await _tempController!.addImage('Arrow', transparentPixel);
-                        await _tempController!.addImage('arrow', transparentPixel);
-                        await _tempController!.addImage('custom-marker', transparentPixel);
-                      } catch (_) {}
-
-                      if (!context.mounted) return;
-                      Provider.of<MapProvider>(context, listen: false).engine.onMapCreated(
-                          _tempController!,
-                          isDark,
-                          Provider.of<GlobalLocationService>(context,
-                              listen: false),
-                          this);
-                    }
-                  },
-                  onMapClick: (point, latLng) async {
-                    FocusScope.of(context).unfocus();
-                    final mapProvider = Provider.of<MapProvider>(context, listen: false);
-                    bool handled =
-                        await mapProvider.handleRouteClick(point, latLng);
-                    if (!handled) {
-                      mapProvider.clearTargetLocation();
-                    }
-                  },
-                  onMapLongClick: (point, latLng) {
-                    Provider.of<MapProvider>(context, listen: false).handleMapTap(point, latLng);
-                  },
-                  initialCameraPosition: const CameraPosition(
-                      target: LatLng(28.6139, 77.2090), zoom: 12.0),
-                  compassEnabled: false,
-                  myLocationEnabled: Provider.of<MapProvider>(context, listen: false).showNativeBlueDot,
-                  myLocationTrackingMode: MyLocationTrackingMode.tracking,
-                  myLocationRenderMode: MyLocationRenderMode.normal,
-                  logoViewMargins: kIsWeb ? null : const Point(-100, -100),
-                  attributionButtonMargins:
-                      kIsWeb ? null : const Point(-100, -100),
-                  onCameraTrackingDismissed: () {
-                    final mapProvider = Provider.of<MapProvider>(context, listen: false);
-                    mapProvider.engine.onUserPannedMap();
-                    if (mapProvider.isActiveNavigation) {
-                      mapProvider.setUserPanning(true);
-                    }
-                  },
-                  onUserLocationUpdated: (location) {
-                    final mapProvider = Provider.of<MapProvider>(context, listen: false);
-                    final pos = location.position;
-                    mapProvider.updateCurrentLocation(pos);
-                    mapProvider.updateNavigationPuck(
-                      pos,
-                      location.heading?.trueHeading ??
-                          location.bearing ??
-                          0.0,
-                    );
-                  },
-                  onCameraIdle: () async {
-                    final mapProvider = Provider.of<MapProvider>(context, listen: false);
-                    final ctrl = mapProvider.controller ?? _tempController;
-                    if (ctrl != null) {
-                      try {
-                        final bounds = await ctrl.getVisibleRegion();
-                        LatLng? userLoc = mapProvider.currentLocation;
-                        if (userLoc != null) {
-                          bool isVisible = bounds.contains(userLoc);
-                          mapProvider.setUserVisibility(isVisible);
-                        }
-                      } catch (_) {
-                        // Suppressed error
+                onUserLocationUpdated: (location) {
+                  final mapProvider =
+                      Provider.of<MapProvider>(context, listen: false);
+                  final pos = location.position;
+                  mapProvider.updateCurrentLocation(pos);
+                  mapProvider.updateNavigationPuck(
+                    pos,
+                    location.heading?.trueHeading ?? location.bearing ?? 0.0,
+                  );
+                },
+                onCameraIdle: () async {
+                  final mapProvider =
+                      Provider.of<MapProvider>(context, listen: false);
+                  final ctrl = mapProvider.controller ?? _tempController;
+                  if (ctrl != null) {
+                    try {
+                      final bounds = await ctrl.getVisibleRegion();
+                      LatLng? userLoc = mapProvider.currentLocation;
+                      if (userLoc != null) {
+                        bool isVisible = bounds.contains(userLoc);
+                        mapProvider.setUserVisibility(isVisible);
                       }
+                    } catch (_) {
+                      // Suppressed error
                     }
-                  },
-                ),
+                  }
+                },
+              ),
+            ),
+          ),
+
+          // 🚀 0.5: SKELETON MAP OVERLAY
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: !_isLoadingStyle,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 300),
+                opacity: _isLoadingStyle ? 1.0 : 0.0,
+                child: PremiumMapSkeleton(isDark: isDark),
+              ),
             ),
           ),
 
@@ -259,22 +336,31 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                     valueListenable: mapProvider.isSpeaking,
                     builder: (context, isSpeaking, _) {
                       return AnimatedOpacity(
-                        duration: isSpeaking ? const Duration(milliseconds: 600) : const Duration(milliseconds: 1500),
+                        duration: isSpeaking
+                            ? const Duration(milliseconds: 600)
+                            : const Duration(milliseconds: 1500),
                         curve: Curves.easeInOutCubic,
                         opacity: isSpeaking ? 1.0 : 0.0,
                         child: ImageFiltered(
-                          imageFilter: ImageFilter.blur(sigmaX: 80.0, sigmaY: 80.0),
+                          imageFilter:
+                              ImageFilter.blur(sigmaX: kIsWeb ? 40.0 : 80.0, sigmaY: kIsWeb ? 40.0 : 80.0),
                           child: ShaderMask(
                             shaderCallback: (Rect bounds) {
                               return const SweepGradient(
-                                colors: [Colors.cyan, Colors.purpleAccent, Colors.pinkAccent, Colors.cyan],
+                                colors: [
+                                  Colors.cyan,
+                                  Colors.purpleAccent,
+                                  Colors.pinkAccent,
+                                  Colors.cyan
+                                ],
                               ).createShader(bounds);
                             },
                             blendMode: BlendMode.srcIn,
                             child: Container(
                               decoration: BoxDecoration(
                                 color: Colors.transparent,
-                                border: Border.all(color: Colors.white, width: 30.0),
+                                border: Border.all(
+                                    color: Colors.white, width: 30.0),
                               ),
                             ),
                           ),
@@ -332,85 +418,96 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             child: TurnByTurnBanner(isDark: isDark),
           ),
 
-
           Positioned(
             bottom:
                 isDesktop ? 32.0 : (MediaQuery.paddingOf(context).bottom + 124),
             left: sideMargin,
-            child: Consumer<MapProvider>(
-              builder: (context, mapProvider, child) {
-                if (mapProvider.engine.camera == null) return const SizedBox.shrink();
-                return ValueListenableBuilder<bool>(
-                  valueListenable: mapProvider.engine.camera!.isUserPanning,
-                  builder: (context, isPanning, _) {
-                    if (!isPanning || !mapProvider.isActiveNavigation) return const SizedBox.shrink();
-                    return _buildPointerSafeWrapper(
-                      child: RidelBounceButton(
-                        onTap: () {
-                          AppHaptics.selectionClick();
-                          mapProvider.engine.camera!.resetCompass();
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(36),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.4),
-                                blurRadius: 24,
-                                offset: const Offset(0, 12),
+            child: _buildPointerSafeWrapper(
+              child: Consumer<MapProvider>(
+                builder: (context, mapProvider, child) {
+                  if (mapProvider.engine.camera == null) {
+                    return const SizedBox.shrink();
+                  }
+                  return ValueListenableBuilder<bool>(
+                    valueListenable: mapProvider.engine.camera!.isUserPanning,
+                    builder: (context, isPanning, _) {
+                      final isVisible = isPanning && mapProvider.isActiveNavigation;
+                      return IgnorePointer(
+                        ignoring: !isVisible,
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 200),
+                          opacity: isVisible ? 1.0 : 0.0,
+                          child: child,
+                        ),
+                      );
+                    },
+                  );
+                },
+                child: RidelBounceButton(
+                  onTap: () {
+                    AppHaptics.selectionClick();
+                    Provider.of<MapProvider>(context, listen: false).engine.camera?.resetCompass();
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(36),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 24,
+                          offset: const Offset(0, 12),
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(36),
+                      child: RepaintBoundary(
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: kIsWeb ? 12.0 : 24.0, sigmaY: kIsWeb ? 12.0 : 24.0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0B0E17)
+                                  .withValues(alpha: 0.75),
+                              borderRadius: BorderRadius.circular(36),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                width: 1,
                               ),
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.2),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(36),
-                            child: BackdropFilter(
-                              filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 14),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF0B0E17)
-                                      .withValues(alpha: 0.75),
-                                  borderRadius: BorderRadius.circular(36),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.08),
-                                    width: 1,
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.navigation_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  "Re-centre",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.2,
                                   ),
                                 ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.navigation_rounded,
-                                      color: Colors.white,
-                                      size: 18,
-                                    ),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      "Re-centre",
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: -0.2,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                              ],
                             ),
                           ),
                         ),
                       ),
-                    );
-                  }
-                );
-              },
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
 
@@ -453,227 +550,248 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   child: pillChild,
                 );
               },
-              child:
-                  Consumer<MapProvider>(builder: (context, mapProvider, child) {
-                return _buildPointerSafeWrapper(
-                  child: Listener(
+              child: _buildPointerSafeWrapper(
+                child: Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: (_) {},
+                  onPointerMove: (_) {},
+                  onPointerUp: (_) {},
+                  onPointerSignal: (_) {},
+                  child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onPointerDown: (_) {},
-                    onPointerMove: (_) {},
-                    onPointerUp: (_) {},
-                    onPointerSignal: (_) {},
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {},
-                      onDoubleTap: () {},
-                      onScaleStart: (_) {},
-                      onScaleUpdate: (_) {},
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 🍏 THE APPLE "PILL" (Map Settings + Locate Me)
-                          IgnorePointer(
-                            ignoring: !(!mapProvider.isActiveNavigation ||
-                                !mapProvider.isAutoTracking),
-                            child: AnimatedOpacity(
-                              duration: const Duration(milliseconds: 300),
-                              opacity: (!mapProvider.isActiveNavigation ||
-                                      !mapProvider.isAutoTracking)
-                                  ? 1.0
-                                  : 0.0,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(50),
-                                  boxShadow: !isDark
-                                      ? [
-                                          BoxShadow(
-                                              color: Colors.black
-                                                  .withValues(alpha: 0.08),
-                                              blurRadius: 12,
-                                              offset: const Offset(0, 4))
-                                        ]
-                                      : [
-                                          BoxShadow(
-                                              color: Colors.black
-                                                  .withValues(alpha: 0.4),
-                                              blurRadius: 24,
-                                              offset: const Offset(0, 12)),
-                                          BoxShadow(
-                                              color: Colors.black
-                                                  .withValues(alpha: 0.2),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 4)),
-                                        ],
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(50),
-                                  child: BackdropFilter(
-                                    filter: ImageFilter.blur(
-                                        sigmaX: 20.0, sigmaY: 20.0),
-                                    child: Container(
-                                      width: 48,
-                                      decoration: BoxDecoration(
-                                          color: !isDark
-                                              ? Colors.white
-                                                  .withValues(alpha: 0.75)
-                                              : const Color(0xFF0B0E17)
-                                                  .withValues(alpha: 0.75),
-                                          borderRadius:
-                                              BorderRadius.circular(50),
-                                          border: !isDark
-                                              ? Border.all(
-                                                  color: Colors.white
-                                                      .withValues(alpha: 0.9),
-                                                  width: 1.0)
-                                              : Border.all(
-                                                  color: Colors.white
-                                                      .withValues(alpha: 0.08),
-                                                  width: 1.0)),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          GestureDetector(
-                                            behavior: HitTestBehavior.opaque,
-                                            onTap: () {
-                                              AppHaptics.heavyImpact();
-                                              MapThemeSelector.show(context,
+                    onTap: () {},
+                    onDoubleTap: () {},
+                    onScaleStart: (_) {},
+                    onScaleUpdate: (_) {},
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 🍏 THE APPLE "PILL" (Map Settings + Locate Me)
+                        Consumer<MapProvider>(
+                          builder: (context, mapProvider, child) {
+                            final isVisible = !mapProvider.isActiveNavigation || !mapProvider.isAutoTracking;
+                            return IgnorePointer(
+                              ignoring: !isVisible,
+                              child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 300),
+                                opacity: isVisible ? 1.0 : 0.0,
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(50),
+                              boxShadow: !isDark
+                                  ? [
+                                      BoxShadow(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.08),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4))
+                                    ]
+                                  : [
+                                      BoxShadow(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.4),
+                                          blurRadius: 24,
+                                          offset: const Offset(0, 12)),
+                                      BoxShadow(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.2),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 4)),
+                                    ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(50),
+                              child: RepaintBoundary(
+                                child: BackdropFilter(
+                                  filter: ImageFilter.blur(
+                                      sigmaX: kIsWeb ? 10.0 : 20.0, sigmaY: kIsWeb ? 10.0 : 20.0),
+                                  child: Container(
+                                    width: 48,
+                                    decoration: BoxDecoration(
+                                        color: !isDark
+                                            ? Colors.white
+                                                .withValues(alpha: 0.75)
+                                            : const Color(0xFF0B0E17)
+                                                .withValues(alpha: 0.75),
+                                        borderRadius:
+                                            BorderRadius.circular(50),
+                                        border: !isDark
+                                            ? Border.all(
+                                                color: Colors.white
+                                                    .withValues(alpha: 0.9),
+                                                width: 1.0)
+                                            : Border.all(
+                                                color: Colors.white
+                                                    .withValues(alpha: 0.08),
+                                                width: 1.0)),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Builder(
+                                          builder: (buttonContext) {
+                                            return GestureDetector(
+                                              behavior: HitTestBehavior.opaque,
+                                              onTap: () {
+                                                AppHaptics.heavyImpact();
+                                                MapThemeSelector.show(
+                                                  buttonContext, // 🚀 CRITICAL: Use the localized context
                                                   currentTheme: _currentTheme ??
                                                       (isDark
                                                           ? MapThemeType.dark
                                                           : MapThemeType.light),
                                                   onThemeSelected:
                                                       (selectedTheme) {
-                                                setState(() {
-                                                  _currentTheme = selectedTheme;
-                                                  _userOverrodeMapTheme = true;
-                                                  _fetchAndFixOlaStyle(
-                                                      Theme.of(context)
-                                                          .brightness);
-                                                });
-                                              });
-                                            },
-                                            child: SizedBox(
-                                              height: 52,
-                                              width: 48,
-                                              child: Center(
-                                                  child: Icon(Icons.map,
-                                                      color: isDark
-                                                          ? Colors.white70
-                                                          : Colors.black87,
-                                                      size: 20)),
-                                            ),
-                                          ),
-                                          Container(
-                                              height: 1,
-                                              width: 48,
-                                              color: isDark
-                                                  ? Colors.white
-                                                      .withValues(alpha: 0.10)
-                                                  : Colors.black
-                                                      .withValues(alpha: 0.10)),
-                                          GestureDetector(
-                                            behavior: HitTestBehavior.opaque,
-                                            onTap: () async {
-                                              AppHaptics.selectionClick();
+                                                    setState(() {
+                                                      _currentTheme = selectedTheme;
+                                                      _userOverrodeMapTheme = true;
+                                                      _fetchAndFixOlaStyle(
+                                                          Theme.of(context)
+                                                              .brightness);
+                                                    });
+                                                  }
+                                                );
+                                              },
+                                              child: SizedBox(
+                                                height: 52,
+                                                width: 48,
+                                                child: Center(
+                                                    child: Icon(Icons.map,
+                                                        color: isDark
+                                                            ? Colors.white70
+                                                            : Colors.black87,
+                                                        size: 20)),
+                                              ),
+                                            );
+                                          }
+                                        ),
+                                        Container(
+                                            height: 1,
+                                            width: 48,
+                                            color: isDark
+                                                ? Colors.white
+                                                    .withValues(alpha: 0.10)
+                                                : Colors.black
+                                                    .withValues(alpha: 0.10)),
+                                        GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: () async {
+                                            AppHaptics.selectionClick();
 
-                                              bool hasLocation = await LocationGuard.checkAndRequestLocation(context);
-                                              if (!hasLocation || !context.mounted) return;
+                                            bool hasLocation =
+                                                await LocationGuard
+                                                    .checkAndRequestLocation(
+                                                        context);
+                                            if (!hasLocation ||
+                                                !context.mounted) {
+                                              return;
+                                            }
 
-                                              if (mapProvider
-                                                      .isActiveNavigation &&
-                                                  !mapProvider.isAutoTracking) {
-                                                // STATE 4: RE-CENTER
-                                                debugPrint(
-                                                    "📍 Re-Center Tapped!");
-                                                await mapProvider
-                                                    .recenter3DNavigation();
-                                              } else if (mapProvider
-                                                      .isRouteCalculated &&
-                                                  !mapProvider
-                                                      .isActiveNavigation) {
-                                                // STATE 3: START NAVIGATION
-                                                debugPrint(
-                                                    "🚀 Start Navigation Tapped! Entering 3D Mode...");
-                                                await mapProvider
-                                                    .start3DNavigation();
-                                              } else if (mapProvider
-                                                      .targetDestination !=
-                                                  null) {
-                                                // STATE 2: GET DIRECTIONS
-                                                debugPrint(
-                                                    "🛣️ Fetching Route...");
-                                                await mapProvider
-                                                    .calculateAndDrawNativeRoute(
-                                                        context, 'driving');
-                                              } else {
-                                                // STATE 1: LOCATE ME (Default)
-                                                debugPrint(
-                                                    "📍 Locate Me Tapped!");
-                                                await _handleLocateMeTapped(
-                                                    mapProvider);
-                                              }
-                                            },
-                                            child: SizedBox(
-                                              height: 52,
-                                              width: 48,
-                                              child: Center(
-                                                child: AnimatedSwitcher(
-                                                  duration: const Duration(
-                                                      milliseconds: 300),
-                                                  transitionBuilder:
-                                                      (Widget child,
-                                                          Animation<double>
-                                                              animation) {
-                                                    return ScaleTransition(
-                                                        scale: animation,
-                                                        child: child);
-                                                  },
-                                                  child: _buildDynamicIcon(
-                                                      context, mapProvider),
-                                                ),
+                                            final mapProvider = Provider.of<MapProvider>(context, listen: false);
+
+                                            if (mapProvider
+                                                    .isActiveNavigation &&
+                                                !mapProvider.isAutoTracking) {
+                                              // STATE 4: RE-CENTER
+                                              debugPrint(
+                                                  "📍 Re-Center Tapped!");
+                                              await mapProvider
+                                                  .recenter3DNavigation();
+                                            } else if (mapProvider
+                                                    .isRouteCalculated &&
+                                                !mapProvider
+                                                    .isActiveNavigation) {
+                                              // STATE 3: START NAVIGATION
+                                              debugPrint(
+                                                  "🚀 Start Navigation Tapped! Entering 3D Mode...");
+                                              await mapProvider
+                                                  .start3DNavigation();
+                                            } else if (mapProvider
+                                                    .targetDestination !=
+                                                null) {
+                                              // STATE 2: GET DIRECTIONS
+                                              debugPrint(
+                                                  "🛣️ Fetching Route...");
+                                              await mapProvider
+                                                  .calculateAndDrawNativeRoute(
+                                                      context, 'driving');
+                                            } else {
+                                              // STATE 1: LOCATE ME (Default)
+                                              debugPrint(
+                                                  "📍 Locate Me Tapped!");
+                                              await _handleLocateMeTapped(
+                                                  mapProvider);
+                                            }
+                                          },
+                                          child: SizedBox(
+                                            height: 52,
+                                            width: 48,
+                                            child: Center(
+                                              child: Consumer<MapProvider>(
+                                                builder: (context, mapProvider, _) {
+                                                  return AnimatedSwitcher(
+                                                    duration: const Duration(
+                                                        milliseconds: 300),
+                                                    transitionBuilder:
+                                                        (Widget child,
+                                                            Animation<double>
+                                                                animation) {
+                                                      return ScaleTransition(
+                                                          scale: animation,
+                                                          child: child);
+                                                    },
+                                                    child: _buildDynamicIcon(
+                                                        context, mapProvider),
+                                                  );
+                                                },
                                               ),
                                             ),
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                          // 🚀 3. ZOOM PILL: Sirf Desktop par dikhega, mobile par clean layout!
-                          if (isDesktop) ...[
-                            const SizedBox(height: 16),
-                            Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(24),
-                                boxShadow: !isDark
-                                    ? [
-                                        BoxShadow(
-                                            color: Colors.black
-                                                .withValues(alpha: 0.15),
-                                            blurRadius: 12,
-                                            offset: const Offset(0, 4))
-                                      ]
-                                    : [
-                                        BoxShadow(
-                                            color: Colors.black
-                                                .withValues(alpha: 0.4),
-                                            blurRadius: 24,
-                                            offset: const Offset(0, 12)),
-                                        BoxShadow(
-                                            color: Colors.black
-                                                .withValues(alpha: 0.2),
-                                            blurRadius: 8,
-                                            offset: const Offset(0, 4)),
-                                      ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(24),
+                        ),
+                        // 🚀 3. ZOOM PILL: Sirf Desktop par dikhega, mobile par clean layout!
+                        if (isDesktop) ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: !isDark
+                                  ? [
+                                      BoxShadow(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.15),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4))
+                                    ]
+                                  : [
+                                      BoxShadow(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.4),
+                                          blurRadius: 24,
+                                          offset: const Offset(0, 12)),
+                                      BoxShadow(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.2),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 4)),
+                                    ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(24),
+                              child: RepaintBoundary(
                                 child: BackdropFilter(
                                   filter: ImageFilter.blur(
-                                      sigmaX: 25.0, sigmaY: 25.0),
+                                      sigmaX: kIsWeb ? 12.0 : 25.0, sigmaY: kIsWeb ? 12.0 : 25.0),
                                   child: Container(
                                     width: 48,
                                     decoration: BoxDecoration(
@@ -697,6 +815,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                           icon: Icons.add_rounded,
                                           isDark: isDark,
                                           onZoomStep: () {
+                                            final mapProvider = Provider.of<MapProvider>(context, listen: false);
                                             final z = mapProvider.controller
                                                     ?.cameraPosition?.zoom ??
                                                 14.0;
@@ -716,6 +835,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                           icon: Icons.remove_rounded,
                                           isDark: isDark,
                                           onZoomStep: () {
+                                            final mapProvider = Provider.of<MapProvider>(context, listen: false);
                                             final z = mapProvider.controller
                                                     ?.cameraPosition?.zoom ??
                                                 14.0;
@@ -729,34 +849,30 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 ),
                               ),
                             ),
-                          ],
+                          ),
                         ],
-                      ),
+                      ],
                     ),
                   ),
-                );
-              }),
+                ),
+              ),
             ),
           ),
 
-          if (isDesktop)
-            DesktopDraggableSearchWrapper(
-              child: MapSearchSheet(
-                key: _searchSheetKey,
-                isMapTabActive: widget.isMapTabActive,
-                onSearchModeChanged: (isSearching) {},
-                onSearchSubmitted: (query) {
-                  final mapProvider =
-                      Provider.of<MapProvider>(context, listen: false);
-                  if (query == "CLEAR_PIN_COMMAND") {
-                    mapProvider.engine.layers?.removeSearchPin();
-                    return;
-                  }
-                  mapProvider.searchAndNavigate(query);
-                },
-                onBackToPreviousTab: () {},
-              ),
+          Positioned.fill(
+            child: MapSearchSheet(
+              key: const ValueKey('map_search_sheet'),
+              isMapTabActive: widget.isMapTabActive,
+              onSearchModeChanged: (isActive) {},
+              onSearchSubmitted: (query) {},
+              onProgressChanged: (progress) {
+                widget.searchSheetProgressNotifier.value = progress;
+              },
+              onBackToPreviousTab: () {
+                Provider.of<AppNavigationProvider>(context, listen: false).goBack();
+              },
             ),
+          ),
         ],
       ),
     );
@@ -1170,6 +1286,31 @@ class _ContinuousZoomButtonState extends State<_ContinuousZoomButton> {
             child: Icon(widget.icon,
                 color: widget.isDark ? Colors.white70 : Colors.black87,
                 size: 22)),
+      ),
+    );
+  }
+}
+
+class PremiumMapSkeleton extends StatelessWidget {
+  final bool isDark;
+  
+  const PremiumMapSkeleton({super.key, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: isDark ? const Color(0xFF0B0E17) : const Color(0xFFF1F2F4),
+      child: Center(
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(
+              isDark ? Colors.white24 : Colors.black26,
+            ),
+            strokeWidth: 3,
+          ),
+        ),
       ),
     );
   }

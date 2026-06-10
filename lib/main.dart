@@ -113,62 +113,60 @@ void main() {
     };
 
     ThemeService.init();
-    await AppHaptics.init();
+    MetroService().initialize(); // Sync init early
 
-    // 1. Load Environment Variables
-    try {
-      await dotenv.load(fileName: ".env");
-    } catch (e) {
-      debugPrint("❌ Env Error: $e");
-    }
+    // 1. Parallel Independent Initializations
+    await Future.wait([
+      AppHaptics.init(),
+      dotenv.load(fileName: ".env").catchError((e) {
+        debugPrint("❌ Env Error: $e");
+        return null;
+      }),
+    ]);
 
-    // 2. Web Database Factory (handled internally if needed)
+    // 2. Parallel Dependent Initializations
+    await Future.wait([
+      () async {
+        try {
+          if (kIsWeb) {
+            await Firebase.initializeApp(
+              options: const FirebaseOptions(
+                apiKey: "AIzaSyCylXea35MHpJ4SlcODDAgB5wj6h5SgnzY",
+                authDomain: "pixra-ridel.firebaseapp.com",
+                projectId: "pixra-ridel",
+                storageBucket: "pixra-ridel.firebasestorage.app",
+                messagingSenderId: "20390923828",
+                appId: "1:20390923828:web:8206196e9cfd1b16790461",
+                measurementId: "G-NK274DS7S2",
+              ),
+            );
+          } else {
+            await Firebase.initializeApp();
+            FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+          }
+          debugPrint("🔥 Firebase Ready!");
+        } catch (e) {
+          debugPrint("❌ Firebase Error: $e");
+        }
+        await NotificationService().init();
+      }(),
+      () async {
+        try {
+          await Supabase.initialize(
+            url: AppConfig.supabaseUrl,
+            anonKey: AppConfig.supabaseAnonKey,
+          );
 
-    // 3. 🔥 FIREBASE INITIALIZATION (Dual Platform Support)
-    try {
-      if (kIsWeb) {
-        // 🚀 Web Setup with your keys
-        await Firebase.initializeApp(
-          options: const FirebaseOptions(
-            apiKey: "AIzaSyCylXea35MHpJ4SlcODDAgB5wj6h5SgnzY",
-            authDomain: "pixra-ridel.firebaseapp.com",
-            projectId: "pixra-ridel",
-            storageBucket: "pixra-ridel.firebasestorage.app",
-            messagingSenderId: "20390923828",
-            appId: "1:20390923828:web:8206196e9cfd1b16790461",
-            measurementId: "G-NK274DS7S2",
-          ),
-        );
-      } else {
-        // 🚀 Mobile Setup (Uses google-services.json)
-        await Firebase.initializeApp();
-        FirebaseMessaging.onBackgroundMessage(
-            _firebaseMessagingBackgroundHandler);
-      }
-      debugPrint("🔥 Firebase Ready!");
-    } catch (e) {
-      debugPrint("❌ Firebase Error: $e");
-    }
-
-    // 4. SUPABASE INITIALIZATION
-    try {
-      await Supabase.initialize(
-        url: AppConfig.supabaseUrl,
-        anonKey: AppConfig.supabaseAnonKey,
-      );
-
-      final supabaseClient = Supabase.instance.client;
-      if (supabaseClient.auth.currentSession != null) {
-        DatabaseHelper.instance.initBackgroundSync();
-        // 🚀 Fetch/Save FCM Token & Permissions
-        AuthService().setupAndSaveDeviceToken();
-      }
-    } catch (e) {
-      debugPrint("❌ Supabase Error: $e");
-    }
-
-    MetroService().initialize();
-    await NotificationService().init();
+          final supabaseClient = Supabase.instance.client;
+          if (supabaseClient.auth.currentSession != null) {
+            DatabaseHelper.instance.initBackgroundSync();
+            AuthService().setupAndSaveDeviceToken();
+          }
+        } catch (e) {
+          debugPrint("❌ Supabase Error: $e");
+        }
+      }(),
+    ]);
 
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -291,17 +289,20 @@ class _RidelAppState extends State<RidelApp> {
           themeMode: ThemeService.themeNotifier.value,
           themeAnimationDuration: const Duration(milliseconds: 850),
           themeAnimationCurve: Curves.easeInOutQuart,
-          // 🚀 Yahan se Web Mouse Dragging Fix add hua hai
-          scrollBehavior: const MaterialScrollBehavior().copyWith(
-            dragDevices: {
-              PointerDeviceKind.mouse,
-              PointerDeviceKind.touch,
-              PointerDeviceKind.trackpad,
-            },
-          ),
+          scrollBehavior: const _AppScrollBehavior(),
           home: const AppGateOverlay(child: SplashScreen()),
         );
       },
     );
   }
+}
+
+class _AppScrollBehavior extends MaterialScrollBehavior {
+  const _AppScrollBehavior();
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.touch,
+        PointerDeviceKind.trackpad,
+      };
 }

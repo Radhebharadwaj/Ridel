@@ -342,10 +342,13 @@ class _NearestStationSheetContentState
             ),
             child: Row(
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 16, right: 12),
-                  child:
-                      Icon(Icons.search_rounded, size: 18, color: accentColor),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 16, right: 12),
+                    child:
+                        Icon(Icons.search_rounded, size: 18, color: accentColor),
+                  ),
                 ),
                 Expanded(
                   child: TextField(
@@ -369,30 +372,39 @@ class _NearestStationSheetContentState
                     ),
                   ),
                 ),
-                if (_searchCtrl.text.isNotEmpty)
-                  GestureDetector(
-                    onTap: () {
-                      AppHaptics.lightImpact();
-                      _searchCtrl.clear();
-                      _onSearchChanged('');
-                      FocusScope.of(context).unfocus();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      child: Icon(Icons.close_rounded,
-                          color: isDark ? Colors.white54 : Colors.black54,
-                          size: 18),
-                    ),
-                  )
-                else
-                  UniversalMicButton(
-                    isDark: isDark,
-                    activeColor: accentColor,
-                    onTextRecognized: (text) {
-                      _searchCtrl.text = text;
-                      _onSearchChanged(text);
-                    },
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_searchCtrl.text.isNotEmpty)
+                        GestureDetector(
+                          onTap: () {
+                            AppHaptics.lightImpact();
+                            _searchCtrl.clear();
+                            _onSearchChanged('');
+                            FocusScope.of(context).unfocus();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            child: Icon(Icons.close_rounded,
+                                color: isDark ? Colors.white54 : Colors.black54,
+                                size: 18),
+                          ),
+                        )
+                      else
+                        UniversalMicButton(
+                          isDark: isDark,
+                          activeColor: accentColor,
+                          onTextRecognized: (text) {
+                            _searchCtrl.text = text;
+                            _onSearchChanged(text);
+                          },
+                        ),
+                    ],
                   ),
+                ),
               ],
             ),
           ),
@@ -565,38 +577,40 @@ class _NearestStationSheetContentState
               )
             ],
           ),
-          child: Row(
-            children: [
-              // 🚀 ICON CONTAINER
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF121419)
-                      : accentColor.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                  border: Border.all(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.center,
+            child: Row(
+              children: [
+                // 🚀 ICON CONTAINER
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
                     color: isDark
-                        ? Colors.white.withValues(alpha: 0.03)
-                        : Colors.transparent,
+                        ? const Color(0xFF121419)
+                        : accentColor.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.03)
+                          : Colors.transparent,
+                    ),
                   ),
+                  child: Icon(
+                      widget.isBus
+                          ? Icons.directions_bus_rounded
+                          : Icons.train_rounded,
+                      color: isSelected
+                          ? accentColor // Selected par pura color
+                          : (isDark
+                              ? Colors.white70
+                              : Colors.black87), // Not selected par neutral
+                      size: 18),
                 ),
-                child: Icon(
-                    widget.isBus
-                        ? Icons.directions_bus_rounded
-                        : Icons.train_rounded,
-                    color: isSelected
-                        ? accentColor // Selected par pura color
-                        : (isDark
-                            ? Colors.white70
-                            : Colors.black87), // Not selected par neutral
-                    size: 18),
-              ),
-              const SizedBox(width: 12),
+                const SizedBox(width: 12),
 
-              // 🚀 TEXT CONTENT
-              Expanded(
-                child: Row(
+                // 🚀 TEXT CONTENT
+                Row(
                   children: [
                     // Dot indicator if selected
                     if (isSelected) ...[
@@ -616,33 +630,30 @@ class _NearestStationSheetContentState
                       ),
                       const SizedBox(width: 8),
                     ],
-                    Expanded(
-                      child: Text(
-                        _toTitleCase(location['name']),
-                        style: GoogleFonts.inter(
-                          color: textColor,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    Text(
+                      _toTitleCase(location['name']),
+                      style: GoogleFonts.inter(
+                        color: textColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
                       ),
+                      maxLines: 1,
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
+                const SizedBox(width: 8),
 
-              // 🚀 DISTANCE TEXT
-              Text(
-                distance,
-                style: GoogleFonts.inter(
-                  color: subColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                // 🚀 DISTANCE TEXT
+                Text(
+                  distance,
+                  style: GoogleFonts.inter(
+                    color: subColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

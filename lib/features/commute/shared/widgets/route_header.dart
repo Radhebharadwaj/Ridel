@@ -81,89 +81,102 @@ class RouteHeader extends StatelessWidget {
                 stops: const [0.0, 0.6, 1.0],
               ),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // ==================== 1. CONSISTENT LIQUID BACK BUTTON ====================
-                RidelLiquidButton(
-                  width: 44,
-                  height: 44,
-                  shapeType: LiquidShapeType.circle,
-                  glassTint: isLightMode 
-                      ? Colors.black.withValues(alpha: 0.04) 
-                      : Colors.white.withValues(alpha: 0.08),
-                  onTap: onBack,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 2.0),
-                    child: Icon(Icons.arrow_back_ios_new_rounded,
-                        color: isLightMode ? Colors.black87 : Colors.white, size: 18),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: constraints.maxWidth < 240 ? 240 : constraints.maxWidth,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // ==================== 1. CONSISTENT LIQUID BACK BUTTON ====================
+                        RidelLiquidButton(
+                          width: 44,
+                          height: 44,
+                          shapeType: LiquidShapeType.circle,
+                          glassTint: isLightMode 
+                              ? Colors.black.withValues(alpha: 0.04) 
+                              : Colors.white.withValues(alpha: 0.08),
+                          onTap: onBack,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 2.0),
+                            child: Icon(Icons.arrow_back_ios_new_rounded,
+                                color: isLightMode ? Colors.black87 : Colors.white, size: 18),
+                          ),
+                        ),
+        
+                        const SizedBox(width: 16),
+        
+                        // ==================== 2. THE CALM FLOATING TEXT ====================
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // FROM STATION (Calm & Dimmed)
+                              Flexible(
+                                child: Text(
+                                  _toTitleCase(_formatStationName(fromStation)),
+                                  style: GoogleFonts.inter(
+                                    color: isLightMode
+                                        ? Colors.black54
+                                        : Colors.white.withValues(alpha: 0.65), // 💎 Smooth fade
+                                    fontSize: 16, // 🚀 Bada aur clean
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: -0.3, // 💎 Premium tight spacing
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+        
+                              // SWAP ICON (Minimal)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                                child: RidelBounceButton(
+                                  scaleFactor: 0.80,
+                                  useHeavyHaptic: true,
+                                  onTap: () => onSwap(toStation, fromStation),
+                                  child: Icon(
+                                    Icons.swap_horiz_rounded,
+                                    color: isLightMode
+                                        ? Colors.black26
+                                        : Colors.white.withValues(alpha: 0.3),
+                                    size: 20,
+                                  ),
+                                ),
+                              ),
+        
+                              // TO STATION (Bright & Popping)
+                              Flexible(
+                                child: Text(
+                                  _toTitleCase(_formatStationName(toStation)),
+                                  style: GoogleFonts.inter(
+                                    color: isLightMode
+                                        ? Colors.black87
+                                        : Colors.white.withValues(alpha: 0.95), // 💎 Bright focus
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700, // Thicker weight
+                                    letterSpacing: -0.4,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.left,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+        
+                        // Invisible spacer (width matches back button + padding) to keep text 100% mathematically centered
+                        const SizedBox(width: 60),
+                      ],
+                    ),
                   ),
-                ),
-
-                const SizedBox(width: 16),
-
-                // ==================== 2. THE CALM FLOATING TEXT ====================
-                Expanded(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // FROM STATION (Calm & Dimmed)
-                      Flexible(
-                        child: Text(
-                          _toTitleCase(_formatStationName(fromStation)),
-                          style: GoogleFonts.inter(
-                            color: isLightMode
-                                ? Colors.black54
-                                : Colors.white.withValues(alpha: 0.65), // 💎 Smooth fade
-                            fontSize: 16, // 🚀 Bada aur clean
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: -0.3, // 💎 Premium tight spacing
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.right,
-                        ),
-                      ),
-
-                      // SWAP ICON (Minimal)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10.0),
-                        child: RidelBounceButton(
-                          scaleFactor: 0.80,
-                          useHeavyHaptic: true,
-                          onTap: () => onSwap(toStation, fromStation),
-                          child: Icon(
-                            Icons.swap_horiz_rounded,
-                            color: isLightMode
-                                ? Colors.black26
-                                : Colors.white.withValues(alpha: 0.3),
-                            size: 20,
-                          ),
-                        ),
-                      ),
-
-                      // TO STATION (Bright & Popping)
-                      Flexible(
-                        child: Text(
-                          _toTitleCase(_formatStationName(toStation)),
-                          style: GoogleFonts.inter(
-                            color: isLightMode
-                                ? Colors.black87
-                                : Colors.white.withValues(alpha: 0.95), // 💎 Bright focus
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700, // Thicker weight
-                            letterSpacing: -0.4,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.left,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Invisible spacer (width matches back button + padding) to keep text 100% mathematically centered
-                const SizedBox(width: 60),
-              ],
+                );
+              },
             ),
           ),
         ),

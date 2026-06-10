@@ -173,189 +173,229 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            // Bouncing scroll physics ensures standard smooth iOS/Android scrolling
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  RidelLogo(size: 100, color: isLightMode ? Colors.black87 : Colors.white),
-                  const SizedBox(height: 20),
-                  AuthHeader(
-                    texts: const [
-                      'Welcome to Ridel!',
-                      'Imagine anything',
-                      'Seamless Journeys',
-                      'Start Creating',
-                    ],
-                    neonColor: neonColor,
-                    isPaused: _isLoading,
-                  ),
-                  const SizedBox(height: 32),
-                  _buildEmailField(isLightMode),
-                  const SizedBox(height: 16),
-                  if (_showTurnstile)
-                    CloudFlareTurnstile(
-                      siteKey: '0x4AAAAAADP3RBwUMZczFXPO',
-                      onTokenReceived: (token) {
-                        setState(() => _showTurnstile = false);
-                        _handleEmailContinue(captchaToken: token);
-                      },
-                      onError: (err) {
-                        setState(() {
-                          _isLoading = false;
-                          _showTurnstile = false;
-                        });
-                        ToastService.showError(
-                            context, 'Security check failed. Try again.');
-                      },
-                      options: TurnstileOptions(
-                          theme: isLightMode ? TurnstileTheme.light : TurnstileTheme.dark,
-                          mode: TurnstileMode.invisible),
-                    ),
-                  _buildContinueButton(isLightMode),
-                  if (_mailSent) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      "Magic link sent to ${_emailController.text}!",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          color: isLightMode ? Colors.black54 : Colors.white.withValues(alpha: 0.5),
-                          fontSize: 13),
-                    ),
-                  ],
-                  const SizedBox(height: 32),
-                  Row(
-                    children: [
-                      Expanded(child: _buildGoogleButton(isLightMode)),
-                      const SizedBox(width: 16),
-                      Expanded(child: _buildAppleButton(isLightMode)),
-                    ],
-                  ),
-                  const SizedBox(height: 40),
-                  TextButton(
-                    onPressed: _isLoading ? null : _handleSkip,
-                    style: TextButton.styleFrom(
-                      foregroundColor: isLightMode ? Colors.black54 : Colors.white.withValues(alpha: 0.5),
-                    ),
-                    child: Text(
-                      'Skip for now →',
-                      style: TextStyle(
-                        color: isLightMode ? Colors.black87 : Colors.white.withValues(alpha: 0.5),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  if (isLoggedIn) ...[
-                    const SizedBox(height: 24),
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Danger Zone',
-                        style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: isLightMode ? Colors.red.shade50 : const Color(0xFF151515),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 4),
-                        leading: const Icon(Icons.delete_outline,
-                            color: Colors.redAccent),
-                        title: const Text('Delete Account',
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              // Bouncing scroll physics ensures standard smooth iOS/Android scrolling
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight -
+                      40, // Account for vertical padding
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 400),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        RidelLogo(
+                            size: 100,
+                            color: isLightMode ? Colors.black87 : Colors.white),
+                        const SizedBox(height: 20),
+                        AuthHeader(
+                          texts: const [
+                            'Welcome to Ridel!',
+                            'Imagine anything',
+                            'Seamless Journeys',
+                            'Start Creating',
+                          ],
+                          neonColor: neonColor,
+                          isPaused: _isLoading,
+                        ),
+                        const SizedBox(height: 32),
+                        _buildEmailField(isLightMode),
+                        const SizedBox(height: 16),
+                        if (_showTurnstile)
+                          CloudFlareTurnstile(
+                            siteKey: '0x4AAAAAADP3RBwUMZczFXPO',
+                            onTokenReceived: (token) {
+                              setState(() => _showTurnstile = false);
+                              _handleEmailContinue(captchaToken: token);
+                            },
+                            onError: (err) {
+                              setState(() {
+                                _isLoading = false;
+                                _showTurnstile = false;
+                              });
+                              ToastService.showError(
+                                  context, 'Security check failed. Try again.');
+                            },
+                            options: TurnstileOptions(
+                                theme: isLightMode
+                                    ? TurnstileTheme.light
+                                    : TurnstileTheme.dark,
+                                mode: TurnstileMode.invisible),
+                          ),
+                        _buildContinueButton(isLightMode),
+                        if (_mailSent) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            "Magic link sent to ${_emailController.text}!",
+                            textAlign: TextAlign.center,
                             style: TextStyle(
-                                color: Colors.redAccent,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500)),
-                        subtitle: Text('Scheduled deletion after 7 days',
+                                color: isLightMode
+                                    ? Colors.black54
+                                    : Colors.white.withValues(alpha: 0.5),
+                                fontSize: 13),
+                          ),
+                        ],
+                        const SizedBox(height: 32),
+                        Row(
+                          children: [
+                            Expanded(child: _buildGoogleButton(isLightMode)),
+                            const SizedBox(width: 16),
+                            Expanded(child: _buildAppleButton(isLightMode)),
+                          ],
+                        ),
+                        const SizedBox(height: 40),
+                        TextButton(
+                          onPressed: _isLoading ? null : _handleSkip,
+                          style: TextButton.styleFrom(
+                            foregroundColor: isLightMode
+                                ? Colors.black54
+                                : Colors.white.withValues(alpha: 0.5),
+                          ),
+                          child: Text(
+                            'Skip for now →',
                             style: TextStyle(
-                                color: isLightMode ? Colors.black54 : Colors.white.withValues(alpha: 0.5),
-                                fontSize: 12)),
-                        onTap: () async {
-                          AppHaptics.heavyImpact();
-                          bool? confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (BuildContext dialogContext) {
-                              return AlertDialog(
-                                backgroundColor: isLightMode ? Colors.white : const Color(0xFF151515),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16)),
-                                title: Row(
-                                  children: [
-                                    const Icon(Icons.warning_amber_rounded,
-                                        color: Colors.redAccent),
-                                    const SizedBox(width: 10),
-                                    Text('Delete Account',
-                                        style: TextStyle(
-                                            color: isLightMode ? Colors.black87 : Colors.white, fontSize: 18)),
-                                  ],
-                                ),
-                                content: Text(
-                                  'Your account will be scheduled for deletion in 7 days. You will be logged out of your current session. Are you sure you want to proceed?',
+                              color: isLightMode
+                                  ? Colors.black87
+                                  : Colors.white.withValues(alpha: 0.5),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        if (isLoggedIn) ...[
+                          const SizedBox(height: 24),
+                          const Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Danger Zone',
+                              style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: isLightMode
+                                  ? Colors.red.shade50
+                                  : const Color(0xFF151515),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 4),
+                              leading: const Icon(Icons.delete_outline,
+                                  color: Colors.redAccent),
+                              title: const Text('Delete Account',
                                   style: TextStyle(
-                                      color: isLightMode ? Colors.black87 : Colors.white.withValues(alpha: 0.7),
-                                      fontSize: 14),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(dialogContext).pop(false),
-                                    child: Text('Cancel',
-                                        style: TextStyle(color: isLightMode ? Colors.black87 : Colors.white)),
-                                  ),
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.redAccent
-                                          .withValues(alpha: 0.1),
-                                      elevation: 0,
+                                      color: Colors.redAccent,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500)),
+                              subtitle: Text('Scheduled deletion after 7 days',
+                                  style: TextStyle(
+                                      color: isLightMode
+                                          ? Colors.black54
+                                          : Colors.white.withValues(alpha: 0.5),
+                                      fontSize: 12)),
+                              onTap: () async {
+                                AppHaptics.heavyImpact();
+                                bool? confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (BuildContext dialogContext) {
+                                    return AlertDialog(
+                                      backgroundColor: isLightMode
+                                          ? Colors.white
+                                          : const Color(0xFF151515),
                                       shape: RoundedRectangleBorder(
                                           borderRadius:
-                                              BorderRadius.circular(8)),
-                                    ),
-                                    onPressed: () =>
-                                        Navigator.of(dialogContext).pop(true),
-                                    child: const Text('Yes, Delete',
+                                              BorderRadius.circular(16)),
+                                      title: Row(
+                                        children: [
+                                          const Icon(
+                                              Icons.warning_amber_rounded,
+                                              color: Colors.redAccent),
+                                          const SizedBox(width: 10),
+                                          Text('Delete Account',
+                                              style: TextStyle(
+                                                  color: isLightMode
+                                                      ? Colors.black87
+                                                      : Colors.white,
+                                                  fontSize: 18)),
+                                        ],
+                                      ),
+                                      content: Text(
+                                        'Your account will be scheduled for deletion in 7 days. You will be logged out of your current session. Are you sure you want to proceed?',
                                         style: TextStyle(
-                                            color: Colors.redAccent,
-                                            fontWeight: FontWeight.bold)),
-                                  ),
-                                ],
-                              );
-                            },
-                          );
+                                            color: isLightMode
+                                                ? Colors.black87
+                                                : Colors.white
+                                                    .withValues(alpha: 0.7),
+                                            fontSize: 14),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.of(dialogContext)
+                                                  .pop(false),
+                                          child: Text('Cancel',
+                                              style: TextStyle(
+                                                  color: isLightMode
+                                                      ? Colors.black87
+                                                      : Colors.white)),
+                                        ),
+                                        ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.redAccent
+                                                .withValues(alpha: 0.1),
+                                            elevation: 0,
+                                            shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(8)),
+                                          ),
+                                          onPressed: () =>
+                                              Navigator.of(dialogContext)
+                                                  .pop(true),
+                                          child: const Text('Yes, Delete',
+                                              style: TextStyle(
+                                                  color: Colors.redAccent,
+                                                  fontWeight: FontWeight.bold)),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                );
 
-                          if (confirm == true) {
-                            await AuthService().signOut();
-                            if (context.mounted) {
-                              ToastService.showInfo(context,
-                                  'Account scheduled for deletion. Logged out safely.');
-                              Navigator.pushAndRemoveUntil(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (_) => const LoginScreen()),
-                                  (route) => false);
-                            }
-                          }
-                        },
-                      ),
+                                if (confirm == true) {
+                                  await AuthService().signOut();
+                                  if (context.mounted) {
+                                    ToastService.showInfo(context,
+                                        'Account scheduled for deletion. Logged out safely.');
+                                    Navigator.pushAndRemoveUntil(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                const LoginScreen()),
+                                        (route) => false);
+                                  }
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
-                ],
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -365,7 +405,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (isLightMode) {
       return Container(
         width: double.infinity,
-        height: 56,
+        constraints: const BoxConstraints(minHeight: 56),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(100),
@@ -381,10 +421,10 @@ class _LoginScreenState extends State<LoginScreen> {
         child: _buildTextField(isLightMode),
       );
     }
-    
+
     return RidelLiquidButton(
       width: double.infinity,
-      height: 56,
+      height: MediaQuery.of(context).size.height * 0.07,
       enableStretch: false,
       glassTint: const Color(0x1AFFFFFF),
       onTap: null,
@@ -396,16 +436,20 @@ class _LoginScreenState extends State<LoginScreen> {
     return TextField(
       controller: _emailController,
       focusNode: _emailFocusNode,
-      style: TextStyle(color: isLightMode ? Colors.black87 : Colors.white, fontSize: 16),
+      style: TextStyle(
+          color: isLightMode ? Colors.black87 : Colors.white, fontSize: 16),
       cursorColor: isLightMode ? Colors.black87 : neonColor,
       decoration: InputDecoration(
         hintText: 'Enter your Email',
         hintStyle: TextStyle(
-          color: isLightMode ? Colors.grey.shade500 : Colors.white.withValues(alpha: 0.3),
+          color: isLightMode
+              ? Colors.grey.shade500
+              : Colors.white.withValues(alpha: 0.3),
           fontSize: 16,
         ),
         filled: false,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
         prefixIcon: Padding(
           padding: const EdgeInsets.only(left: 20, right: 12),
           child: AnimatedSwitcher(
@@ -415,13 +459,19 @@ class _LoginScreenState extends State<LoginScreen> {
               key: ValueKey(_emailFocusNode.hasFocus),
               color: _emailFocusNode.hasFocus
                   ? (isLightMode ? Colors.black87 : neonColor)
-                  : (isLightMode ? Colors.grey.shade400 : Colors.white.withValues(alpha: 0.4)),
+                  : (isLightMode
+                      ? Colors.grey.shade400
+                      : Colors.white.withValues(alpha: 0.4)),
               size: 22,
             ),
           ),
         ),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(100), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(100), borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(100),
+            borderSide: BorderSide.none),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(100),
+            borderSide: BorderSide.none),
       ),
     );
   }
@@ -432,7 +482,7 @@ class _LoginScreenState extends State<LoginScreen> {
         onTap: _isLoading ? null : _onContinuePressed,
         child: Container(
           width: double.infinity,
-          height: 56,
+          constraints: const BoxConstraints(minHeight: 56),
           decoration: BoxDecoration(
             color: Colors.black87,
             borderRadius: BorderRadius.circular(100),
@@ -449,10 +499,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 ? const SizedBox(
                     height: 24,
                     width: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5, color: Colors.white),
                   )
                 : Text(
-                    _resendTimer == 0 ? 'Continue' : 'Resend in ${_resendTimer}s',
+                    _resendTimer == 0
+                        ? 'Continue'
+                        : 'Resend in ${_resendTimer}s',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 17,
@@ -464,10 +517,10 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     }
-    
+
     return RidelLiquidButton(
       width: double.infinity,
-      height: 56,
+      height: MediaQuery.of(context).size.height * 0.07,
       enableStretch: true,
       glassTint: neonColor.withValues(alpha: 0.15),
       onTap: _isLoading ? () {} : _onContinuePressed,
@@ -495,34 +548,42 @@ class _LoginScreenState extends State<LoginScreen> {
       return GestureDetector(
         onTap: _isLoading ? null : _handleGoogleLogin,
         child: Container(
-          height: 56,
+          constraints: const BoxConstraints(minHeight: 56),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(100),
-            border: Border.all(color: Colors.grey.shade300, width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              )
-            ]
-          ),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(100),
+              border: Border.all(color: Colors.grey.shade300, width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                )
+              ]),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              SvgPicture.string(GoogleLoginButton.googleSvgCode, height: 20, width: 20),
+              SvgPicture.string(GoogleLoginButton.googleSvgCode,
+                  height: 20, width: 20),
               const SizedBox(width: 10),
-              const Text('Google', style: TextStyle(color: Colors.black87, fontSize: 15, fontWeight: FontWeight.w600)),
+              const Flexible(
+                child: Text('Google',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: Colors.black87,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600)),
+              ),
             ],
           ),
         ),
       );
     }
-    
+
     return RidelLiquidButton(
       width: double.infinity,
-      height: 56,
+      height: MediaQuery.of(context).size.height * 0.07,
       enableStretch: true,
       glassTint: const Color(0x1AFFFFFF),
       onTap: _isLoading ? () {} : _handleGoogleLogin,
@@ -532,11 +593,15 @@ class _LoginScreenState extends State<LoginScreen> {
           SvgPicture.string(GoogleLoginButton.googleSvgCode,
               height: 20, width: 20),
           const SizedBox(width: 10),
-          const Text('Google',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600)),
+          const Flexible(
+            child: Text('Google',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600)),
+          ),
         ],
       ),
     );
@@ -547,34 +612,41 @@ class _LoginScreenState extends State<LoginScreen> {
       return GestureDetector(
         onTap: _isLoading ? null : _handleAppleLogin,
         child: Container(
-          height: 56,
+          constraints: const BoxConstraints(minHeight: 56),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(100),
-            border: Border.all(color: Colors.grey.shade300, width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              )
-            ]
-          ),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(100),
+              border: Border.all(color: Colors.grey.shade300, width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                )
+              ]),
           child: const Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.apple, color: Colors.black, size: 24),
               SizedBox(width: 8),
-              Text('Apple', style: TextStyle(color: Colors.black87, fontSize: 15, fontWeight: FontWeight.w600)),
+              Flexible(
+                child: Text('Apple',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: Colors.black87,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600)),
+              ),
             ],
           ),
         ),
       );
     }
-    
+
     return RidelLiquidButton(
       width: double.infinity,
-      height: 56,
+      height: MediaQuery.of(context).size.height * 0.07,
       enableStretch: true,
       glassTint: const Color(0x1AFFFFFF),
       onTap: _isLoading ? () {} : _handleAppleLogin,
@@ -583,11 +655,15 @@ class _LoginScreenState extends State<LoginScreen> {
         children: [
           Icon(Icons.apple, color: Colors.white, size: 24),
           SizedBox(width: 8),
-          Text('Apple',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600)),
+          Flexible(
+            child: Text('Apple',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600)),
+          ),
         ],
       ),
     );

@@ -125,7 +125,7 @@ class MapLayerController {
     };
   }
 
-  Future<void> drawRoute(List<LatLng> points) async {
+  Future<void> drawRoute(List<LatLng> points, {double bottomPadding = 350.0}) async {
     if (_isDrawingRoute || _map == null) return;
     _isDrawingRoute = true;
 
@@ -172,8 +172,8 @@ class MapLayerController {
           _calculateBounds(points),
           left: 50,
           right: 50,
-          top: 100,
-          bottom: 400));
+          top: 120,
+          bottom: bottomPadding)); // Dynamic padding to respect sheet height
     } catch (e) {
       debugPrint("Route draw failed: $e");
     } finally {

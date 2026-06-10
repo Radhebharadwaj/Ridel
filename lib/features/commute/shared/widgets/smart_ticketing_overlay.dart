@@ -46,22 +46,23 @@ Future<String?> showSmartTicketingOverlay(BuildContext context, {bool isBus = fa
                               width: double.infinity,
                               padding: const EdgeInsets.all(20),
                               decoration: _cardDecoration(isLightMode),
-                              child: Row(
-                                children: [
-                                  Image.asset(
-                                    'assets/images/metrocard.png',
-                                    height: 40,
-                                    width: 60,
-                                    fit: BoxFit.contain,
-                                    alignment: Alignment.centerLeft,
-                                    errorBuilder: (c, e, s) =>
-                                        Icon(Icons.broken_image, size: 40, color: isLightMode ? Colors.black54 : Colors.white54),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Row(
+                                  children: [
+                                    Image.asset(
+                                      'assets/images/metrocard.png',
+                                      height: 40,
+                                      width: 60,
+                                      fit: BoxFit.contain,
+                                      alignment: Alignment.centerLeft,
+                                      errorBuilder: (c, e, s) =>
+                                          Icon(Icons.broken_image, size: 40, color: isLightMode ? Colors.black54 : Colors.white54),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text('Recharge Smart Card',
                                             style: _titleStyle(isLightMode)),
@@ -70,8 +71,8 @@ Future<String?> showSmartTicketingOverlay(BuildContext context, {bool isBus = fa
                                             style: _subtitleStyle(isLightMode)),
                                       ],
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -87,22 +88,23 @@ Future<String?> showSmartTicketingOverlay(BuildContext context, {bool isBus = fa
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    children: [
-                                      Image.asset(
-                                        'assets/images/whatsapp.png',
-                                        height: 48,
-                                        width: 48,
-                                        fit: BoxFit.contain,
-                                        errorBuilder: (c, e, s) => Icon(
-                                            Icons.broken_image,
-                                            size: 48, color: isLightMode ? Colors.black54 : Colors.white54),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Row(
+                                      children: [
+                                        Image.asset(
+                                          'assets/images/whatsapp.png',
+                                          height: 48,
+                                          width: 48,
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (c, e, s) => Icon(
+                                              Icons.broken_image,
+                                              size: 48, color: isLightMode ? Colors.black54 : Colors.white54),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             Text('Book via WhatsApp Bot',
                                                 style: _titleStyle(isLightMode)),
@@ -111,15 +113,15 @@ Future<String?> showSmartTicketingOverlay(BuildContext context, {bool isBus = fa
                                                 style: _subtitleStyle(isLightMode)),
                                           ],
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                   const SizedBox(height: 16),
                                   Padding(
                                     padding: const EdgeInsets.only(left: 56.0),
                                     child: Wrap(
-                                      spacing: 8.0,
-                                      runSpacing: 8.0,
+                                      spacing: 12.0,
+                                      runSpacing: 12.0,
                                       crossAxisAlignment:
                                           WrapCrossAlignment.center,
                                       children: [
@@ -179,30 +181,31 @@ Future<String?> showSmartTicketingOverlay(BuildContext context, {bool isBus = fa
                                     child: Container(
                                       padding: const EdgeInsets.all(20),
                                       decoration: _cardDecoration(isLightMode),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Image.asset(
-                                            'assets/images/paytm.png',
-                                            height: 36,
-                                            fit: BoxFit.contain,
-                                            errorBuilder: (context, error,
-                                                    stackTrace) =>
-                                                Text('Paytm',
-                                                    style: GoogleFonts.inter(
-                                                        color: Colors.blueAccent,
-                                                        fontWeight:
-                                                            FontWeight.w900,
-                                                        fontSize: 24)),
-                                          ),
-                                          const Spacer(),
-                                          Text('Book on Paytm',
-                                              style: _titleStyle(isLightMode)),
-                                          const SizedBox(height: 4),
-                                          Text(isBus ? 'Direct bus ticketing mini-app.' : 'Direct metro ticketing mini-app.',
-                                              style: _subtitleStyle(isLightMode)),
-                                        ],
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Image.asset(
+                                              'assets/images/paytm.png',
+                                              height: 36,
+                                              fit: BoxFit.contain,
+                                              errorBuilder: (context, error, stackTrace) =>
+                                                  Text('Paytm',
+                                                      style: GoogleFonts.inter(
+                                                          color: Colors.blueAccent,
+                                                          fontWeight: FontWeight.w900,
+                                                          fontSize: 24)),
+                                            ),
+                                            const SizedBox(height: 16),
+                                            Text('Book on Paytm',
+                                                style: _titleStyle(isLightMode)),
+                                            const SizedBox(height: 4),
+                                            Text(isBus ? 'Direct bus ticketing mini-app.' : 'Direct metro ticketing mini-app.',
+                                                style: _subtitleStyle(isLightMode)),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -215,21 +218,24 @@ Future<String?> showSmartTicketingOverlay(BuildContext context, {bool isBus = fa
                                     child: Container(
                                       padding: const EdgeInsets.all(20),
                                       decoration: _cardDecoration(isLightMode),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          _buildSimulatedCalculator(isLightMode),
-                                          const Spacer(),
-                                          Text('Fare Calculator',
-                                              style: _titleStyle(isLightMode),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                              'Check ticket prices & route details.',
-                                              style: _subtitleStyle(isLightMode)),
-                                        ],
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            _buildSimulatedCalculator(isLightMode),
+                                            const SizedBox(height: 16),
+                                            Text('Fare Calculator',
+                                                style: _titleStyle(isLightMode),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                                'Check ticket prices & route details.',
+                                                style: _subtitleStyle(isLightMode)),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),

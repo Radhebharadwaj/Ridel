@@ -468,31 +468,40 @@ class DesktopPromoDashboard extends StatelessWidget {
                     ),
                   ],
                 ),
-                Row(
+                Wrap(
+                  spacing: 20,
+                  runSpacing: 20,
                   children: [
-                    _buildPromoCard(
-                        title: "Live Bus Tracking",
-                        subtitle:
-                            "Never miss a bus again with real-time GPS tracking across Delhi.",
-                        icon: Icons.directions_bus_filled_rounded,
-                        color: const Color(0xFFFF9F0A),
-                        isDark: isDark),
-                    const SizedBox(width: 20),
-                    _buildPromoCard(
-                        title: "Ridel Premium",
-                        subtitle:
-                            "Get ad-free experience, AR navigation & personalized commute insights.",
-                        icon: Icons.workspace_premium_rounded,
-                        color: const Color(0xFFB15EFF),
-                        isDark: isDark),
-                    const SizedBox(width: 20),
-                    _buildPromoCard(
-                        title: "Smart AQI",
-                        subtitle:
-                            "Check the air quality of your destination before you travel.",
-                        icon: Icons.air_rounded,
-                        color: const Color(0xFF00E5FF),
-                        isDark: isDark),
+                    SizedBox(
+                      width: 280,
+                      child: _buildPromoCard(
+                          title: "Live Bus Tracking",
+                          subtitle:
+                              "Never miss a bus again with real-time GPS tracking across Delhi.",
+                          icon: Icons.directions_bus_filled_rounded,
+                          color: const Color(0xFFFF9F0A),
+                          isDark: isDark),
+                    ),
+                    SizedBox(
+                      width: 280,
+                      child: _buildPromoCard(
+                          title: "Ridel Premium",
+                          subtitle:
+                              "Get ad-free experience, AR navigation & personalized commute insights.",
+                          icon: Icons.workspace_premium_rounded,
+                          color: const Color(0xFFB15EFF),
+                          isDark: isDark),
+                    ),
+                    SizedBox(
+                      width: 280,
+                      child: _buildPromoCard(
+                          title: "Smart AQI",
+                          subtitle:
+                              "Check the air quality of your destination before you travel.",
+                          icon: Icons.air_rounded,
+                          color: const Color(0xFF00E5FF),
+                          isDark: isDark),
+                    ),
                   ],
                 )
               ],
@@ -509,10 +518,9 @@ class DesktopPromoDashboard extends StatelessWidget {
       required IconData icon,
       required Color color,
       required bool isDark}) {
-    return Expanded(
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: Container(
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF1E2129) : Colors.white,
@@ -552,7 +560,6 @@ class DesktopPromoDashboard extends StatelessWidget {
             ],
           ),
         ),
-      ),
     );
   }
 }

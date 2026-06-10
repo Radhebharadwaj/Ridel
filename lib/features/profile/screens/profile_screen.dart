@@ -60,6 +60,12 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
     }
   }
 
+  @override
+  void dispose() {
+    _userIdCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadData() async {
     final data = await _repo.getProfile();
     if (mounted) {

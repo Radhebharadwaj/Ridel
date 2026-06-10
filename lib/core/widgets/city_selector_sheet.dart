@@ -429,12 +429,16 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
                           color: accentColor, size: 20),
                     ),
                     const SizedBox(width: 16),
-                    Text(
-                      'Auto-detect my region',
-                      style: GoogleFonts.inter(
-                        color: accentColor,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
+                    Expanded(
+                      child: Text(
+                        'Auto-detect my region',
+                        style: GoogleFonts.inter(
+                          color: accentColor,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -475,6 +479,7 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
                         behavior: ScrollConfiguration.of(context)
                             .copyWith(scrollbars: false),
                         child: ListView.builder(
+                          itemExtent: 72.0,
                           physics: const BouncingScrollPhysics(),
                           itemCount: _selectedRegion != null
                               ? (_selectedRegion['covered_cities'] as List)
@@ -518,6 +523,8 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
                                               fontSize: 16,
                                               fontWeight: FontWeight.w600,
                                             ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                       ],
@@ -574,6 +581,8 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
                                                   fontSize: 16,
                                                   fontWeight: FontWeight.w600,
                                                 ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                               const SizedBox(height: 2),
                                               Text(
@@ -629,6 +638,8 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
                                                 fontSize: 16,
                                                 fontWeight: FontWeight.w600,
                                               ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                             const SizedBox(height: 2),
                                             Text(

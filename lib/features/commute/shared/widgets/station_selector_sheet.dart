@@ -143,8 +143,12 @@ class _StationSelectorSheetState extends State<StationSelectorSheet> {
           final dist = Geolocator.distanceBetween(
             position.latitude,
             position.longitude,
-            s['lat'] is num ? (s['lat'] as num).toDouble() : double.tryParse(s['lat']?.toString() ?? '0.0') ?? 0.0,
-            s['lon'] is num ? (s['lon'] as num).toDouble() : double.tryParse(s['lon']?.toString() ?? '0.0') ?? 0.0,
+            s['lat'] is num
+                ? (s['lat'] as num).toDouble()
+                : double.tryParse(s['lat']?.toString() ?? '0.0') ?? 0.0,
+            s['lon'] is num
+                ? (s['lon'] as num).toDouble()
+                : double.tryParse(s['lon']?.toString() ?? '0.0') ?? 0.0,
           );
           return dist < 2000;
         }).toList();
@@ -153,14 +157,22 @@ class _StationSelectorSheetState extends State<StationSelectorSheet> {
           final distA = Geolocator.distanceBetween(
             position.latitude,
             position.longitude,
-            a['lat'] is num ? (a['lat'] as num).toDouble() : double.tryParse(a['lat']?.toString() ?? '0.0') ?? 0.0,
-            a['lon'] is num ? (a['lon'] as num).toDouble() : double.tryParse(a['lon']?.toString() ?? '0.0') ?? 0.0,
+            a['lat'] is num
+                ? (a['lat'] as num).toDouble()
+                : double.tryParse(a['lat']?.toString() ?? '0.0') ?? 0.0,
+            a['lon'] is num
+                ? (a['lon'] as num).toDouble()
+                : double.tryParse(a['lon']?.toString() ?? '0.0') ?? 0.0,
           );
           final distB = Geolocator.distanceBetween(
             position.latitude,
             position.longitude,
-            b['lat'] is num ? (b['lat'] as num).toDouble() : double.tryParse(b['lat']?.toString() ?? '0.0') ?? 0.0,
-            b['lon'] is num ? (b['lon'] as num).toDouble() : double.tryParse(b['lon']?.toString() ?? '0.0') ?? 0.0,
+            b['lat'] is num
+                ? (b['lat'] as num).toDouble()
+                : double.tryParse(b['lat']?.toString() ?? '0.0') ?? 0.0,
+            b['lon'] is num
+                ? (b['lon'] as num).toDouble()
+                : double.tryParse(b['lon']?.toString() ?? '0.0') ?? 0.0,
           );
           return distA.compareTo(distB);
         });

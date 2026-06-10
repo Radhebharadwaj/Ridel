@@ -44,7 +44,7 @@ class MapModeController {
     _updateDerivedModeNotifiers(mode);
 
     _modeDebounceTimer?.cancel();
-    _modeDebounceTimer = Timer(const Duration(milliseconds: 250), () {
+    _modeDebounceTimer = Timer(const Duration(milliseconds: 100), () {
       _isApplyingModeChange = false;
     });
   }
@@ -113,7 +113,7 @@ class MapModeController {
 
   void _resetDetailLock() {
     _detailDebounceTimer?.cancel();
-    _detailDebounceTimer = Timer(const Duration(milliseconds: 200), () {
+    _detailDebounceTimer = Timer(const Duration(milliseconds: 100), () {
       _isTogglingDetail = false;
     });
   }

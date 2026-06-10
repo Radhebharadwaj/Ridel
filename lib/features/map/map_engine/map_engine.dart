@@ -277,7 +277,7 @@ class MapEngine {
   /// [route] — The RouteResult from RouteEngineService.
   /// [destination] — The final destination LatLng (needed for rerouting).
   Future<void> startActiveNavigation(
-      RouteResult route, LatLng destination) async {
+      RouteResult route, LatLng destination, String navMode) async {
     _navigationDestination = destination;
 
     // 1. Draw the route polyline on the map
@@ -286,8 +286,18 @@ class MapEngine {
     // 2. Start the navigation state machine (parses steps, builds boundaries)
     await navigation.startNavigation(route);
 
-    // 3. Switch camera to driving mode (60° tilt, 17.8 zoom, heading-locked)
-    await camera?.setCameraForMode(CameraMode.driving);
+    // 3. Switch camera to the correct mode based on transport type
+    CameraMode targetCameraMode = CameraMode.driving;
+
+    if (navMode == 'walking') {
+      targetCameraMode = CameraMode.walking;
+    } else if (navMode == 'twowheeler' || navMode == 'bicycling') {
+      targetCameraMode = CameraMode.cycling;
+    } else {
+      targetCameraMode = CameraMode.driving; // For driving and heavy
+    }
+
+    await camera?.setCameraForMode(targetCameraMode);
 
     // 4. Ensure GPS is feeding the navigation loop
     if (locService != null && !locService!.isLiveTracking) {

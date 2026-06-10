@@ -627,6 +627,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                                             top: 2, bottom: 4),
                                         child: Text(displayState,
                                             maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                             style: GoogleFonts.inter(
                                                 color: secondaryText,
                                                 fontSize: 14,
@@ -635,6 +636,8 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                                   Text(
                                       WeatherService.getWeatherCondition(
                                           _weather!.weatherCode),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: GoogleFonts.inter(
                                           color: secondaryText,
                                           fontSize: 13,
@@ -668,74 +671,99 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                 ],
               ),
               const SizedBox(height: 25),
-              Row(
-                children: [
-                  Text("AQI ${_weather!.aqi}",
-                      style: GoogleFonts.inter(
-                          color: primaryText,
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SizedBox(
-                      height: 6,
-                      child: Stack(
-                        alignment: Alignment.centerLeft,
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  return FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: constraints.maxWidth < 250 ? 250 : constraints.maxWidth,
+                      ),
+                      child: Row(
                         children: [
-                          Container(
-                              decoration: BoxDecoration(
-                                  color: isLightMode ? Colors.black.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.3),
-                                  borderRadius: BorderRadius.circular(10))),
-                          Container(
-                              decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10),
-                                  gradient: const LinearGradient(colors: [
-                                    Colors.green,
-                                    Colors.yellow,
-                                    Colors.orange,
-                                    Colors.red,
-                                    Colors.purple
-                                  ], stops: [
-                                    0.1,
-                                    0.3,
-                                    0.5,
-                                    0.7,
-                                    0.9
-                                  ]))),
-                          Align(
-                            alignment: Alignment(
-                                (_weather!.aqi / 500).clamp(0.0, 1.0) * 2 - 1,
-                                0),
-                            child: Container(
-                                width: 12,
-                                height: 12,
-                                decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                        color: Colors.black, width: 2))),
-                          )
+                          Text("AQI ${_weather!.aqi}",
+                              style: GoogleFonts.inter(
+                                  color: primaryText,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: SizedBox(
+                              height: 6,
+                              child: Stack(
+                                alignment: Alignment.centerLeft,
+                                children: [
+                                  Container(
+                                      decoration: BoxDecoration(
+                                          color: isLightMode ? Colors.black.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.3),
+                                          borderRadius: BorderRadius.circular(10))),
+                                  Container(
+                                      decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(10),
+                                          gradient: const LinearGradient(colors: [
+                                            Colors.green,
+                                            Colors.yellow,
+                                            Colors.orange,
+                                            Colors.red,
+                                            Colors.purple
+                                          ], stops: [
+                                            0.1,
+                                            0.3,
+                                            0.5,
+                                            0.7,
+                                            0.9
+                                          ]))),
+                                  Align(
+                                    alignment: Alignment(
+                                        (_weather!.aqi / 500).clamp(0.0, 1.0) * 2 - 1,
+                                        0),
+                                    child: Container(
+                                        width: 12,
+                                        height: 12,
+                                        decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                                color: Colors.black, width: 2))),
+                                  )
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(aqiStatus,
+                              style: GoogleFonts.inter(
+                                  color: secondaryText,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(aqiStatus,
-                      style: GoogleFonts.inter(
-                          color: secondaryText,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600)),
-                ],
+                  );
+                }
               ),
               const SizedBox(height: 18),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildDetailItem(Icons.water_drop_outlined, "Humidity", "${_weather!.humidity}%", secondaryText, primaryText),
-                  _buildDetailItem(Icons.air_outlined, "Wind", "${_weather!.windSpeed.toStringAsFixed(1)} km/h", secondaryText, primaryText),
-                  _buildDetailItem(Icons.thermostat_outlined, "Feels Like", "${_weather!.feelsLike.toInt()}°", secondaryText, primaryText),
-                  _buildDetailItem(Icons.wb_sunny_outlined, "UV Index", _weather!.uvIndex.toStringAsFixed(1), secondaryText, primaryText),
-                ],
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.center,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: 360,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildDetailItem(Icons.water_drop_outlined, "Humidity", "${_weather!.humidity}%", secondaryText, primaryText),
+                      const SizedBox(width: 16),
+                      _buildDetailItem(Icons.air_outlined, "Wind", "${_weather!.windSpeed.toStringAsFixed(1)} km/h", secondaryText, primaryText),
+                      const SizedBox(width: 16),
+                      _buildDetailItem(Icons.thermostat_outlined, "Feels Like", "${_weather!.feelsLike.toInt()}°", secondaryText, primaryText),
+                      const SizedBox(width: 16),
+                      _buildDetailItem(Icons.wb_sunny_outlined, "UV Index", _weather!.uvIndex.toStringAsFixed(1), secondaryText, primaryText),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 18),
               Divider(color: dividerColor, height: 1),
@@ -928,64 +956,78 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
   Widget _buildDailyItem(String day, int code, int minT, int maxT, bool isLightMode) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          SizedBox(
-              width: 100, // 🚀 CRITICAL FOR ALIGNMENT
-              child: Text(day,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(
-                      color: isLightMode ? Colors.black87 : Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500))),
-          Icon(
-              WeatherService.getWeatherIcon(code),
-              size: 22,
-              color: isLightMode ? Colors.black87 : Colors.white),
-          Row(
-            children: [
-              SizedBox(
-                width: 35,
-                child: Text("$minT°",
-                    textAlign: TextAlign.start,
-                    style: GoogleFonts.inter(color: isLightMode ? Colors.black54 : Colors.white54, fontSize: 15)),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: constraints.maxWidth < 280 ? 280 : constraints.maxWidth,
+                maxWidth: constraints.maxWidth < 280 ? 280 : constraints.maxWidth,
               ),
-              const SizedBox(width: 10),
-              Stack(
-                alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                      width: 60,
-                      height: 4,
-                      decoration: BoxDecoration(
-                          color: isLightMode ? Colors.black.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(5))),
-                  Container(
-                      width: 60,
-                      height: 4,
-                      decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(5),
-                          gradient: LinearGradient(colors: [
-                            Colors.lightBlueAccent.withValues(alpha: 0.8),
-                            Colors.orangeAccent.withValues(alpha: 0.9)
-                          ]))),
-                ]
+                  SizedBox(
+                      width: 100, // 🚀 CRITICAL FOR ALIGNMENT
+                      child: Text(day,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                              color: isLightMode ? Colors.black87 : Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500))),
+                  Icon(
+                      WeatherService.getWeatherIcon(code),
+                      size: 22,
+                      color: isLightMode ? Colors.black87 : Colors.white),
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 35,
+                        child: Text("$minT°",
+                            textAlign: TextAlign.start,
+                            style: GoogleFonts.inter(color: isLightMode ? Colors.black54 : Colors.white54, fontSize: 15)),
+                      ),
+                      const SizedBox(width: 10),
+                      Stack(
+                        alignment: Alignment.centerLeft,
+                        children: [
+                          Container(
+                              width: 60,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                  color: isLightMode ? Colors.black.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.3),
+                                  borderRadius: BorderRadius.circular(5))),
+                          Container(
+                              width: 60,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(5),
+                                  gradient: LinearGradient(colors: [
+                                    Colors.lightBlueAccent.withValues(alpha: 0.8),
+                                    Colors.orangeAccent.withValues(alpha: 0.9)
+                                  ]))),
+                        ]
+                      ),
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        width: 35,
+                        child: Text("$maxT°",
+                            textAlign: TextAlign.end,
+                            style: GoogleFonts.inter(
+                                color: isLightMode ? Colors.black87 : Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500)),
+                      ),
+                    ],
+                  )
+                ],
               ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 35,
-                child: Text("$maxT°",
-                    textAlign: TextAlign.end,
-                    style: GoogleFonts.inter(
-                        color: isLightMode ? Colors.black87 : Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500)),
-              ),
-            ],
-          )
-        ],
+            ),
+          );
+        }
       ),
     );
   }
