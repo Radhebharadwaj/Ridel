@@ -8,7 +8,8 @@ class MapDetailsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final modeController = context.read<MapModeController>();
+    // 🚀 CRITICAL FIX: Must be .watch() so the UI reacts to taps!
+    final modeController = context.watch<MapModeController>(); 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
@@ -42,33 +43,36 @@ class MapDetailsSheet extends StatelessWidget {
                   fontWeight: FontWeight.w600)),
           const SizedBox(height: 16),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              ValueListenableBuilder<MapMapType>(
-                valueListenable: modeController.mapType,
-                builder: (context, mapType, _) {
-                  return _buildTypeCard(
-                      context: context,
-                      isDark: isDark,
-                      title: "Default",
-                      icon: Icons.map,
-                      isSelected: mapType == MapMapType.defaultVector,
-                      onTap: () =>
-                          modeController.setMapType(MapMapType.defaultVector));
-                },
+              Expanded(
+                child: ValueListenableBuilder<MapMapType>(
+                  valueListenable: modeController.mapType,
+                  builder: (context, mapType, _) {
+                    return _buildTypeCard(
+                        isDark: isDark,
+                        title: "Default",
+                        icon: Icons.map,
+                        isSelected: mapType == MapMapType.defaultVector,
+                        onTap: () =>
+                            modeController.setMapType(MapMapType.defaultVector));
+                  },
+                ),
               ),
-              ValueListenableBuilder<MapMapType>(
-                valueListenable: modeController.mapType,
-                builder: (context, mapType, _) {
-                  return _buildTypeCard(
-                      context: context,
-                      isDark: isDark,
-                      title: "Satellite",
-                      icon: Icons.satellite_alt,
-                      isSelected: mapType == MapMapType.satellite,
-                      onTap: () =>
-                          modeController.setMapType(MapMapType.satellite));
-                },
+              const SizedBox(width: 8),
+              Expanded(
+                child: ValueListenableBuilder<MapMapType>(
+                  valueListenable: modeController.mapType,
+                  builder: (context, mapType, _) {
+                    return _buildTypeCard(
+                        isDark: isDark,
+                        title: "Satellite",
+                        icon: Icons.satellite_alt,
+                        isSelected: mapType == MapMapType.satellite,
+                        onTap: () =>
+                            modeController.setMapType(MapMapType.satellite));
+                  },
+                ),
               ),
             ],
           ),
@@ -88,7 +92,6 @@ class MapDetailsSheet extends StatelessWidget {
                 valueListenable: modeController.showTransitLayer,
                 builder: (context, showTransitLayer, _) {
                   return _buildDetailCard(
-                      context: context,
                       isDark: isDark,
                       title: "Transit",
                       icon: Icons.directions_transit,
@@ -100,7 +103,6 @@ class MapDetailsSheet extends StatelessWidget {
                 valueListenable: modeController.showTraffic,
                 builder: (context, showTraffic, _) {
                   return _buildDetailCard(
-                      context: context,
                       isDark: isDark,
                       title: "Traffic",
                       icon: Icons.traffic,
@@ -112,7 +114,6 @@ class MapDetailsSheet extends StatelessWidget {
                 valueListenable: modeController.showPOIs,
                 builder: (context, showPOIs, _) {
                   return _buildDetailCard(
-                      context: context,
                       isDark: isDark,
                       title: "POIs",
                       icon: Icons.store,
@@ -129,19 +130,19 @@ class MapDetailsSheet extends StatelessWidget {
   }
 
   Widget _buildTypeCard(
-      {required BuildContext context,
-      required bool isDark,
+      {required bool isDark,
       required String title,
       required IconData icon,
       required bool isSelected,
       required VoidCallback onTap}) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque, // 🚀 FIX: Prevent dead tap zones
       onTap: onTap,
       child: Column(
         children: [
           Container(
             height: 70,
-            width: 70,
+            width: double.infinity, // 🚀 FIX: Let Expanded handle the width
             decoration: BoxDecoration(
                 color: isSelected
                     ? Colors.cyan.withValues(alpha: 0.2)
@@ -164,13 +165,13 @@ class MapDetailsSheet extends StatelessWidget {
   }
 
   Widget _buildDetailCard(
-      {required BuildContext context,
-      required bool isDark,
+      {required bool isDark,
       required String title,
       required IconData icon,
       required bool isSelected,
       required VoidCallback onTap}) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque, // 🚀 FIX: Prevent dead tap zones
       onTap: onTap,
       child: Column(
         children: [

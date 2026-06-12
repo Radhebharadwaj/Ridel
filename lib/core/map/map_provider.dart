@@ -2,8 +2,6 @@ import 'dart:math' as math;
 import 'dart:math' show Point;
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui' as ui;
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -59,10 +57,6 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
-  // 🚀 NAVIGATION PUCK LOGIC
-  LatLng _lastPuckLocation = const LatLng(0, 0);
-  double _lastPuckBearing = 0.0;
-
   bool get showNativeBlueDot =>
       engine.mapUIState.value == MapUIState.idle ||
       engine.mapUIState.value == MapUIState.placeSelected;
@@ -71,73 +65,6 @@ class MapProvider extends ChangeNotifier {
               engine.mapUIState.value == MapUIState.routeDrawn)
           ? 1.0
           : 0.0;
-
-  Future<void> _updatePuckGeoJson(
-      LatLng location, double bearing, double opacity) async {
-    if (controller == null) return;
-    try {
-      final bool isVisible = opacity > 0.0;
-      await controller!.setGeoJsonSource('nav_puck_source', {
-        "type": "FeatureCollection",
-        "features": isVisible
-            ? [
-                {
-                  "type": "Feature",
-                  "geometry": {
-                    "type": "Point",
-                    "coordinates": [location.longitude, location.latitude]
-                  },
-                  "properties": {"bearing": bearing}
-                }
-              ]
-            : []
-      });
-      _lastPuckLocation = location;
-      _lastPuckBearing = bearing;
-    } catch (_) {}
-  }
-
-  Future<void> updatePuckVisibility() async {
-    await _updatePuckGeoJson(
-        _lastPuckLocation, _lastPuckBearing, customPuckOpacity);
-    engine.camera?.setBlueDotOpacity(showNativeBlueDot ? 1.0 : 0.0);
-    notifyListeners();
-  }
-
-  Future<void> showNavigationPuck(LatLng location, double bearing) async {
-    await _updatePuckGeoJson(location, bearing, customPuckOpacity);
-  }
-
-  Future<void> updateNavigationPuck(LatLng location, double bearing) async {
-    // Only update if in a state where the puck should be visible
-    if (customPuckOpacity == 0.0) {
-      await updatePuckVisibility(); // Ensure it hides gracefully
-      return;
-    }
-
-    // 1. ALWAYS update Puck Position & Rotation if visible (Route Overview & Navigating)
-    await _updatePuckGeoJson(location, bearing, customPuckOpacity);
-
-    // 2. Animate Camera to Follow User & Rotate Map ONLY if actively navigating
-    if (engine.mapUIState.value == MapUIState.navigating &&
-        controller != null &&
-        isAutoTracking) {
-      controller!.animateCamera(
-        CameraUpdate.newCameraPosition(CameraPosition(
-          target: location,
-          bearing: bearing, // THIS ROTATES THE MAP WITH THE USER
-          tilt: 50.0, // Keep the 3D perspective
-          zoom: 18.0, // Zoomed in for navigation
-        )),
-        duration: const Duration(
-            seconds: 1), // Smooth 1-second animation between GPS ticks
-      );
-    }
-  }
-
-  Future<void> hideNavigationPuck() async {
-    await _updatePuckGeoJson(_lastPuckLocation, _lastPuckBearing, 0.0);
-  }
 
   // 1. ADD NATIVE VECTOR PIN
   Future<void> addNativeDestinationPin(LatLng location) async {
@@ -190,10 +117,7 @@ class MapProvider extends ChangeNotifier {
   Future<void> clearNativeDestinationPin() async {
     if (controller != null) {
       try {
-        await controller!.removeLayer('destination_pin_layer');
-      } catch (_) {}
-      try {
-        await controller!.removeSource('destination_pin_source');
+        await controller!.setGeoJsonSource('destination_pin_source', {"type": "FeatureCollection", "features": []});
       } catch (_) {}
       notifyListeners();
     }
@@ -288,9 +212,19 @@ class MapProvider extends ChangeNotifier {
         debugPrint(
           "⚠️ [ROUTE ENGINE] Ola API returned empty coordinates or null.",
         );
+        _currentRouteResult = null;
+        if (context.mounted) {
+          ToastService.showError(context, "Routing API Error: Could not calculate route.");
+        }
+        notifyListeners();
       }
     } catch (e) {
       debugPrint("💥 [ROUTE ENGINE] CRASH: $e");
+      _currentRouteResult = null;
+      if (context.mounted) {
+        ToastService.showError(context, "Routing Failed: Server returned 404 or an error occurred.");
+      }
+      notifyListeners();
     }
   }
 
@@ -327,7 +261,6 @@ class MapProvider extends ChangeNotifier {
       engine.setUIState(MapUIState.navigating);
     }
 
-    await updatePuckVisibility();
     notifyListeners();
 
     // 1. Get current user location with robust fallback
@@ -344,8 +277,6 @@ class MapProvider extends ChangeNotifier {
     }
 
     if (targetLoc != null) {
-      await showNavigationPuck(targetLoc, pos?.heading ?? 0.0);
-
       // 2. Animate Camera to 3D Perspective (Tilt/Pitch)
       await controller!.animateCamera(
         CameraUpdate.newCameraPosition(
@@ -400,44 +331,6 @@ class MapProvider extends ChangeNotifier {
         duration: const Duration(milliseconds: 800),
       );
     }
-  }
-
-  List<String> activeFocusLayerIds = [];
-
-  Future<void> _toggleFocusModeLayers(bool isFocusMode) async {
-    if (controller == null) return;
-
-    if (activeFocusLayerIds.isEmpty) {
-      final allLayers = await controller!.getLayerIds();
-      activeFocusLayerIds = allLayers.map((e) => e.toString()).where((id) {
-        final lowerId = id.toLowerCase();
-        bool isFocusTarget = lowerId.contains('poi') ||
-            lowerId.contains('amenity') ||
-            lowerId.contains('shop') ||
-            lowerId.contains('transit');
-
-        return isFocusTarget;
-      }).toList();
-      debugPrint("🔍 Tracked Focus Mode Layers: ${activeFocusLayerIds.length}");
-    }
-
-    if (activeFocusLayerIds.isEmpty) {
-      debugPrint("⚠️ Cannot set Focus Mode: Layer IDs list is empty!");
-      return;
-    }
-
-    // 🚨 Safe MapLibre Web Filter: Set a filter that matches nothing to hide the layer
-    // This avoids using setLayerProperties which destroys iconImages on the WebGL bridge.
-    final dynamic filter = isFocusMode ? ['==', 'id', 'nothing'] : null;
-
-    for (String layerId in activeFocusLayerIds) {
-      try {
-        await controller!.setFilter(layerId, filter);
-      } catch (_) {}
-    }
-
-    debugPrint(
-        "🔍 Focus Mode set to $isFocusMode using non-destructive filters for ${activeFocusLayerIds.length} layers.");
   }
 
   // 🚨 DYNAMIC FUEL STATIONS TOGGLE
@@ -566,8 +459,6 @@ class MapProvider extends ChangeNotifier {
     // 1. Clear previous route if it exists
     await clearNativeRoute(preserveState: true);
 
-    // 🚨 Activate Focus Mode (Hide non-essential layers)
-    await _toggleFocusModeLayers(true);
 
     _drawnRoutesCount = allRoutes.length;
 
@@ -628,33 +519,45 @@ class MapProvider extends ChangeNotifier {
       try {
         final bool isWalking = currentNavMode == 'walking';
         if (isWalking) {
-          await controller!.addGeoJsonSource('alt-source-$i', geoJson);
-          await controller!.addLineLayer(
-            'alt-source-$i',
-            'alt-walk-layer-$i',
-            const LineLayerProperties(
-              lineColor: "#8E8E93",
-              lineWidth: 4.5,
-              lineCap: "round",
-              lineJoin: "round",
-              lineDasharray: [0.01, 2.5],
-            ),
-            belowLayerId: 'nav_puck_layer',
-          );
+          try {
+            // 🚀 MEMORY FIX: Try injecting data into existing buffer first
+            await controller!.setGeoJsonSource('alt-source-$i', geoJson);
+          } catch (_) {
+            // Fallback: Buffer doesn't exist, create it once
+            await controller!.addGeoJsonSource('alt-source-$i', geoJson);
+            await controller!.addLineLayer(
+              'alt-source-$i',
+              'alt-walk-layer-$i',
+              const LineLayerProperties(
+                lineColor: "#8E8E93",
+                lineWidth: 4.5,
+                lineCap: "round",
+                lineJoin: "round",
+                lineDasharray: [0.01, 2.5],
+              ),
+              belowLayerId: 'nav_puck_layer',
+            );
+          }
         } else {
-          await controller!.addGeoJsonSource('route-source-$i', geoJson);
-          await controller!.addLineLayer(
-            'route-source-$i',
-            'route-layer-$i',
-            const LineLayerProperties(
-              lineColor: "#8E8E93",
-              lineWidth: 4.0,
-              lineCap: "round",
-              lineJoin: "round",
-              lineOpacity: 0.6,
-            ),
-            belowLayerId: 'nav_puck_layer',
-          );
+          try {
+            // 🚀 MEMORY FIX: Try injecting data into existing buffer first
+            await controller!.setGeoJsonSource('route-source-$i', geoJson);
+          } catch (_) {
+            // Fallback: Buffer doesn't exist, create it once
+            await controller!.addGeoJsonSource('route-source-$i', geoJson);
+            await controller!.addLineLayer(
+              'route-source-$i',
+              'route-layer-$i',
+              const LineLayerProperties(
+                lineColor: "#8E8E93",
+                lineWidth: 4.0,
+                lineCap: "round",
+                lineJoin: "round",
+                lineOpacity: 0.6,
+              ),
+              belowLayerId: 'nav_puck_layer',
+            );
+          }
         }
       } catch (e) {
         debugPrint("🗺️ ALT ROUTE DRAW ERROR for index $i: $e");
@@ -674,27 +577,34 @@ class MapProvider extends ChangeNotifier {
       final congestionData = _currentRouteResult?.congestion;
 
       if (congestionData != null && congestionData.isNotEmpty) {
-        for (int i = 0; i < primaryCoords.length - 1; i++) {
-          int congestionIndex =
-              (i / primaryCoords.length * congestionData.length).floor();
-          if (congestionIndex >= congestionData.length) {
-            congestionIndex = congestionData.length - 1;
-          }
+        String currentCongestion = congestionData[0];
+        List<List<double>> currentSegmentCoords = [
+          [primaryCoords[0].longitude, primaryCoords[0].latitude]
+        ];
 
-          features.add({
-            "type": "Feature",
-            "properties": {
-              "index": 0,
-              "congestion": congestionData[congestionIndex]
-            },
-            "geometry": {
-              "type": "LineString",
-              "coordinates": [
-                [primaryCoords[i].longitude, primaryCoords[i].latitude],
-                [primaryCoords[i + 1].longitude, primaryCoords[i + 1].latitude]
-              ]
-            },
-          });
+        for (int i = 1; i < primaryCoords.length; i++) {
+          int congestionIndex = ((i / primaryCoords.length) * congestionData.length).floor();
+          if (congestionIndex >= congestionData.length) congestionIndex = congestionData.length - 1;
+
+          String pointCongestion = congestionData[congestionIndex];
+          currentSegmentCoords.add([primaryCoords[i].longitude, primaryCoords[i].latitude]);
+
+          // If congestion changes or we reach the end, flush the segment
+          if (pointCongestion != currentCongestion || i == primaryCoords.length - 1) {
+            features.add({
+              "type": "Feature",
+              "properties": {"index": 0, "congestion": currentCongestion},
+              "geometry": {
+                "type": "LineString",
+                "coordinates": List.from(currentSegmentCoords)
+              },
+            });
+            // Start new segment overlapping the last point for visual continuity
+            currentSegmentCoords = [
+              [primaryCoords[i].longitude, primaryCoords[i].latitude]
+            ];
+            currentCongestion = pointCongestion;
+          }
         }
       } else {
         features.add({
@@ -702,8 +612,7 @@ class MapProvider extends ChangeNotifier {
           "properties": {"index": 0, "congestion": "low"},
           "geometry": {
             "type": "LineString",
-            "coordinates":
-                primaryCoords.map((p) => [p.longitude, p.latitude]).toList()
+            "coordinates": primaryCoords.map((p) => [p.longitude, p.latitude]).toList()
           },
         });
       }
@@ -717,71 +626,83 @@ class MapProvider extends ChangeNotifier {
         final bool isWalking = currentNavMode == 'walking';
 
         if (isWalking) {
-          await controller!.addGeoJsonSource('primary-source', geoJson);
-          await controller!.addLineLayer(
-            'primary-source',
-            'primary-walk-layer',
-            const LineLayerProperties(
-              lineColor: "#0A84FF", // Neon Blue Highlight
-              lineWidth: 6.5, // Thicker to cover grey lines
-              lineCap: "round",
-              lineJoin: "round",
-              lineDasharray: [0.01, 2.0], // Safe values for circular dots
-            ),
-            belowLayerId: 'nav_puck_layer',
-          );
+          try {
+            // 🚀 MEMORY FIX: Try injecting data into existing buffer first
+            await controller!.setGeoJsonSource('primary-source', geoJson);
+          } catch (_) {
+            // Fallback: Buffer doesn't exist, create it once
+            await controller!.addGeoJsonSource('primary-source', geoJson);
+            await controller!.addLineLayer(
+              'primary-source',
+              'primary-walk-layer',
+              const LineLayerProperties(
+                lineColor: "#0A84FF", // Neon Blue Highlight
+                lineWidth: 6.5, // Thicker to cover grey lines
+                lineCap: "round",
+                lineJoin: "round",
+                lineDasharray: [0.01, 2.0], // Safe values for circular dots
+              ),
+              belowLayerId: 'nav_puck_layer',
+            );
+          }
         } else {
-          await controller!.addGeoJsonSource('route-source-0', geoJson);
+          try {
+            // 🚀 MEMORY FIX: Try injecting data into existing buffer first
+            await controller!.setGeoJsonSource('route-source-0', geoJson);
+          } catch (_) {
+            // Fallback: Buffer doesn't exist, create it once
+            await controller!.addGeoJsonSource('route-source-0', geoJson);
 
-          // 1. BOTTOM: Casing (Deep shadow to give height/3D effect)
-          await controller!.addLineLayer(
-            "route-source-0",
-            "primary-casing",
-            const LineLayerProperties(
-              lineColor: "#001D4A", // Very dark navy blue
-              lineWidth: 10.0,
-              lineCap: "round",
-              lineJoin: "round",
-            ),
-            belowLayerId: 'nav_puck_layer',
-          );
+            // 1. BOTTOM: Casing (Deep shadow to give height/3D effect)
+            await controller!.addLineLayer(
+              "route-source-0",
+              "primary-casing",
+              const LineLayerProperties(
+                lineColor: "#001D4A", // Very dark navy blue
+                lineWidth: 10.0,
+                lineCap: "round",
+                lineJoin: "round",
+              ),
+              belowLayerId: 'nav_puck_layer',
+            );
 
-          // 2. MIDDLE: Core (Solid Neon Blue or Traffic Colors)
-          await controller!.addLineLayer(
-            "route-source-0",
-            "primary-core",
-            const LineLayerProperties(
-              lineColor: [
-                "match",
-                ["get", "congestion"],
-                "severe", "#8B0000",
-                "heavy", "#FF0000",
-                "moderate", "#FFA500",
-                "low", "#0A84FF", // Apple Neon Blue
-                "#0A84FF" // Default
-              ],
-              lineWidth: 6.0,
-              lineCap: "round",
-              lineJoin: "round",
-            ),
-            belowLayerId: 'nav_puck_layer',
-          );
+            // 2. MIDDLE: Core (Solid Neon Blue or Traffic Colors)
+            await controller!.addLineLayer(
+              "route-source-0",
+              "primary-core",
+              const LineLayerProperties(
+                lineColor: [
+                  "match",
+                  ["get", "congestion"],
+                  "severe", "#8B0000",
+                  "heavy", "#FF0000",
+                  "moderate", "#FFA500",
+                  "low", "#0A84FF", // Apple Neon Blue
+                  "#0A84FF" // Default
+                ],
+                lineWidth: 6.0,
+                lineCap: "round",
+                lineJoin: "round",
+              ),
+              belowLayerId: 'nav_puck_layer',
+            );
 
-          // 3. TOP: Shine (Ultra-thin 1px Sky Blue reflection perfectly blending)
-          await controller!.addLineLayer(
-            "route-source-0",
-            "primary-shine",
-            const LineLayerProperties(
-              lineColor: "#AEE5FF", // A slightly softer, more blended sky blue
-              lineWidth: 1.5,
-              lineOpacity: 0.9,
-              lineCap: "round",
-              lineJoin: "round",
-              lineBlur:
-                  1.0, // Adds a tiny glow effect to blend the edges seamlessly into the core
-            ),
-            belowLayerId: 'nav_puck_layer',
-          );
+            // 3. TOP: Shine (Ultra-thin 1px Sky Blue reflection perfectly blending)
+            await controller!.addLineLayer(
+              "route-source-0",
+              "primary-shine",
+              const LineLayerProperties(
+                lineColor: "#AEE5FF", // A slightly softer, more blended sky blue
+                lineWidth: 1.5,
+                lineOpacity: 0.9,
+                lineCap: "round",
+                lineJoin: "round",
+                lineBlur:
+                    1.0, // Adds a tiny glow effect to blend the edges seamlessly into the core
+              ),
+              belowLayerId: 'nav_puck_layer',
+            );
+          }
         }
       } catch (e) {
         debugPrint("🗺️ PRIMARY ROUTE DRAW ERROR: $e");
@@ -904,32 +825,31 @@ class MapProvider extends ChangeNotifier {
 
         // Draw the connectors if any gaps exist
         if (connectorLines.isNotEmpty) {
-          try {
-            await controller!.removeLayer('connectors-layer');
-          } catch (_) {}
-          try {
-            await controller!.removeSource('connectors-source');
-          } catch (_) {}
-
-          await controller!.addGeoJsonSource("connectors-source", {
+          final geoJson = {
             "type": "Feature",
             "geometry": {
               "type": "MultiLineString",
               "coordinates": connectorLines,
             },
-          });
-
-          await controller!.addLineLayer(
-            "connectors-source",
-            "connectors-layer",
-            const LineLayerProperties(
-              lineColor: "#0A84FF", // Match the primary route color
-              lineWidth: 3.5,
-              lineCap: "round",
-              lineJoin: "round",
-              lineDasharray: [0.0, 2.5], // Premium circular dots
-            ),
-          );
+          };
+          try {
+            // 🚀 MEMORY FIX: Try injecting data into existing buffer first
+            await controller!.setGeoJsonSource('connectors-source', geoJson);
+          } catch (_) {
+            // Fallback: Buffer doesn't exist, create it once
+            await controller!.addGeoJsonSource("connectors-source", geoJson);
+            await controller!.addLineLayer(
+              "connectors-source",
+              "connectors-layer",
+              const LineLayerProperties(
+                lineColor: "#0A84FF", // Match the primary route color
+                lineWidth: 3.5,
+                lineCap: "round",
+                lineJoin: "round",
+                lineDasharray: [0.0, 2.5], // Premium circular dots
+              ),
+            );
+          }
         }
       } catch (e) {
         debugPrint("⚠️ Failed to draw route connectors: $e");
@@ -978,8 +898,6 @@ class MapProvider extends ChangeNotifier {
 
       final String sourceId = 'time-tag-source-$i';
       final String layerId = 'time-tag-layer-$i';
-      final String imageId =
-          'time-tag-image-$i-${DateTime.now().millisecondsSinceEpoch}';
 
       LatLng midpoint;
       if (isPrimary) {
@@ -988,42 +906,42 @@ class MapProvider extends ChangeNotifier {
         midpoint = _getBestAlternateTagLocation(allRoutes[0], routePoints);
       }
 
+      final geoJson = {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [midpoint.longitude, midpoint.latitude],
+        },
+      };
+
       try {
-        // 1. Generate and Add the Image
-        final Uint8List imageBytes = await _generateETAPillImage(
-          timeString,
-          isPrimary,
-        );
-        await controller!.addImage(imageId, imageBytes);
+        try {
+          // 🚀 MEMORY FIX: Try injecting data into existing buffer first
+          await controller!.setGeoJsonSource(sourceId, geoJson);
+        } catch (_) {
+          // Fallback: Buffer doesn't exist, create it once
+          // 1. Add Point Source
+          await controller!.addGeoJsonSource(sourceId, geoJson);
 
-        // 2. Add Point Source
-        await controller!.addGeoJsonSource(sourceId, {
-          "type": "Feature",
-          "geometry": {
-            "type": "Point",
-            "coordinates": [midpoint.longitude, midpoint.latitude],
-          },
-        });
-
-        // 3. Add Symbol Layer (ICON ONLY, NO TEXT)
-        await controller!.addSymbolLayer(
-          sourceId,
-          layerId,
-          SymbolLayerProperties(
-            iconImage: imageId,
-            iconSize: 0.35, // Scale down the high-res image
-            iconAnchor: "bottom",
-            iconOffset: [0, -1.0],
-            symbolSortKey:
-                i, // 🚨 THE FIX: MapLibre prioritizes LOWER numbers (i=0 is top priority)
-            symbolPlacement: "point",
-            // 🚨 SELECTIVE ANTI-COLLISION:
-            // Main Route (i==0): Force it to ALWAYS show, ignoring overlaps.
-            // Alternate Routes (i>0): Hide gracefully if they collide.
-            iconAllowOverlap: isPrimary ? true : false,
-            iconIgnorePlacement: isPrimary ? true : false,
-          ),
-        );
+          // 2. Add Native Text Symbol Layer (ZERO MEMORY LEAK)
+          await controller!.addSymbolLayer(
+            sourceId,
+            layerId,
+            SymbolLayerProperties(
+              textField: timeString, // Automatically renders text without images!
+              textSize: 15.0,
+              textColor: "#FFFFFF",
+              textHaloColor: isPrimary ? "#0A84FF" : "#2C2C2E", // Creates a glowing border effect acting as a background
+              textHaloWidth: 2.0,
+              textAnchor: "bottom",
+              textOffset: const Offset(0, -1.0),
+              symbolSortKey: i,
+              symbolPlacement: "point",
+              textAllowOverlap: isPrimary ? true : false,
+              textIgnorePlacement: isPrimary ? true : false,
+            ),
+          );
+        }
       } catch (e) {
         debugPrint("🗺️ ETA TAG DRAW ERROR for index $i: $e");
       }
@@ -1034,54 +952,20 @@ class MapProvider extends ChangeNotifier {
 
   Future<void> clearNativeRoute({bool preserveState = false}) async {
     if (controller != null && _drawnRoutesCount > 0) {
-      // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
-      try {
-        await controller!.removeLayer('primary-casing');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-core');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-shine');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-walk-layer');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('connectors-layer');
-      } catch (_) {}
-
+      // 🚀 PARALLEL WEBGL CLEAUP: Fire all bridge calls simultaneously
+      final emptyGeoJson = {"type": "FeatureCollection", "features": []};
+      List<Future> cleanupTasks = [
+        controller!.setGeoJsonSource('primary-source', emptyGeoJson).catchError((_) {}),
+        controller!.setGeoJsonSource('connectors-source', emptyGeoJson).catchError((_) {}),
+      ];
       for (int i = 0; i < 5; i++) {
-        try {
-          await controller!.removeLayer('route-layer-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('alt-walk-layer-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('time-tag-layer-$i');
-        } catch (_) {}
+        cleanupTasks.add(controller!.setGeoJsonSource('route-source-$i', emptyGeoJson).catchError((_) {}));
+        cleanupTasks.add(controller!.setGeoJsonSource('alt-source-$i', emptyGeoJson).catchError((_) {}));
+        cleanupTasks.add(controller!.setGeoJsonSource('time-tag-source-$i', emptyGeoJson).catchError((_) {}));
       }
+      await Future.wait(cleanupTasks);
 
-      // 2. SECURE SOURCE CLEANUP (Only safe to remove after layers are dead)
-      try {
-        await controller!.removeSource('primary-source');
-      } catch (_) {}
-      try {
-        await controller!.removeSource('connectors-source');
-      } catch (_) {}
 
-      for (int i = 0; i < 5; i++) {
-        try {
-          await controller!.removeSource('route-source-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('alt-source-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('time-tag-source-$i');
-        } catch (_) {}
-      }
 
       _drawnRoutesCount = 0;
       if (!preserveState) {
@@ -1089,13 +973,9 @@ class MapProvider extends ChangeNotifier {
         _currentRouteResult = null;
         _lastRouteData = null;
 
-        // 🚨 Deactivate Focus Mode & Hide Puck
-        await _toggleFocusModeLayers(false);
-        await hideNavigationPuck();
 
         isActiveNavigation = false; // Reset navigation state
         engine.setUIState(MapUIState.idle);
-        await updatePuckVisibility();
 
         // 🚨 Cinematic Camera Reset
         if (controller != null && currentLocation != null) {
@@ -1133,54 +1013,20 @@ class MapProvider extends ChangeNotifier {
     _liveLocationSub = null;
     // 1. Clear MapLibre Native Layers (Lines AND ETA Pills)
     if (controller != null) {
-      // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
-      try {
-        await controller!.removeLayer('primary-casing');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-core');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-shine');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-walk-layer');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('connectors-layer');
-      } catch (_) {}
-
+      // 🚀 PARALLEL WEBGL CLEAUP: Fire all bridge calls simultaneously
+      final emptyGeoJson = {"type": "FeatureCollection", "features": []};
+      List<Future> cleanupTasks = [
+        controller!.setGeoJsonSource('primary-source', emptyGeoJson).catchError((_) {}),
+        controller!.setGeoJsonSource('connectors-source', emptyGeoJson).catchError((_) {}),
+      ];
       for (int i = 0; i < 5; i++) {
-        try {
-          await controller!.removeLayer('route-layer-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('alt-walk-layer-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('time-tag-layer-$i');
-        } catch (_) {}
+        cleanupTasks.add(controller!.setGeoJsonSource('route-source-$i', emptyGeoJson).catchError((_) {}));
+        cleanupTasks.add(controller!.setGeoJsonSource('alt-source-$i', emptyGeoJson).catchError((_) {}));
+        cleanupTasks.add(controller!.setGeoJsonSource('time-tag-source-$i', emptyGeoJson).catchError((_) {}));
       }
+      await Future.wait(cleanupTasks);
 
-      // 2. SECURE SOURCE CLEANUP (Only safe to remove after layers are dead)
-      try {
-        await controller!.removeSource('primary-source');
-      } catch (_) {}
-      try {
-        await controller!.removeSource('connectors-source');
-      } catch (_) {}
 
-      for (int i = 0; i < 5; i++) {
-        try {
-          await controller!.removeSource('route-source-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('alt-source-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('time-tag-source-$i');
-        } catch (_) {}
-      }
 
       // Also clear destination pin circle if it exists
       await clearNativeDestinationPin();
@@ -1194,7 +1040,7 @@ class MapProvider extends ChangeNotifier {
       } catch (_) {}
 
       // Remove the manual dropped pin or search symbol layer
-      await engine.layers?.removeSearchPin();
+      // await engine.layers?.removeSearchPin(); // Deprecated: relying on native destination pin
     }
 
     // 2. Reset all routing state variables to null/empty
@@ -1209,7 +1055,6 @@ class MapProvider extends ChangeNotifier {
     _isDestinationSelected = false;
     isActiveNavigation = false;
     engine.setUIState(MapUIState.idle);
-    await updatePuckVisibility();
     currentNavMode = 'driving';
 
     // 🧭 State Machine: Reset to idle
@@ -1238,9 +1083,6 @@ class MapProvider extends ChangeNotifier {
           .catchError((_) {});
     }
 
-    // 🌟 Explicitly Restore All Dimmed/Hidden Background Layers & Hide Puck
-    await _toggleFocusModeLayers(false);
-    await hideNavigationPuck();
 
     // 3. Notify the UI to rebuild (This brings the Search Bar back!)
     notifyListeners();
@@ -1501,10 +1343,6 @@ class MapProvider extends ChangeNotifier {
   StreamSubscription<Position>? _liveLocationSub;
 
   MapProvider() {
-    engine.state.addListener(() {
-      notifyListeners();
-    });
-
     engine.navigation.voiceInstruction.addListener(() {
       final text = engine.navigation.voiceInstruction.value;
       if (text != null) {
@@ -1543,12 +1381,6 @@ class MapProvider extends ChangeNotifier {
     engine.mapUIState.addListener(() {
       final state = engine.mapUIState.value;
       _toggleFuelStationsVisibility(state == MapUIState.navigating);
-      if ((state == MapUIState.navigating || state == MapUIState.routeDrawn) &&
-          currentLocation != null) {
-        // Show initial puck before the first native location update fires
-        updateNavigationPuck(currentLocation!,
-            engine.locService?.currentPosition?.heading ?? 0.0);
-      }
       notifyListeners();
     });
 
@@ -1629,7 +1461,7 @@ class MapProvider extends ChangeNotifier {
     if (!_isMapReady) return;
 
     await cancelAndClearRoute();
-    await drawDroppedPin(latLng);
+    await addNativeDestinationPin(latLng);
 
     AppHaptics.lightImpact();
 
@@ -1675,10 +1507,6 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> drawDroppedPin(LatLng latLng) async {
-    await addNativeDestinationPin(latLng);
-  }
-
   Future<void> clearSearchSession(BuildContext context) async {
     targetDestination = null;
     setDestinationSelected(false);
@@ -1688,7 +1516,7 @@ class MapProvider extends ChangeNotifier {
       await RouteVisualizer.clearRoute(controller);
 
       // 2. Remove the manual dropped pin or search symbol layer
-      await engine.layers?.removeSearchPin();
+      // await engine.layers?.removeSearchPin(); // Deprecated: relying on native destination pin
 
       await clearNativeDestinationPin();
     }
@@ -1902,13 +1730,13 @@ class MapProvider extends ChangeNotifier {
     bool hasChanged = false;
 
     if (_currentMapCenter == null ||
-        (_currentMapCenter!.latitude - center.latitude).abs() > 0.0001 ||
-        (_currentMapCenter!.longitude - center.longitude).abs() > 0.0001) {
+        (_currentMapCenter!.latitude - center.latitude).abs() > 0.005 ||
+        (_currentMapCenter!.longitude - center.longitude).abs() > 0.005) {
       _currentMapCenter = center;
       hasChanged = true;
     }
 
-    if ((_currentZoomLevel - zoom).abs() > 0.1) {
+    if ((_currentZoomLevel - zoom).abs() > 0.5) {
       _currentZoomLevel = zoom;
       hasChanged = true;
     }
@@ -2157,8 +1985,8 @@ class MapProvider extends ChangeNotifier {
 
     isFlying = true;
     try {
-      await engine.layers?.removeSearchPin();
-      await engine.layers?.showSearchPin(target);
+      // await engine.layers?.removeSearchPin();
+      // await engine.layers?.showSearchPin(target);
 
       await controller?.animateCamera(CameraUpdate.newLatLngZoom(target, 16.0));
 
@@ -2400,70 +2228,7 @@ class MapProvider extends ChangeNotifier {
   }
 }
 
-Future<Uint8List> _generateETAPillImage(String text, bool isPrimary) async {
-  final ui.PictureRecorder recorder = ui.PictureRecorder();
-  final Canvas canvas = Canvas(recorder);
 
-  // 🚨 TRANSLUCENT GLASS EFFECT
-  // Apple Blue for primary, Dark Grey for alternates, both slightly transparent
-  final Color bgColor = isPrimary
-      ? const Color(0xFF0A84FF).withValues(alpha: 0.85)
-      : const Color(0xFF2C2C2E).withValues(alpha: 0.85);
-
-  // High-res text for crisp rendering
-  final TextSpan span = TextSpan(
-    text: text,
-    style: const TextStyle(
-      color: Colors.white,
-      fontSize: 36,
-      fontWeight: FontWeight.bold,
-    ),
-  );
-  final TextPainter tp = TextPainter(
-    text: span,
-    textDirection: TextDirection.ltr,
-  );
-  tp.layout();
-
-  // Padding
-  const double paddingX = 28.0; // Slightly wider for the perfect pill look
-  const double paddingY = 16.0;
-  final double width = tp.width + (paddingX * 2);
-  final double height = tp.height + (paddingY * 2);
-
-  // 🚨 PERFECT PILL SHAPE (Radius = height / 2)
-  final RRect rrect = RRect.fromLTRBR(
-    0,
-    0,
-    width,
-    height,
-    Radius.circular(height / 2),
-  );
-
-  // Draw translucent background
-  canvas.drawRRect(rrect, Paint()..color = bgColor);
-
-  // Draw subtle glassy border
-  canvas.drawRRect(
-    rrect,
-    Paint()
-      ..color = Colors.white.withValues(alpha: 0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5,
-  );
-
-  // Center the text
-  tp.paint(canvas, Offset((width - tp.width) / 2, (height - tp.height) / 2));
-
-  final ui.Image image = await recorder.endRecording().toImage(
-        width.toInt(),
-        height.toInt(),
-      );
-  final ByteData? byteData = await image.toByteData(
-    format: ui.ImageByteFormat.png,
-  );
-  return byteData!.buffer.asUint8List();
-}
 
 // Fast squared distance for UI heuristics
 double _fastSquaredDistance(LatLng p1, LatLng p2) {

@@ -28,12 +28,6 @@ class MapLayerController {
   static double _safeSize(double? value, double fallback) =>
       value != null && value > 0 ? value : fallback;
 
-  // Red Pulsing Dot layers
-  static const String _redGlowLayerId = "apple-premium-red-glow";
-  static const String _redStaticAuraLayerId = "apple-premium-red-static-aura";
-  static const String _redBorderLayerId = "apple-premium-red-border";
-  static const String _redCoreLayerId = "apple-premium-red-core";
-
   static const String _routeSourceId = "active-route-source";
   static const String _routeCasingLayerId = "active-route-casing";
   static const String _routeLineLayerId = "active-route-line";
@@ -144,29 +138,27 @@ class MapLayerController {
       final geoJson = _buildRouteGeoJson(geoJsonCoordinates);
 
       if (_map == null) return;
-      await _map!.addGeoJsonSource(_routeSourceId, geoJson);
+      try {
+        // Try updating existing buffer first
+        await _map!.setGeoJsonSource(_routeSourceId, geoJson);
+      } catch (_) {
+        // Fallback: Buffer doesn't exist, create it once
+        await _map!.addGeoJsonSource(_routeSourceId, geoJson);
 
-      await _map!.addLineLayer(
-        _routeSourceId,
-        _routeCasingLayerId,
-        const LineLayerProperties(
+        await _map!.addLineLayer(_routeSourceId, _routeCasingLayerId, const LineLayerProperties(
           lineColor: "#111111",
           lineWidth: 8.0,
           lineJoin: "round",
           lineCap: "round",
-        ),
-      );
+        ));
 
-      await _map!.addLineLayer(
-        _routeSourceId,
-        _routeLineLayerId,
-        const LineLayerProperties(
+        await _map!.addLineLayer(_routeSourceId, _routeLineLayerId, const LineLayerProperties(
           lineColor: "#0A84FF",
           lineWidth: 5.0,
           lineJoin: "round",
           lineCap: "round",
-        ),
-      );
+        ));
+      }
 
       await _map!.animateCamera(CameraUpdate.newLatLngBounds(
           _calculateBounds(points),
@@ -184,13 +176,7 @@ class MapLayerController {
   Future<void> removeRoute() async {
     if (_map == null) return;
     try {
-      if (layerExists(_routeLineLayerId)) {
-        await _map!.removeLayer(_routeLineLayerId);
-      }
-      if (layerExists(_routeCasingLayerId)) {
-        await _map!.removeLayer(_routeCasingLayerId);
-      }
-      await _map!.removeSource(_routeSourceId);
+      await _map!.setGeoJsonSource(_routeSourceId, {"type": "FeatureCollection", "features": []});
     } catch (_) {}
   }
 
@@ -226,17 +212,21 @@ class MapLayerController {
       });
 
       if (_map == null) return;
-      await _map!.addGeoJsonSource(_pinSourceId, geoJson);
+      try {
+        await _map!.setGeoJsonSource(_pinSourceId, geoJson);
+      } catch (_) {
+        await _map!.addGeoJsonSource(_pinSourceId, geoJson);
 
-      await _map!.addSymbolLayer(
-        _pinSourceId,
-        "custom-pin-layer",
-        const SymbolLayerProperties(
-          iconImage: 'custom_pin',
-          iconAnchor: 'bottom',
-          iconSize: 0.35,
-        ),
-      );
+        await _map!.addSymbolLayer(
+          _pinSourceId,
+          "custom-pin-layer",
+          const SymbolLayerProperties(
+            iconImage: 'custom_pin',
+            iconAnchor: 'bottom',
+            iconSize: 0.35,
+          ),
+        );
+      }
     } catch (e) {
       debugPrint("⚠️ Pin Drawing Failed: $e");
     }
@@ -252,39 +242,43 @@ class MapLayerController {
       });
 
       if (_map == null) return;
-      await _map!.addGeoJsonSource(_pinSourceId, geoJson);
+      try {
+        await _map!.setGeoJsonSource(_pinSourceId, geoJson);
+      } catch (_) {
+        await _map!.addGeoJsonSource(_pinSourceId, geoJson);
 
-      await _map!.addCircleLayer(
-          _pinSourceId,
-          _blueGlowLayerId,
-          CircleLayerProperties(
-              circleColor: _safeColorString(hexColor, '#0A84FF'),
-              circleOpacity: 0.3,
-              circleRadius: _safeSize(25.0, 10.0),
-              circlePitchAlignment: "map",
-              circleStrokeWidth: 0));
+        await _map!.addCircleLayer(
+            _pinSourceId,
+            _blueGlowLayerId,
+            CircleLayerProperties(
+                circleColor: _safeColorString(hexColor, '#0A84FF'),
+                circleOpacity: 0.3,
+                circleRadius: _safeSize(25.0, 10.0),
+                circlePitchAlignment: "map",
+                circleStrokeWidth: 0));
 
-      await _map!.addCircleLayer(
-          _pinSourceId,
-          _blueBorderLayerId,
-          const CircleLayerProperties(
-              circleColor: "#FFFFFF",
-              circleOpacity: 1.0,
-              circleRadius: 10.0,
-              circlePitchAlignment: "map",
-              circleStrokeWidth: 0.5,
-              circleStrokeColor: "#000000",
-              circleStrokeOpacity: 0.15));
+        await _map!.addCircleLayer(
+            _pinSourceId,
+            _blueBorderLayerId,
+            const CircleLayerProperties(
+                circleColor: "#FFFFFF",
+                circleOpacity: 1.0,
+                circleRadius: 10.0,
+                circlePitchAlignment: "map",
+                circleStrokeWidth: 0.5,
+                circleStrokeColor: "#000000",
+                circleStrokeOpacity: 0.15));
 
-      await _map!.addCircleLayer(
-          _pinSourceId,
-          _blueCoreLayerId,
-          CircleLayerProperties(
-              circleColor: _safeColorString(hexColor, '#0A84FF'),
-              circleOpacity: 1.0,
-              circleRadius: _safeSize(7.0, 4.0),
-              circlePitchAlignment: "map",
-              circleStrokeWidth: 0));
+        await _map!.addCircleLayer(
+            _pinSourceId,
+            _blueCoreLayerId,
+            CircleLayerProperties(
+                circleColor: _safeColorString(hexColor, '#0A84FF'),
+                circleOpacity: 1.0,
+                circleRadius: _safeSize(7.0, 4.0),
+                circlePitchAlignment: "map",
+                circleStrokeWidth: 0));
+      }
 
       // The pulsing glow will be handled via a Flutter CustomPaint Overlay
       // in the widget tree to avoid method channel flooding.
@@ -367,19 +361,8 @@ class MapLayerController {
   Future<void> removeSearchPin() async {
     if (_map == null) return;
     try {
-      await _map!.removeLayer(_blueCoreLayerId);
-      await _map!.removeLayer(_blueBorderLayerId);
-      await _map!.removeLayer(_blueGlowLayerId);
-      
-      await _map!.removeLayer("custom-pin-layer");
-      await _map!.removeLayer(_redCoreLayerId);
-      await _map!.removeLayer(_redBorderLayerId);
-      await _map!.removeLayer(_redStaticAuraLayerId);
-      await _map!.removeLayer(_redGlowLayerId);
-      
-      await _map!.removeSource(_pinSourceId);
+      await _map!.setGeoJsonSource(_pinSourceId, {"type": "FeatureCollection", "features": []});
     } catch (_) {}
-
     try {
       await _restoreContextualFocus();
     } catch (_) {}

@@ -283,7 +283,10 @@ class PlaceEnrichmentService {
                   (comp) => comp['types'].contains('neighborhood'),
                   orElse: () => {'short_name': ''})['short_name'] ??
               '';
-          if (name.isEmpty) name = result['formatted_address'].split(',').first;
+          if (name.isEmpty) {
+             // 🚀 CRITICAL FIX: Prevent Null Pointer Crash on empty map zones
+             name = (result['formatted_address'] as String?)?.split(',').first ?? 'Dropped Pin';
+          }
         }
 
         return PlaceModel(

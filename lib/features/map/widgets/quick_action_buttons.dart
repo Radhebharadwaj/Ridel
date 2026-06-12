@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
+import 'package:ridel/core/services/global_location_service.dart';
 
 import 'package:ridel/features/map/map_engine/map_engine.dart';
 import 'package:ridel/features/map/models/place_model.dart';
@@ -26,36 +27,20 @@ class QuickActionButtons extends StatefulWidget {
   State<QuickActionButtons> createState() => QuickActionButtonsState();
 }
 
-class QuickActionButtonsState extends State<QuickActionButtons>
-    with SingleTickerProviderStateMixin {
+class QuickActionButtonsState extends State<QuickActionButtons> {
   PlaceModel? _homePlace;
   PlaceModel? _workPlace;
   bool _isLoading = true;
-
-  // 🎯 Animation controller for the primary action button morph
-  late AnimationController _morphController;
 
   @override
   void initState() {
     super.initState();
     refreshData();
-
-    _morphController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
-    _morphController.forward(); // Animate in on first build
-  }
-
-  @override
-  void dispose() {
-    _morphController.dispose();
-    super.dispose();
   }
 
   // 🚀 Call this method to forcefully reload buttons when a place is saved!
   Future<void> refreshData() async {
-    if (!mounted) return;
+    if (!context.mounted) return;
     setState(() => _isLoading = true);
 
     final user = Supabase.instance.client.auth.currentUser;
@@ -191,11 +176,6 @@ class QuickActionButtonsState extends State<QuickActionButtons>
   // 🎯 PRIMARY ACTION BUTTON HANDLERS (State Machine Driven)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  void _onDirectionsTap(MapProvider provider) {
-    AppHaptics.heavyImpact();
-    provider.calculateAndDrawNativeRoute(context, provider.currentNavMode);
-  }
-
   void _onStartNavTap(MapProvider provider) {
     AppHaptics.heavyImpact();
     provider.startActiveNavigation(context);
@@ -216,15 +196,14 @@ class QuickActionButtonsState extends State<QuickActionButtons>
       child: _isLoading
           ? const SizedBox(
               height: 86, child: Center(child: CupertinoActivityIndicator()))
-          : Consumer<MapProvider>(
-              builder: (context, provider, _) {
-                final uiState = provider.currentUIState;
-
+          : Selector<MapProvider, MapUIState>(
+              selector: (context, provider) => provider.currentUIState,
+              builder: (context, uiState, _) {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // ─── Primary Action Button (State-Morphing) ───
-                    _buildPrimaryActionButton(uiState, provider, isDark),
+                    _buildPrimaryActionButton(uiState, context, isDark),
 
                     // ─── Home / Work / Add Row (hidden during navigation) ───
                     if (uiState == MapUIState.idle)
@@ -247,9 +226,6 @@ class QuickActionButtonsState extends State<QuickActionButtons>
                                         : (isDark
                                             ? Colors.white70
                                             : Colors.black87),
-                                    bgColor: isDark
-                                        ? Colors.white.withValues(alpha: 0.08)
-                                        : Colors.black.withValues(alpha: 0.05),
                                     size: 52.0,
                                     iconSize: 24.0,
                                     onTap: _handleHomeTap,
@@ -279,9 +255,6 @@ class QuickActionButtonsState extends State<QuickActionButtons>
                                         : (isDark
                                             ? Colors.white70
                                             : Colors.black87),
-                                    bgColor: isDark
-                                        ? Colors.white.withValues(alpha: 0.08)
-                                        : Colors.black.withValues(alpha: 0.05),
                                     size: 52.0,
                                     iconSize: 24.0,
                                     onTap: _handleWorkTap,
@@ -304,9 +277,6 @@ class QuickActionButtonsState extends State<QuickActionButtons>
                                   icon: CupertinoIcons.add,
                                   iconColor:
                                       isDark ? Colors.white : Colors.black87,
-                                  bgColor: isDark
-                                      ? Colors.white.withValues(alpha: 0.08)
-                                      : Colors.black.withValues(alpha: 0.05),
                                   size: 52.0,
                                   iconSize: 26.0,
                                   onTap: _handleAddPlaceTap,
@@ -336,7 +306,7 @@ class QuickActionButtonsState extends State<QuickActionButtons>
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildPrimaryActionButton(
-      MapUIState uiState, MapProvider provider, bool isDark) {
+      MapUIState uiState, BuildContext context, bool isDark) {
     // Don't show anything in idle state — the Home/Work/Add row IS the UI
     if (uiState == MapUIState.idle) {
       return const SizedBox.shrink();
@@ -348,19 +318,34 @@ class QuickActionButtonsState extends State<QuickActionButtons>
           icon: CupertinoIcons.arrow_turn_up_right,
           label: 'Directions',
           gradient: const [Color(0xFF007AFF), Color(0xFF00BFFF)],
-          onTap: () => _onDirectionsTap(provider),
+          onTap: () async {
+            AppHaptics.heavyImpact();
+
+            // 1. Force location refresh to prevent silent routing failures
+            final locService =
+                Provider.of<GlobalLocationService>(context, listen: false);
+            if (locService.currentPosition == null) {
+              await locService.forceRefreshLocation();
+            }
+
+            // 2. Calculate and draw the route
+            if (!context.mounted) return;
+            final provider = Provider.of<MapProvider>(context, listen: false);
+            await provider.calculateAndDrawNativeRoute(
+                context, provider.currentNavMode);
+          },
         ),
       MapUIState.routeDrawn => _ActionButtonConfig(
           icon: CupertinoIcons.play_fill,
           label: 'Start',
           gradient: const [Color(0xFF007AFF), Color(0xFF0055FF)],
-          onTap: () => _onStartNavTap(provider),
+          onTap: () => _onStartNavTap(context.read<MapProvider>()),
         ),
       MapUIState.navigating => _ActionButtonConfig(
           icon: CupertinoIcons.xmark,
           label: 'End',
           gradient: const [Color(0xFF2C2C2E), Color(0xFF1C1C1E)],
-          onTap: () => _onStopNavTap(provider),
+          onTap: () => _onStopNavTap(context.read<MapProvider>()),
         ),
       MapUIState.idle => _ActionButtonConfig(
           icon: CupertinoIcons.location_fill,
@@ -439,7 +424,6 @@ class QuickActionButtonsState extends State<QuickActionButtons>
     required IconData icon,
     required VoidCallback onTap,
     Color iconColor = Colors.white,
-    Color? bgColor,
     double size = 44.0,
     double iconSize = 20.0,
   }) {

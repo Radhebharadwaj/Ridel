@@ -9,8 +9,9 @@ import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/services/weather_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/features/map/services/weather_cache_service.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 
-import 'package:ridel/core/utils/ridel_bounce_button.dart';
+
 import 'package:intl/intl.dart';
 
 enum WeatherState { compact, expanded, full }
@@ -42,11 +43,14 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
   WeatherState _currentState = WeatherState.compact;
 
   // 🚀 OPTIMIZATION: State variables to prevent infinite API loops
+  bool _isExecutingFetch = false;
   bool _isInitialized = false;
   double? _lastLat;
   double? _lastLng;
   bool _isLoading = true;
   bool _hasError = false;
+  bool _hasFetchedWeather = false;
+  late GlobalLocationService _locService;
 
   // 🚀 OPTIMIZATION: Haversine distance formula to calculate distance in meters
   double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
@@ -95,12 +99,48 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
   @override
   void initState() {
     super.initState();
+    _locService = Provider.of<GlobalLocationService>(context, listen: false);
+    _locService.addListener(_onLocationUpdated);
+
+    WeatherService.currentWeather.addListener(_onGlobalWeatherChanged);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _resolveLocationAndFetchWeather();
+      if (_locService.currentPosition != null && !_hasFetchedWeather) {
+        _resolveLocationAndFetchWeather();
+        _hasFetchedWeather = true;
+      }
     });
   }
 
+  void _onGlobalWeatherChanged() {
+    final w = WeatherService.currentWeather.value;
+    if (w != null && mounted) {
+      setState(() {
+        _weather = w;
+        _isLoading = false;
+        _hasError = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    WeatherService.currentWeather.removeListener(_onGlobalWeatherChanged);
+    _locService.removeListener(_onLocationUpdated);
+    _hourlyScrollController.dispose();
+    super.dispose();
+  }
+
+  void _onLocationUpdated() {
+    if (_locService.currentPosition != null && !_hasFetchedWeather) {
+      _resolveLocationAndFetchWeather();
+      _hasFetchedWeather = true;
+    }
+  }
+
   Future<void> _resolveLocationAndFetchWeather() async {
+    if (_isExecutingFetch) return;
+    _isExecutingFetch = true;
     final locService = Provider.of<GlobalLocationService>(context, listen: false);
 
     double? lat;
@@ -114,22 +154,14 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     }
 
     if (lat == null || lng == null) {
-      await locService.forceRefreshLocation();
-      if (!mounted) return;
-      if (locService.currentPosition != null) {
-        lat = locService.currentPosition!.latitude;
-        lng = locService.currentPosition!.longitude;
-        isMocked = locService.currentPosition!.isMocked;
-      } else {
-        // Location completely unavailable; UI stays in "Locating..." loading state
-        if (mounted) {
-          setState(() {
-            _hasError = true;
-            _isLoading = false;
-          });
-        }
-        return;
+      // Location completely unavailable; UI stays in "Locating..." loading state
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
       }
+      return;
     }
 
     // 🚀 OPTIMIZATION: Strict distance threshold check (3km) to prevent API spam
@@ -155,8 +187,8 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
         // EXACT GPS: Smart Cache
         data = await _weatherCache.getSmartWeather(lat, lng, locService.currentCity);
       } else {
-        // 🚀 PHASE 8: FALLBACK / GPS DENIED -> Fetch by City Name
-        data = await _weatherCache.getSmartWeatherByCity(locService.currentCity);
+        // 🚀 PHASE 8: FALLBACK / GPS DENIED -> Fetch by City Name with coordinate failsafe
+        data = await _weatherCache.getSmartWeatherByCity(locService.currentCity, lat: lat, lng: lng);
       }
 
       if (!mounted) return;
@@ -176,6 +208,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
         _hasError = true;
       });
     } finally {
+      _isExecutingFetch = false;
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -185,7 +218,12 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
   }
 
   void _handleTap() {
+    debugPrint("🟢 [WEATHER DEBUG] MAIN CARD TAPPED!");
+    debugPrint("🟢 [WEATHER DEBUG] Current State: $_currentState");
+    debugPrint("🟢 [WEATHER DEBUG] _hasError: $_hasError, _weather: ${_weather?.temp}");
+
     if (_hasError || _weather == null) {
+      debugPrint("🔴 [WEATHER DEBUG] Tap blocked! (Error or Null Weather). Retrying fetch...");
       _resolveLocationAndFetchWeather(); // Retry tap
       return;
     }
@@ -197,10 +235,13 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
         if (_currentState == WeatherState.compact) {
           _currentState = WeatherState.expanded;
           _scrollToNow();
+          debugPrint("🟢 [WEATHER DEBUG] State changed to -> EXPANDED");
         } else if (_currentState == WeatherState.expanded) {
           _currentState = WeatherState.full;
+          debugPrint("🟢 [WEATHER DEBUG] State changed to -> FULL");
         } else {
           _currentState = WeatherState.compact;
+          debugPrint("🟢 [WEATHER DEBUG] State changed to -> COMPACT");
         }
       });
     }
@@ -241,6 +282,7 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
           _currentState = (currentHeight > _expandedHeight * 0.8)
               ? WeatherState.full
               : WeatherState.expanded;
+          _scrollToNow(); // 🚀 FIX: Scroll when violently dragged open
         } else if (velocity < -300) {
           AppHaptics.lightImpact();
           _currentState = (currentHeight > _expandedHeight * 1.2)
@@ -251,8 +293,10 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
             _currentState = WeatherState.compact;
           } else if (currentHeight < (_expandedHeight + _fullHeight) / 2) {
             _currentState = WeatherState.expanded;
+            _scrollToNow(); // 🚀 FIX: Scroll when gently dragged open
           } else {
             _currentState = WeatherState.full;
+            _scrollToNow(); // 🚀 FIX: Scroll when gently dragged to full
           }
           AppHaptics.mediumImpact();
         }
@@ -284,9 +328,29 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final mapProvider = context.watch<MapProvider>();
-    if (mapProvider.currentZoomLevel < 11.0) return const SizedBox.shrink();
+    // 🚀 INP Optimization: Only listens to the zoom boolean, preventing 5000ms blur lag!
+    // Unlike the Selector widget, this allows local setState (taps) to trigger rebuilds.
+    final isZoomedIn = context.select<MapProvider, bool>(
+      (provider) => provider.currentZoomLevel >= 11.0,
+    );
 
+    if (!isZoomedIn) return const SizedBox.shrink();
+
+    return ValueListenableBuilder<WeatherModel?>(
+      valueListenable: WeatherService.currentWeather,
+      builder: (context, globalWeather, child) {
+        if (globalWeather != null) {
+          _weather = globalWeather;
+          _isLoading = false;
+          _hasError = false;
+        }
+
+        return _buildWeatherCore(context);
+      },
+    );
+  }
+
+  Widget _buildWeatherCore(BuildContext context) {
     final locService = context.read<GlobalLocationService>();
     String displayCity = locService.currentCity.isEmpty ? "Locating..." : locService.currentCity;
     String displayState = locService.currentState;
@@ -301,9 +365,11 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     }
 
     final isLightMode = Theme.of(context).brightness == Brightness.light;
+    final bool isDragging = _dragHeight != null;
     final glassColor = isLightMode 
-        ? Colors.white.withValues(alpha: 0.65)
-        : const Color(0xFF0B0E17).withValues(alpha: 0.75);
+        ? Colors.white.withValues(alpha: isDragging ? 0.95 : 0.65)
+        : const Color(0xFF0B0E17).withValues(alpha: isDragging ? 0.95 : 0.75);
+
     final borderColor = isLightMode
         ? Colors.white.withValues(alpha: 0.9)
         : Colors.white.withValues(alpha: 0.1);
@@ -311,32 +377,24 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     // 🚀 OPTIMIZATION: Dynamic max width instead of hardcoded 340 to fix overflow
     double maxWidth = MediaQuery.sizeOf(context).width - 32;
 
-    return ValueListenableBuilder<WeatherModel?>(
-      valueListenable: WeatherService.currentWeather,
-      builder: (context, globalWeather, child) {
-        if (globalWeather != null) {
-          _weather = globalWeather;
-          _isLoading = false;
-          _hasError = false;
-        }
+    // 🚀 CRITICAL FIX: Removed ValueListenableBuilder to prevent double-rendering.
+    // Rely exclusively on the synced local `_weather` state.
+    final activeWeather = _weather;
+    final bool showLoading = _isLoading && activeWeather == null;
 
-        // 🚀 NEW: Handled Error & Loading States smoothly
-    if (_isLoading || _hasError || _weather == null) {
-      return RidelBounceButton(
-          onTap: () async {
-            if (_hasError || _weather == null) {
-              // 🚀 PHASE 8: Interactive Permission Hook
-              bool granted = await locService.requireLocationForMapServices(context);
-              if (!mounted) return;
-              if (granted) {
-                if (mounted) setState(() { _isLoading = true; });
-                _resolveLocationAndFetchWeather();
-              } else {
-                _resolveLocationAndFetchWeather(); // Retry city fallback
-              }
-            }
-          },
-          scaleFactor: 0.95,
+    // 🚀 NEW: Handled Error & Loading States smoothly
+    if (showLoading || _hasError || activeWeather == null) {
+      return GestureDetector(
+        onTap: () async {
+          debugPrint("🟡 [WEATHER DEBUG] FALLBACK BUTTON TAPPED!");
+          if (_hasError || activeWeather == null) {
+            AppHaptics.lightImpact();
+            if (mounted) setState(() { _isLoading = true; _hasError = false; });
+            await _resolveLocationAndFetchWeather();
+          }
+        },
+        behavior: HitTestBehavior.opaque,
+        child: PointerInterceptor(
           child: Container(
             width: _compactWidth,
             height: _compactHeight,
@@ -344,136 +402,82 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 isLightMode 
-                  ? BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 32,
-                      spreadRadius: 0,
-                      offset: const Offset(0, 12))
-                  : BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      blurRadius: 24,
-                      offset: const Offset(0, 12)),
+                  ? BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 32, offset: const Offset(0, 12))
+                  : BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 24, offset: const Offset(0, 12)),
               ],
             ),
-            // 🚀 OPTIMIZATION: Wrap BackdropFilter in RepaintBoundary for performance
             child: RepaintBoundary(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(24),
                 child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: glassColor,
-                    border: Border.all(
-                        color: borderColor,
-                        width: 1.0),
-                  ),
-                  child: Center(
+                  filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: glassColor,
+                      border: Border.all(color: borderColor, width: 1.0),
+                    ),
+                    child: Center(
                       child: _isLoading 
                           ? CupertinoActivityIndicator(color: isLightMode ? Colors.black54 : Colors.white, radius: 10)
                           : Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.cloud_outlined,
-                                        color: isLightMode ? Colors.black54 : Colors.white60, size: 20),
-                                    const SizedBox(width: 4),
-                                    Text("--°",
-                                        style: GoogleFonts.inter(
-                                            color: isLightMode ? Colors.black54 : Colors.white60,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 20,
-                                            height: 1.0)),
-                                  ],
-                                ),
+                                Icon(Icons.cloud_outlined, color: isLightMode ? Colors.black54 : Colors.white60, size: 20),
                                 const SizedBox(height: 5),
-                                Text(
-                                  "Weather",
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.inter(
-                                      color: isLightMode ? Colors.black38 : Colors.white38,
-                                      fontSize: 11,
-                                      height: 1.1,
-                                      fontWeight: FontWeight.w500)),
+                                Text("Weather", style: GoogleFonts.inter(color: isLightMode ? Colors.black38 : Colors.white38, fontSize: 11, fontWeight: FontWeight.w500)),
                               ],
-                            )),
+                            )
+                    ),
+                  ),
                 ),
               ),
             ),
-            ),
           ),
-        );
-    }
+        ),
+      );
+        }
 
-    final isNight = DateTime.now().hour > 18 || DateTime.now().hour < 6;
-    double targetWidth =
-        _currentState == WeatherState.compact ? _compactWidth : maxWidth;
-    double targetHeight = _dragHeight ?? _getCurrentTargetHeight();
-    double currentRadius = _currentState == WeatherState.compact ? 24 : 35;
+        final isNight = DateTime.now().hour > 18 || DateTime.now().hour < 6;
+        double targetWidth =
+            _currentState == WeatherState.compact ? _compactWidth : maxWidth;
+        double targetHeight = _dragHeight ?? _getCurrentTargetHeight();
+        double currentRadius = _currentState == WeatherState.compact ? 24 : 35;
 
-    return TapRegion(
-        onTapOutside: (_) {
-          if (_currentState != WeatherState.compact) {
-            if (mounted) {
-              setState(() {
-                _dragHeight = null;
-                _currentState = WeatherState.compact;
-              });
-            }
-          }
-        },
-        child: MouseRegion(
+        return MouseRegion(
           cursor: SystemMouseCursors.click,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
+            onTap: () {
+              debugPrint("🟢 [WEATHER DEBUG] MAIN CARD TAPPED!");
+              _handleTap();
+            },
             onVerticalDragUpdate: _handleVerticalDragUpdate,
             onVerticalDragEnd: _handleVerticalDragEnd,
-            child: RidelBounceButton(
-              onTap: _handleTap,
-              scaleFactor: 0.95,
+            child: PointerInterceptor(
               child: AnimatedContainer(
-                duration:
-                    Duration(milliseconds: _dragHeight != null ? 50 : 650),
-                // 🚀 Apple-like native physics curve
-                curve:
-                    _dragHeight != null ? Curves.linear : Curves.fastOutSlowIn,
+                duration: Duration(milliseconds: _dragHeight != null ? 0 : 650),
+                curve: _dragHeight != null ? Curves.linear : Curves.fastOutSlowIn,
                 width: targetWidth,
                 height: targetHeight,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(currentRadius),
                   boxShadow: [
                     isLightMode
-                      ? BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 32,
-                          spreadRadius: 0,
-                          offset: const Offset(0, 12))
-                      : BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 24,
-                          offset: const Offset(0, 12)),
+                      ? BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 32, offset: const Offset(0, 12))
+                      : BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 24, offset: const Offset(0, 12)),
                     if (!isLightMode)
-                      BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4)),
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 4)),
                   ],
                 ),
-                // 🚀 OPTIMIZATION: Wrap BackdropFilter in RepaintBoundary for performance
                 child: RepaintBoundary(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(currentRadius),
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                      filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
                       child: Container(
                         decoration: BoxDecoration(
                           color: glassColor,
-                          border: Border.all(
-                              color: borderColor,
-                              width: 1.0),
+                          border: Border.all(color: borderColor, width: 1.0),
                         ),
                         child: OverflowBox(
                           maxWidth: maxWidth,
@@ -483,44 +487,39 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                             children: [
                               AnimatedOpacity(
                                 duration: const Duration(milliseconds: 200),
-                                opacity: _currentState == WeatherState.compact
-                                    ? 0.0
-                                    : 1.0,
+                                opacity: _currentState == WeatherState.compact ? 0.0 : 1.0,
                                 child: IgnorePointer(
                                   ignoring: _currentState == WeatherState.compact,
                                   child: SizedBox(
-                                      width: maxWidth,
-                                      height: _fullHeight,
-                                      child: _buildExpandedAndFullView(isNight, isLightMode, displayCity, displayState)),
+                                    width: maxWidth,
+                                    height: _fullHeight,
+                                    child: _buildExpandedAndFullView(isNight, isLightMode, displayCity, displayState),
+                                  ),
                                 ),
                               ),
-                            AnimatedOpacity(
-                              duration: const Duration(milliseconds: 200),
-                              opacity: _currentState == WeatherState.compact
-                                  ? 1.0
-                                  : 0.0,
-                              child: IgnorePointer(
-                                ignoring: _currentState != WeatherState.compact,
-                                child: SizedBox(
+                              AnimatedOpacity(
+                                duration: const Duration(milliseconds: 200),
+                                opacity: _currentState == WeatherState.compact ? 1.0 : 0.0,
+                                child: IgnorePointer(
+                                  ignoring: _currentState != WeatherState.compact,
+                                  child: SizedBox(
                                     width: _compactWidth,
                                     height: _compactHeight,
-                                    child: _buildCompactView(isNight, isLightMode)),
+                                    child: _buildCompactView(isNight, isLightMode),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-                ),
               ),
             ),
           ),
-        ),
-      );
-      },
-    );
+        );
   }
 
   Widget _buildCompactView(bool isNight, bool isLightMode) {

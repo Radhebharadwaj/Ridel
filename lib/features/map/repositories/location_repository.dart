@@ -45,25 +45,9 @@ class LocationRepository extends ChangeNotifier {
       final currentLng = currentPos.longitude;
 
       bool shouldFetchFromOla = false;
-      final hasCache = await _cache.hasCache();
+      final hasCache = await _cache.hasValidCache(currentLat, currentLng);
 
-      if (hasCache) {
-        final cachedLat = await _cache.getCachedLat();
-        final cachedLng = await _cache.getCachedLng();
-
-        if (cachedLat != null && cachedLng != null) {
-          final distance = Geolocator.distanceBetween(
-              cachedLat, cachedLng, currentLat, currentLng);
-          
-          // Trigger Condition: IF the distance is greater than 10000 meters (10 km)
-          if (distance > 10000) {
-            shouldFetchFromOla = true;
-          }
-        } else {
-          shouldFetchFromOla = true;
-        }
-      } else {
-        // OR if the cache is empty
+      if (!hasCache) {
         shouldFetchFromOla = true;
       }
 

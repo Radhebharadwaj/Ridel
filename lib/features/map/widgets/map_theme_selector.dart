@@ -84,9 +84,11 @@ class _MapThemePopup extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
-          child: Container(
+        // 🚀 CRITICAL FPS FIX: Cache the blur rasterization during animation
+        child: RepaintBoundary(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+            child: Container(
             width: 170, // Sleek, constrained width
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -129,6 +131,7 @@ class _MapThemePopup extends StatelessWidget {
               ],
             ),
           ),
+        ),
         ),
       ),
     );

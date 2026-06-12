@@ -29,16 +29,15 @@ class MapCameraController {
 
   String? _lastError;
 
-  Symbol? _userLocationPuck;
-  Circle? _userLocationHalo;
+  bool _isPuckInitialized = false;
   double _blueDotOpacity = 1.0;
 
   void setBlueDotOpacity(double opacity) {
     _blueDotOpacity = opacity;
-    if (_userLocationPuck != null && _userLocationHalo != null && _currentDotPos != null) {
+    if (_isPuckInitialized) {
       try {
-        map.updateCircle(_userLocationHalo!, CircleOptions(circleOpacity: 0.25 * opacity));
-        map.updateSymbol(_userLocationPuck!, SymbolOptions(iconOpacity: 1.0 * opacity));
+        map.setLayerProperties('user-halo-layer', CircleLayerProperties(circleOpacity: 0.25 * opacity));
+        map.setLayerProperties('user-puck-layer', SymbolLayerProperties(iconOpacity: 1.0 * opacity));
       } catch (_) {}
     }
   }
@@ -141,12 +140,7 @@ class MapCameraController {
     _blueDotTicker = null;
 
     try {
-      if (_userLocationHalo != null) {
-        map.removeCircle(_userLocationHalo!);
-      }
-      if (_userLocationPuck != null) {
-        map.removeSymbol(_userLocationPuck!);
-      }
+      map.setGeoJsonSource('user-puck-source', {"type": "FeatureCollection", "features": []});
     } catch (_) {}
   }
 
@@ -214,9 +208,7 @@ class MapCameraController {
   }
 
   void _onBlueDotTick(Duration elapsed) {
-    if (_dotLatSim == null ||
-        _userLocationPuck == null ||
-        _userLocationHalo == null) {
+    if (_dotLatSim == null || !_isPuckInitialized) {
       return;
     }
     _dotElapsedTime = elapsed.inMicroseconds / 1000000.0;
@@ -226,15 +218,15 @@ class MapCameraController {
     _currentDotPos = LatLng(lat, lng);
 
     final now = DateTime.now();
-    if (_lastDotNativeUpdate == null ||
-        now.difference(_lastDotNativeUpdate!).inMilliseconds >= 16) {
+    if (_lastDotNativeUpdate == null || now.difference(_lastDotNativeUpdate!).inMilliseconds >= 16) {
       _lastDotNativeUpdate = now;
-      try {
-        map.updateCircle(
-            _userLocationHalo!, CircleOptions(geometry: _currentDotPos));
-        map.updateSymbol(
-            _userLocationPuck!, SymbolOptions(geometry: _currentDotPos));
-      } catch (_) {}
+
+      // 🚀 120FPS FIX: Zero-overhead GeoJSON mutation instead of Annotation updates
+      final geoJson = {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [_currentDotPos!.longitude, _currentDotPos!.latitude] }
+      };
+      map.setGeoJsonSource('user-puck-source', geoJson).catchError((_) {});
     }
 
     if (_dotLatSim!.isDone(_dotElapsedTime) &&
@@ -326,17 +318,10 @@ class MapCameraController {
     _userCustomizedCamera = false;
     
     if (mode == CameraMode.explore || mode == CameraMode.transit) {
-      if (_userLocationPuck != null) {
+      if (_isPuckInitialized) {
         try {
-          map.removeSymbol(_userLocationPuck!);
+          map.setGeoJsonSource('user-puck-source', {"type": "FeatureCollection", "features": []});
         } catch (_) {}
-        _userLocationPuck = null;
-      }
-      if (_userLocationHalo != null) {
-        try {
-          map.removeCircle(_userLocationHalo!);
-        } catch (_) {}
-        _userLocationHalo = null;
       }
     }
 
@@ -531,17 +516,10 @@ class MapCameraController {
     }
 
     if (currentMode == CameraMode.explore) {
-      if (_userLocationPuck != null) {
+      if (_isPuckInitialized) {
         try {
-          map.removeSymbol(_userLocationPuck!);
+          map.setGeoJsonSource('user-puck-source', {"type": "FeatureCollection", "features": []});
         } catch (_) {}
-        _userLocationPuck = null;
-      }
-      if (_userLocationHalo != null) {
-        try {
-          map.removeCircle(_userLocationHalo!);
-        } catch (_) {}
-        _userLocationHalo = null;
       }
     }
   }
@@ -556,59 +534,60 @@ class MapCameraController {
     double targetHaloRadius = isSimulated ? 45.0 : 0.0; // Hidden when normal, expanded when GPS lost
     double targetHaloOpacity = isSimulated ? 0.15 : 0.0;
 
-    if (_userLocationPuck == null || _userLocationHalo == null) {
+    // 1. Prepare dynamic properties
+    final geoJson = {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [pos.longitude, pos.latitude] }
+    };
+
+    if (!_isPuckInitialized) {
+      // 3. Fallback: Source doesn't exist, create it once
       _currentDotPos = pos;
       try {
-        _userLocationHalo = await map.addCircle(CircleOptions(
-          geometry: pos,
-          circleRadius: targetHaloRadius,
+        await map.addGeoJsonSource('user-puck-source', geoJson);
+
+        await map.addCircleLayer('user-puck-source', 'user-halo-layer', CircleLayerProperties(
           circleColor: "#007AFF",
+          circleRadius: targetHaloRadius,
           circleOpacity: targetHaloOpacity * _blueDotOpacity,
         ));
 
-        _userLocationPuck = await map.addSymbol(SymbolOptions(
-          geometry: pos,
+        await map.addSymbolLayer('user-puck-source', 'user-puck-layer', SymbolLayerProperties(
           iconImage: "assets/images/nav_puck.png",
           iconSize: 1.0,
           iconOpacity: targetPuckOpacity * _blueDotOpacity,
           iconRotate: heading,
+          iconAllowOverlap: true,
+          iconIgnorePlacement: true,
         ));
+        _isPuckInitialized = true;
       } catch (e) {
-        debugPrint("Failed to draw custom blue dot: $e");
+        debugPrint("Failed to initialize custom puck layers: $e");
       }
       return;
     }
 
+    // 2. Update mutatable source and layer properties
+    try {
+      if (ignoreThrottle) {
+        await map.setGeoJsonSource('user-puck-source', geoJson);
+      }
+      
+      // Update opacity and rotation dynamically via layer properties instead of redrawing the symbol
+      await map.setLayerProperties('user-halo-layer', CircleLayerProperties(
+        circleRadius: targetHaloRadius,
+        circleOpacity: targetHaloOpacity * _blueDotOpacity,
+      ));
+      await map.setLayerProperties('user-puck-layer', SymbolLayerProperties(
+        iconOpacity: targetPuckOpacity * _blueDotOpacity,
+        iconRotate: heading,
+      ));
+    } catch (_) {}
+
     if (ignoreThrottle) {
       _currentDotPos = pos;
-      try {
-        await map.updateCircle(
-            _userLocationHalo!, CircleOptions(
-              geometry: pos,
-              circleRadius: targetHaloRadius,
-              circleOpacity: targetHaloOpacity * _blueDotOpacity,
-            ));
-        await map.updateSymbol(_userLocationPuck!, SymbolOptions(
-              geometry: pos,
-              iconOpacity: targetPuckOpacity * _blueDotOpacity,
-              iconRotate: heading,
-            ));
-      } catch (_) {}
       return;
     }
-
-    // Update opacity/radius even if not ignoreThrottle, as animation tick won't update those
-    try {
-      map.updateCircle(
-          _userLocationHalo!, CircleOptions(
-            circleRadius: targetHaloRadius,
-            circleOpacity: targetHaloOpacity * _blueDotOpacity,
-          ));
-      map.updateSymbol(_userLocationPuck!, SymbolOptions(
-            iconOpacity: targetPuckOpacity * _blueDotOpacity,
-            iconRotate: heading,
-          ));
-    } catch (_) {}
 
     // Continuous Frame Interpolation for Blue Dot
     final currentLat =

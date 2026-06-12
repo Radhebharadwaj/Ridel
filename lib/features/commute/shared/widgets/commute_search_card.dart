@@ -1473,6 +1473,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
                       try {
                         final mapProv = Provider.of<MapProvider>(context, listen: false);
                         if (!isFrom) {
+                          mapProv.setTargetDestination(null);
                           mapProv.clearNativeDestinationPin();
                         }
                         mapProv.stopStationNavigation();

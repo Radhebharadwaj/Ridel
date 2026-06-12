@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 class OfflineService {
   static final OfflineService _instance = OfflineService._();
@@ -40,9 +42,17 @@ class OfflineService {
   // 🚀 FIX 1: Zero-Payload Native DNS Ping instead of heavy HTTP GET
   Future<void> _performLightweightCheck() async {
     try {
-      final result = await InternetAddress.lookup('google.com');
-      _updateStatus(result.isNotEmpty && result.first.rawAddress.isNotEmpty);
-    } on SocketException catch (_) {
+      if (kIsWeb) {
+        // Web-safe check (browsers block raw sockets)
+        final response = await http.get(Uri.parse('https://clients3.google.com/generate_204'))
+            .timeout(const Duration(seconds: 3));
+        _updateStatus(response.statusCode == 204 || response.statusCode == 200);
+      } else {
+        // Native mobile check
+        final result = await InternetAddress.lookup('google.com');
+        _updateStatus(result.isNotEmpty && result.first.rawAddress.isNotEmpty);
+      }
+    } catch (_) {
       _updateStatus(false);
     }
   }

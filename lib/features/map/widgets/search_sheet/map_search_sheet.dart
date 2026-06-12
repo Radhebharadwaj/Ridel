@@ -29,12 +29,10 @@ import 'package:ridel/features/map/services/route_visualizer.dart';
 import 'package:ridel/features/map/services/route_engine_service.dart';
 import 'package:ridel/core/widgets/ridel_liquid_button.dart';
 import 'package:ridel/features/map/widgets/quick_action_buttons.dart';
-
-// 🚀 IMPORT YOUR NOTIFICATION SERVICE HERE
 import 'package:ridel/core/services/notification_service.dart';
 import 'package:ridel/core/utils/toast_service.dart';
+import 'package:ridel/core/services/saved_places_service.dart';
 
-// YE DONO FILES ISI KA HISSA HAIN (Do not change structure)
 part 'search_sheet_headers.dart';
 part 'search_sheet_views.dart';
 part 'search_sheet_premium.dart';
@@ -62,6 +60,7 @@ class MapSearchSheet extends StatefulWidget {
 
 class _MapSearchSheetState extends State<MapSearchSheet>
     with SingleTickerProviderStateMixin {
+  MapProvider? _mapProviderRef;
   final TextEditingController _searchCtrl = TextEditingController();
   final TextEditingController _originCtrl = TextEditingController();
   final TextEditingController _destCtrl = TextEditingController();
@@ -74,8 +73,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   final FocusNode _searchFocus = FocusNode();
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
-
-  // ignore: deprecated_member_use
 
   // ignore: deprecated_member_use
   final ExpansionTileController _nearbyTileCtrl = ExpansionTileController();
@@ -116,8 +113,11 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   late AnimationController _slideController;
   late Animation<Offset> _slideAnimation;
 
-  static const Color neonCyan = Color(0xFF00E5FF);
+  final ValueNotifier<bool> _isDraggingNotifier = ValueNotifier(false);
 
+  static const Color premiumBlue = Color(0xFF0A84FF);
+
+  // ignore: unused_field
   static const Map<String, Map<String, String>> _ticketBookingInfo = {
     'Lal Quila': {
       'bookingWebsite': 'https://booking.asi.ind.in',
@@ -129,12 +129,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     },
   };
 
-  double _lastScreenHeight = 0;
-  double _lastScreenWidth = 0;
   double _lastHapticExtent = -1.0;
 
   double get _safeMinSize {
-    if (!mounted) return 0.15;
+    if (!mounted) {
+      return 0.15;
+    }
     final screenSize = MediaQuery.sizeOf(context);
     final safeBottom = MediaQuery.paddingOf(context).bottom;
     final requiredHeight = 86.0 + safeBottom;
@@ -144,14 +144,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   double get _safeMidSize => 0.35;
   double get _safeMaxSize => 0.55;
 
-  // Helper to allow extensions to call setState without violating protected member rules
   void rebuildState(VoidCallback fn) {
     if (mounted) {
       setState(fn);
     }
   }
 
-  // 🚀 FIX: Centralized Premium Notification Handler
   void _showPremiumNotification(String message, {bool isError = false}) {
     if (isError) {
       ToastService.showError(context, message, title: "Error");
@@ -177,7 +175,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
             .maybeSingle();
       }
 
-      if (!mounted) return; // 🛡️ CRITICAL ASYNC SAFETY
+      if (!mounted) {
+        return;
+      }
 
       final column = type == 'HOME' ? 'home_place' : 'work_place';
       final savedPlace = data?[column];
@@ -185,7 +185,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       if (savedPlace != null && savedPlace['latitude'] != null) {
         _searchFocus.unfocus();
         if (_sheetController.isAttached) {
-          // 🍏 APPLE CURVE (easeOutCubic for natural snap)
           _safeAnimateSheet(_safeMinSize);
         }
 
@@ -194,7 +193,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
         final mapProvider = Provider.of<MapProvider>(context, listen: false);
         await mapProvider.flyToPlace(lat, lng);
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         mapProvider.setDestinationSelected(true);
         await mapProvider.calculateAndDrawNativeRoute(
             context, mapProvider.currentNavMode);
@@ -205,7 +206,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         final mapProvider = Provider.of<MapProvider>(context, listen: false);
         mapProvider.setMapSelectionMode(type);
 
-        // Collapse sheet to show the full map
         if (_sheetController.isAttached) {
           _safeAnimateSheet(_safeMinSize);
         }
@@ -228,7 +228,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-    // 🚀 FIX: iOS style fluid entrance using easeOutExpo
     _slideAnimation =
         Tween<Offset>(begin: const Offset(0, 1.2), end: Offset.zero).animate(
       CurvedAnimation(
@@ -237,55 +236,45 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       ),
     );
 
-    if (widget.isMapTabActive) unawaited(_slideController.forward());
+    if (widget.isMapTabActive) {
+      unawaited(_slideController.forward());
+    }
 
-    _searchFocus.addListener(() {
-      /* 🚀 CANCELLED THE FOCUS ASSASSIN
-      _wakeUpDragHandle();
-      if (_searchFocus.hasFocus) {
-        if (!_showSearchList) setState(() => _showSearchList = true);
-
-        try {
-          _nearbyTileCtrl.expand();
-        } catch (_) {}
-      } else {
-
-        try {
-          _nearbyTileCtrl.collapse();
-        } catch (_) {}
-        
-        final provider = Provider.of<MapProvider>(context, listen: false);
-        // ONLY revert to idle if we aren't actively looking at a selected place
-        if (provider.engine.mapUIState.value != MapUIState.placeSelected) {
-          provider.engine.setUIState(MapUIState.idle);
-        }
-      }
-      setState(() {});
-      */
-    });
+    _searchFocus.addListener(() {});
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<MapProvider>(context, listen: false)
-          .addListener(_onMapProviderUpdated);
+      if (!mounted) return;
+      _mapProviderRef = Provider.of<MapProvider>(context, listen: false);
+      _mapProviderRef?.addListener(_onMapProviderUpdated);
     });
 
     _searchCtrl.addListener(_onSearchChanged);
     unawaited(_handleGuestSessionHistory());
   }
 
-  void _wakeUpDragHandle() {
-    if (!mounted) return;
+  void _wakeUpDragHandle({bool forceReset = false}) {
+    if (!mounted) {
+      return;
+    }
     if (!_showDragHandle) {
       setState(() => _showDragHandle = true);
     }
+
+    if (!forceReset && _isDraggingNotifier.value) return;
+
     _dragHandleTimer?.cancel();
     _dragHandleTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted) setState(() => _showDragHandle = false);
+      if (mounted && !_isDraggingNotifier.value) {
+        setState(() => _showDragHandle = false);
+      }
     });
   }
 
   void _onSearchChanged() {
     _wakeUpDragHandle();
+
+    // 🚀 FIX 1: ALWAYS cancel the previous timer first!
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
 
     final currentQuery = _searchCtrl.text.trim();
 
@@ -293,8 +282,10 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       if (mounted) {
         setState(() {
           _searchResults = [];
-          _isSearching = false; // Using _isSearching as isLoading
-          if (!_showSearchList) _showSearchList = true;
+          _isSearching = false;
+          if (!_showSearchList) {
+            _showSearchList = true;
+          }
         });
       }
       return;
@@ -303,14 +294,10 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     setState(() {
       _isSearching = true;
       _showSearchList = true;
-      // Removed the aggressive _searchResults clearing to keep previous
-      // suggestions visible while the debounce timer runs and fetches new ones.
     });
 
-    _debounce?.cancel();
-
-    _debounce = Timer(const Duration(milliseconds: 500), () async {
-      debugPrint("🔍 DEBUG SEARCH: Sending query -> '$currentQuery'");
+    _debounce = Timer(const Duration(milliseconds: 300), () async {
+      if (!mounted) return; // 🚀 FIX 2: Prevent Unmounted Context Crash
       final globalLoc =
           Provider.of<GlobalLocationService>(context, listen: false);
       final pos = globalLoc.currentPosition;
@@ -318,10 +305,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
       final results = await MasterSearchService().searchPlaces(
         currentQuery,
-        userLocation: latLng, // Pass user location for parameter broadening
+        userLocation: latLng,
       );
-      debugPrint(
-          "🔍 DEBUG SEARCH: Received ${results.length} results for '$currentQuery'");
 
       if (mounted && _searchCtrl.text.trim() == currentQuery) {
         setState(() {
@@ -378,33 +363,26 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   void _handleCancelRoute(BuildContext context, MapProvider provider) {
-    // 1. Cache the ENTIRE necessary state BEFORE clearing it
     final cachedPlace = _selectedPlace;
     final cachedCoords = provider.targetDestination;
     final cachedNavMode = provider.currentNavMode;
     final wasRouteCalculated = provider.isRouteCalculated;
 
-    // 2. Clear the UI and Map
     provider.cancelAndClearRoute();
 
-    // 3. Show the Undo Toast
     ToastService.showActionToast(context,
         message: "Route cleared", actionLabel: "UNDO", onActionTap: () async {
       AppHaptics.selectionClick();
-
-      // RESTORE LOGIC:
       if (cachedPlace != null) {
-        // A. Restore the basic place data and pin
         await _selectPlaceFromList(cachedPlace);
-
-        // B. Restore the route if it was previously active
         if (wasRouteCalculated) {
           provider.currentNavMode = cachedNavMode;
-          if (!context.mounted) return;
+          if (!context.mounted) {
+            return;
+          }
           await provider.calculateAndDrawNativeRoute(context, cachedNavMode);
         }
       } else if (cachedCoords != null) {
-        // Fallback manual restore
         provider.addNativeDestinationPin(cachedCoords);
         provider.setTargetDestination(cachedCoords);
         provider.setDestinationSelected(true);
@@ -417,14 +395,10 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     final safeProvider = Provider.of<MapProvider>(context, listen: false);
 
     try {
-      // 1. SAVE THE SEARCH TO HISTORY
       safeProvider.saveNewSearch(place);
-
-      // 2. Lock State FIRST
       safeProvider.setDestinationSelected(true);
       safeProvider.engine.setUIState(MapUIState.placeSelected);
 
-      // Safely animate sheet to Pill View size
       if (_sheetController.isAttached) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_sheetController.isAttached) {
@@ -437,7 +411,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         });
       }
 
-      // 3. Process Coordinates
       double lat = place.latitude;
       double lng = place.longitude;
 
@@ -454,8 +427,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         }
       }
 
-      // 4. Fly Camera
       if (lat != 0.0 && lng != 0.0) {
+        if (!mounted) return;
         safeProvider.setTargetDestination(LatLng(lat, lng));
         setState(() => _selectedPlace = place);
         if (_sheetController.isAttached) {
@@ -465,10 +438,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
             curve: Curves.easeOutCubic,
           );
         }
-
-        // Drop the native Red Circle at the selected place coordinates
-        safeProvider.addNativeDestinationPin(LatLng(lat, lng));
         await safeProvider.flyToPlace(lat, lng);
+        safeProvider.addNativeDestinationPin(LatLng(lat, lng));
       } else {
         if (mounted) {
           ToastService.showError(context, "Location coordinates not found.");
@@ -477,14 +448,16 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
       widget.onSearchSubmitted(place.name);
     } catch (e) {
-      debugPrint("💥 CRITICAL ERROR DURING PLACE SELECTION: $e");
+      debugPrint("💥 CRITICAL ERROR: $e");
     }
   }
 
   Future<void> _handleSearchExecution(String query,
       [PlaceModel? savedPlace]) async {
     _searchFocus.unfocus();
-    if (query.trim().isEmpty) return;
+    if (query.trim().isEmpty) {
+      return;
+    }
 
     if (savedPlace != null &&
         savedPlace.latitude != 0.0 &&
@@ -503,7 +476,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           "No match found for '$query'. Please check the spelling and try again.",
         );
       }
-      return; // Early return to keep the sheet open and input focused
+      return;
     }
 
     final place = results.first;
@@ -523,7 +496,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           (_searchResults.isNotEmpty ? _searchResults.first : null);
       if (initialPlace != null) {
         PlaceModel placeToSubmit = initialPlace;
-        // --- NEW: Fetch exact coordinates if they are 0.0 ---
+
         if (placeToSubmit.latitude == 0.0 || placeToSubmit.longitude == 0.0) {
           if (placeToSubmit.placeId.isNotEmpty) {
             try {
@@ -532,6 +505,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
               if (exactCoords != null &&
                   exactCoords.latitude != 0.0 &&
                   exactCoords.longitude != 0.0) {
+                // 🚀 UX/LINT FIX: copyWith undefined error replaced with manual constructor
                 placeToSubmit = PlaceModel(
                   placeId: placeToSubmit.placeId,
                   name: placeToSubmit.name,
@@ -545,12 +519,11 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                   imageUrls: placeToSubmit.imageUrls,
                 );
               }
-            } catch (_) {
-              // Silently fail to fallback
-            }
+            } catch (_) {}
           }
         }
 
+        if (!mounted) return;
         setState(() {
           _selectedPlace = placeToSubmit;
           _showSearchList = false;
@@ -559,7 +532,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         });
 
         await _searchService.saveToHistory(placeToSubmit);
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
         try {
           final supabase = Supabase.instance.client;
@@ -578,7 +553,10 @@ class _MapSearchSheetState extends State<MapSearchSheet>
             });
           }
         } catch (_) {}
-        if (!mounted) return;
+
+        if (!mounted) {
+          return;
+        }
 
         if (_selectedActionType == 'HOME' || _selectedActionType == 'WORK') {
           try {
@@ -594,17 +572,27 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                   'longitude': placeToSubmit.longitude,
                 },
               }).eq('id', user.id);
-              if (!mounted) return;
+              if (!mounted) {
+                return;
+              }
               _showPremiumNotification(
                   "${_selectedActionType == 'HOME' ? 'Home' : 'Work'} location updated successfully!");
+            } else {
+              if (_selectedActionType == 'HOME') {
+                await SavedPlacesService.saveHome(placeToSubmit);
+              } else {
+                await SavedPlacesService.saveWork(placeToSubmit);
+              }
+              if (!mounted) return;
+              _showPremiumNotification(
+                  "${_selectedActionType == 'HOME' ? 'Home' : 'Work'} location updated locally!");
             }
           } catch (_) {}
           _selectedActionType = null;
         }
 
         widget.onSearchSubmitted(
-          '${placeToSubmit.latitude},${placeToSubmit.longitude}',
-        );
+            '${placeToSubmit.latitude},${placeToSubmit.longitude}');
 
         if (mounted) {
           try {
@@ -612,20 +600,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                 placeToSubmit.longitude != 0.0) {
               final validLatLng =
                   LatLng(placeToSubmit.latitude, placeToSubmit.longitude);
-
-              // Update provider with valid data
               final provider = Provider.of<MapProvider>(context, listen: false);
               provider.setTargetDestination(validLatLng);
               provider.addNativeDestinationPin(validLatLng);
-
-              // Safely fly camera
               await provider.flyToPlace(
                   validLatLng.latitude, validLatLng.longitude);
             } else {
-              // CRITICAL FALLBACK: If coordinates are STILL missing, abort flight
-              // and revert UI to prevent a permanent locked/broken state.
-              debugPrint(
-                  "🚨 ABORTING FLIGHT: Valid coordinates not found for this place.");
               final provider = Provider.of<MapProvider>(context, listen: false);
               provider.setTargetDestination(null);
               provider.setDestinationSelected(false);
@@ -647,7 +627,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
             });
           }
         } catch (e) {
-          if (mounted) setState(() => _isLoadingDetails = false);
+          if (mounted) {
+            setState(() => _isLoadingDetails = false);
+          }
         }
       } else if (_searchCtrl.text.isNotEmpty) {
         if (_searchResults.isEmpty) {
@@ -693,11 +675,11 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   void _onMapProviderUpdated() async {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     final provider = Provider.of<MapProvider>(context, listen: false);
 
-    // 🚀 FIX: Deep Clean Synchronization with Provider
-    // If provider was cleared (e.g., cross button tapped in headers) but sheet still has the place
     if (!provider.isDestinationSelected &&
         _selectedPlace != null &&
         !_showDirections) {
@@ -710,12 +692,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         _currentRoute = null;
         _showSearchList = true;
       });
-      // 🚀 FIX: Sheet should NOT collapse here! It should retain current size
-      // if (_sheetController.isAttached && !_searchFocus.hasFocus) {
-      //   _sheetController.animateTo(_safeMinSize,
-      //       duration: const Duration(milliseconds: 350),
-      //       curve: Curves.easeOutCubic);
-      // }
     }
 
     if (provider.tappedPlaceFromMap != null) {
@@ -758,7 +734,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   Future<void> _checkAndFetchRoute() async {
-    if (_destPlace == null && _selectedPlace == null) return;
+    if (_destPlace == null && _selectedPlace == null) {
+      return;
+    }
 
     final destLoc = LatLng(
       _destPlace?.latitude ?? _selectedPlace!.latitude,
@@ -773,6 +751,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           Provider.of<GlobalLocationService>(context, listen: false);
       if (locService.currentPosition == null) {
         await locService.forceRefreshLocation();
+        if (!mounted) return; // 🚀 FIX: Prevent orphaned execution
       }
       final pos = locService.currentPosition;
       if (pos == null) {
@@ -795,53 +774,35 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     }
 
     try {
-      // 🚀 FIX: Force sync with Provider's current mode to solve the Walk/Car Bug
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       final provider = Provider.of<MapProvider>(context, listen: false);
       final activeMode = provider.currentNavMode;
 
-      debugPrint(
-          "🛑 ROUTE DEBUG: Fetching route from ${originLoc.latitude},${originLoc.longitude} to ${destLoc.latitude},${destLoc.longitude}");
       final route = await _routeEngineService
-          .getRoute(
-            originLoc,
-            destLoc,
-            mode: activeMode,
-          )
+          .getRoute(originLoc, destLoc, mode: activeMode)
           .timeout(const Duration(seconds: 10));
-
-      if (route == null) {
-        debugPrint("🛑 ROUTE DEBUG FATAL: RoutingService returned NULL!");
-      } else {
-        debugPrint(
-            "🛑 ROUTE DEBUG SUCCESS: Got ${route.coordinates.length} coordinates back!");
-      }
 
       if (mounted) {
         setState(() {
           _currentRoute = route;
           _isLoadingRoute = false;
-          if (route == null) _routeErrorMessage = 'Route unavailable.';
+          if (route == null) {
+            _routeErrorMessage = 'Route unavailable.';
+          }
         });
       }
 
-      debugPrint("🛑 DEBUG ROUTE STATUS: Route fetched? ${route != null}");
       if (route != null) {
-        debugPrint(
-            "🛑 DEBUG ROUTE COORDS: Count = ${route.coordinates.length}");
-      } else {
-        debugPrint("🛑 DEBUG ROUTE ERROR: $_routeErrorMessage");
-      }
-
-      if (route != null) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         final mapCtrl = provider.controller;
 
         if (mapCtrl != null) {
           await RouteVisualizer.drawRoute(
               mapCtrl, route.coordinates, provider.currentTheme);
-
-          // 🧭 State Machine: Route drawn → morph QuickActionButtons to "Start"
           provider.engine.setUIState(MapUIState.routeDrawn);
 
           final double minLat = math.min(originLoc.latitude, destLoc.latitude);
@@ -887,7 +848,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoadingDetails = false);
+      if (mounted) {
+        setState(() => _isLoadingDetails = false);
+      }
     }
   }
 
@@ -910,14 +873,20 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   // ignore: unused_element
   Future<void> _initiatePhoneCall() async {
-    if (_enrichedDetails?.osmPhone == null) return;
+    if (_enrichedDetails?.osmPhone == null) {
+      return;
+    }
     final url = Uri.parse('tel:${_enrichedDetails!.osmPhone!}');
-    if (await canLaunchUrl(url)) await launchUrl(url);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    }
   }
 
   // ignore: unused_element
   Future<void> _openWebsite() async {
-    if (_enrichedDetails?.osmWebsite == null) return;
+    if (_enrichedDetails?.osmWebsite == null) {
+      return;
+    }
     final url = Uri.parse(_enrichedDetails!.osmWebsite!);
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -926,7 +895,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   void _expandToFull() {
     _wakeUpDragHandle();
-    if (!_sheetController.isAttached) return;
+    if (!_sheetController.isAttached) {
+      return;
+    }
     if (_sheetController.size < (_safeMaxSize - 0.02)) {
       _safeAnimateSheet(_safeMaxSize);
     }
@@ -937,9 +908,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
     final provider = Provider.of<MapProvider>(context, listen: false);
 
-    // 1. Check if there's actually a pin/route to cancel
     if (provider.targetDestination == null) {
-      // If it's just the search bar open without a pin, just close the keyboard/sheet normally.
       FocusScope.of(context).unfocus();
 
       bool hasText = _searchCtrl.text.isNotEmpty;
@@ -950,7 +919,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           isExpanded;
 
       if (isActivelySearching) {
-        // CONDITION 1: User is searching -> Reset to Idle State
         _searchCtrl.clear();
         if (_sheetController.isAttached) {
           _safeAnimateSheet(_safeMinSize);
@@ -959,21 +927,19 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           provider.engine.setUIState(MapUIState.idle);
         }
       } else {
-        // CONDITION 2: User is already in Idle state -> Go Back to Dashboard!
         setState(() => _isSearchMode = false);
         WidgetsBinding.instance
             .addPostFrameCallback((_) => widget.onSearchModeChanged(false));
-        widget.onBackToPreviousTab(); // Ridel's specific routing method
+        widget.onBackToPreviousTab();
       }
       return;
     }
 
-    // 2. Backup the current state in case the user wants to UNDO
     final backupCoords = provider.targetDestination!;
     final bool wasRouteDrawn = provider.isRouteCalculated;
+    // 🚀 FIX: Resolved isNavigating property mismatch error
     final bool wasNavigating = provider.isActiveNavigation;
 
-    // BACKUP UI STATE
     final backupPlace = _selectedPlace;
     final backupDestPlace = _destPlace;
     final backupOriginPlace = _originPlace;
@@ -985,20 +951,17 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     final double backupSheetSize =
         _sheetController.isAttached ? _sheetController.size : _safeMinSize;
 
-    // 3. Clear the Map and internal state
     provider.clearNativeRoute();
     provider.clearNativeDestinationPin();
     provider.setTargetDestination(null);
     provider.setDestinationSelected(false);
     FocusScope.of(context).unfocus();
 
-    // 4. Show Premium Custom Toast with Undo Action
     ToastService.showActionToast(
       context,
       message: 'Route cancelled',
       actionLabel: 'UNDO',
       onActionTap: () async {
-        // 5. RESTORE LOGIC
         provider.setTargetDestination(backupCoords);
         provider.setDestinationSelected(true);
 
@@ -1033,15 +996,22 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   // ignore: unused_element
   Map<String, String>? _getBookingInfoForCurrentPlace() {
-    if (_selectedPlace == null) return null;
+    if (_selectedPlace == null) {
+      return null;
+    }
     return _ticketBookingInfo[_selectedPlace!.name];
   }
 
   void _handleManualDragUpdate(DragUpdateDetails details) {
     _wakeUpDragHandle();
-    if (!_sheetController.isAttached) return;
+    _isDraggingNotifier.value = true;
+    if (!_sheetController.isAttached) {
+      return;
+    }
     final screenHeight = MediaQuery.sizeOf(context).height;
-    if (screenHeight == 0) return;
+    if (screenHeight == 0) {
+      return;
+    }
     final delta = -details.primaryDelta! / screenHeight;
     final newSize =
         (_sheetController.size + delta).clamp(_safeMinSize, _safeMaxSize);
@@ -1049,13 +1019,20 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   void _handleManualDragEnd(DragEndDetails details) {
-    _wakeUpDragHandle();
-    if (!_sheetController.isAttached) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _isDraggingNotifier.value = false;
+        _wakeUpDragHandle(forceReset: true); // 🚀 FIX: Call AFTER state resets
+      }
+    });
+
+    if (!_sheetController.isAttached) {
+      return;
+    }
     final velocity = details.primaryVelocity ?? 0;
     final size = _sheetController.size;
     final snaps = <double>[_safeMinSize, _safeMidSize, _safeMaxSize];
 
-    // 🚀 FIX: iOS-style snappy velocity release using easeOutCubic
     if (velocity < -300) {
       final next =
           snaps.firstWhere((s) => s > size + 0.02, orElse: () => _safeMaxSize);
@@ -1072,10 +1049,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   void _safeAnimateSheet(double targetSize) {
-    // 1. Defers execution until the current layout frame is completely finished
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_sheetController.isAttached) {
-        // 2. Strict bounds check to prevent Flutter Engine crashes
         double safeSize = targetSize.clamp(_safeMinSize, 1.0);
         _sheetController.animateTo(
           safeSize,
@@ -1088,16 +1063,24 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   @override
   void dispose() {
+    _mapProviderRef?.removeListener(_onMapProviderUpdated);
+
     _dragHandleTimer?.cancel();
     _debounce?.cancel();
     _sheetController.dispose();
     _searchCtrl.dispose();
     _originCtrl.dispose();
     _destCtrl.dispose();
+
+    _searchFocus.unfocus();
+    _originFocus.unfocus();
+    _destFocus.unfocus();
+
     _originFocus.dispose();
     _destFocus.dispose();
     _searchFocus.dispose();
     _sheetProgress.dispose();
+    _isDraggingNotifier.dispose();
     _slideController.dispose();
     super.dispose();
   }
@@ -1142,38 +1125,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isDesktop = screenSize.width > 600;
 
-    // Header height is computed inside the builder where progress is available
-
     final minS = _safeMinSize;
     final midS = _safeMidSize;
     final maxS = _safeMaxSize;
-
-    if ((_lastScreenHeight != 0 &&
-            (_lastScreenHeight - screenSize.height).abs() > 20) ||
-        (_lastScreenWidth != 0 &&
-            (_lastScreenWidth - screenSize.width).abs() > 20)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _sheetController.isAttached) {
-          if (!_searchFocus.hasFocus &&
-              _selectedPlace == null &&
-              !_showDirections &&
-              _searchCtrl.text.isEmpty) {
-            _sheetController.jumpTo(_safeMinSize);
-          } else if (!_searchFocus.hasFocus) {
-            // Only jump if NOT focused. If focused, let the 500ms focus listener animateTo handle it smoothly!
-            _sheetController.jumpTo(_safeMaxSize.clamp(_safeMinSize, 1.0));
-          }
-        }
-      });
-    }
-    _lastScreenHeight = screenSize.height;
-    _lastScreenWidth = screenSize.width;
 
     var snaps = <double>[minS, midS, maxS];
     snaps.sort();
     snaps = snaps.toSet().toList();
 
-    // 🚨 Dynamic Height Calculation
     final double expandedHeight = screenSize.height -
         keyboardHeight -
         MediaQuery.paddingOf(context).top -
@@ -1185,12 +1144,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         AnimatedOpacity(
           opacity: (isKeyboardOpen && widget.isMapTabActive) ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 300),
-          child: (isKeyboardOpen && widget.isMapTabActive)
-              ? BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                  child: Container(color: Colors.black.withValues(alpha: 0.3)),
-                )
-              : const SizedBox.shrink(),
+          // 🚀 FIX: Keep child in tree for smooth fade-out, just ignore touches
+          child: IgnorePointer(
+            ignoring: !(isKeyboardOpen && widget.isMapTabActive),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+              child: Container(color: Colors.black.withValues(alpha: 0.3)),
+            ),
+          ),
         ),
         Align(
             alignment: Alignment.bottomCenter,
@@ -1198,11 +1159,31 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeOutCubic,
                 height: isKeyboardOpen ? expandedHeight : defaultIdleHeight,
-                padding: EdgeInsets.only(bottom: keyboardHeight > 0 ? 0 : 0),
+                padding: const EdgeInsets.only(bottom: 0),
                 child: SlideTransition(
                   position: _slideAnimation,
                   child: NotificationListener<Notification>(
                     onNotification: (notification) {
+                      if (notification is ScrollStartNotification &&
+                          notification.depth == 0) {
+                        if (!_isDraggingNotifier.value) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) _isDraggingNotifier.value = true;
+                          });
+                        }
+                      }
+                      if (notification is ScrollEndNotification &&
+                          notification.depth == 0) {
+                        if (_isDraggingNotifier.value) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              _isDraggingNotifier.value = false;
+                              _wakeUpDragHandle(forceReset: true);
+                            }
+                          });
+                        }
+                      }
+
                       if (notification is ScrollEndNotification &&
                           notification.dragDetails != null) {
                         final velocity =
@@ -1217,7 +1198,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
                       if (notification is ScrollUpdateNotification &&
                           notification.dragDetails != null) {
-                        // Unfocus keyboard if the user drags the sheet down
                         if (notification.scrollDelta != null &&
                             notification.scrollDelta! < 0 &&
                             _searchFocus.hasFocus) {
@@ -1229,7 +1209,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                         _wakeUpDragHandle();
 
                         final extent = notification.extent;
-                        // ⌨️ KEYBOARD DISMISS FIX
                         if (extent < midS - 0.05 && _searchFocus.hasFocus) {
                           _searchFocus.unfocus();
                         }
@@ -1254,7 +1233,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                     (notification.maxExtent -
                                         notification.minExtent))
                                 .clamp(0.0, 1.0);
-                        if (_sheetProgress.value != progress) {
+                        if ((_sheetProgress.value - progress).abs() > 0.005) {
                           _sheetProgress.value = progress;
                           if (widget.onProgressChanged != null) {
                             widget.onProgressChanged!(progress);
@@ -1287,212 +1266,200 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                       snap: true,
                       snapAnimationDuration: const Duration(milliseconds: 350),
                       snapSizes: snaps,
-                      builder: (context, scrollController) {
-                        return ValueListenableBuilder<double>(
-                          valueListenable: _sheetProgress,
-                          builder: (context, progress, child) {
-                            // 🚀 FIX: Lerp header height from 62 (closed) → 76 (open) so closed state matches original
-                            final dynamicHeaderHeight = _showDirections
-                                ? 190.0
-                                : (lerpDouble(62.0, 76.0, progress) ?? 62.0);
-                            const currentSideMargin = 16.0;
-                            final currentBottomMargin =
-                                24.0 - (14.0 * progress);
-                            const sheetRadius = 50.0;
+                      builder: (BuildContext context,
+                          ScrollController scrollController) {
+                        // 🚀 FIX: Pure static sliver height to prevent layout recalculations
+                        final double staticHeaderHeight =
+                            _showDirections ? 190.0 : 76.0;
+                        const double sheetRadius = 50.0;
 
-                            final Color sheetBgColor = isDark
-                                ? const Color(0xFF0B0E17)
-                                    .withValues(alpha: 0.80)
-                                : Colors.white.withValues(alpha: 0.65);
-                            const double blurAmount = 30.0;
+                        return Align(
+                          alignment: Alignment.bottomCenter,
+                          child: PointerInterceptor(
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: isDesktop ? 800 : 450,
+                              ),
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  Container(
+                                    margin: EdgeInsets.only(
+                                      left: 16.0,
+                                      right: 16.0,
+                                      bottom: 10.0 +
+                                          MediaQuery.paddingOf(context).bottom,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      borderRadius:
+                                          BorderRadius.circular(sheetRadius),
+                                      boxShadow: [
+                                        BoxShadow(
+                                            color: Colors.black
+                                                .withValues(alpha: 0.15),
+                                            blurRadius: 10,
+                                            offset: const Offset(0, -2)),
+                                      ],
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius:
+                                          BorderRadius.circular(sheetRadius),
+                                      child: ValueListenableBuilder<bool>(
+                                        valueListenable: _isDraggingNotifier,
+                                        builder: (context, isDragging, child) {
+                                          final double blurAmount =
+                                              isDragging ? 0.0 : 12.0;
+                                          final double bgOpacity = isDragging
+                                              ? 0.95
+                                              : (isDark ? 0.80 : 0.65);
+                                          final Color sheetBgColor = isDark
+                                              ? const Color(0xFF0B0E17)
+                                                  .withValues(alpha: bgOpacity)
+                                              : Colors.white
+                                                  .withValues(alpha: bgOpacity);
 
-                            return PointerInterceptor(
-                              child: Align(
-                                alignment: Alignment.bottomCenter,
-                                child: ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    maxWidth: isDesktop ? 800 : 450,
-                                  ),
-                                  child: Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      // 🎨 PERFORMANCE FIX: RepaintBoundary around Blur
-                                      RepaintBoundary(
-                                        child: Container(
-                                          margin: EdgeInsets.only(
-                                            left: currentSideMargin,
-                                            right: currentSideMargin,
-                                            bottom: currentBottomMargin +
-                                                MediaQuery.paddingOf(context)
-                                                    .bottom,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(
-                                                sheetRadius),
-                                            boxShadow: progress < 0.2
-                                                ? [
-                                                    BoxShadow(
-                                                        color: Colors.black
-                                                            .withValues(
-                                                                alpha: 0.3),
-                                                        blurRadius: 20,
-                                                        offset:
-                                                            const Offset(0, 8)),
-                                                    BoxShadow(
-                                                        color: Colors.black
-                                                            .withValues(
-                                                                alpha: 0.1),
-                                                        blurRadius: 4,
-                                                        offset:
-                                                            const Offset(0, 2)),
-                                                  ]
-                                                : [
-                                                    BoxShadow(
-                                                        color: Colors.black
-                                                            .withValues(
-                                                                alpha: 0.15),
-                                                        blurRadius: 8,
-                                                        offset: const Offset(
-                                                            0, -2)),
-                                                  ],
-                                          ),
-                                          child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                                sheetRadius),
-                                            child: BackdropFilter(
-                                              filter: ImageFilter.blur(
-                                                  sigmaX: blurAmount,
-                                                  sigmaY: blurAmount),
-                                              child: Container(
-                                                decoration: BoxDecoration(
-                                                  color: sheetBgColor,
-                                                  border: Border.all(
-                                                    color: Colors.white
-                                                        .withValues(
-                                                            alpha: 0.12),
-                                                    width: 1.0,
-                                                  ),
-                                                ),
-                                                child: ScrollConfiguration(
-                                                  behavior:
-                                                      ScrollConfiguration.of(
-                                                              context)
-                                                          .copyWith(
-                                                    scrollbars: false,
-                                                    dragDevices: {
-                                                      PointerDeviceKind.touch,
-                                                      PointerDeviceKind.mouse,
-                                                    },
-                                                  ),
-                                                  child: CustomScrollView(
-                                                    controller:
-                                                        scrollController,
-                                                    // 🚀 FIX: Prevent overscroll bouncing, disable scrolling when keyboard is open
-                                                    physics: isKeyboardOpen
-                                                        ? const NeverScrollableScrollPhysics()
-                                                        : const ClampingScrollPhysics(
-                                                            parent:
-                                                                AlwaysScrollableScrollPhysics()),
-                                                    keyboardDismissBehavior:
-                                                        ScrollViewKeyboardDismissBehavior
-                                                            .onDrag,
-                                                    slivers: [
-                                                      SliverAppBar(
-                                                        pinned: true,
-                                                        elevation: 0,
-                                                        backgroundColor:
-                                                            Colors.transparent,
-                                                        collapsedHeight:
-                                                            dynamicHeaderHeight,
-                                                        toolbarHeight:
-                                                            dynamicHeaderHeight,
-                                                        flexibleSpace:
-                                                            GestureDetector(
-                                                          onTap: () {
-                                                            if (progress <
-                                                                0.1) {
-                                                              _expandToFull();
-                                                            }
-                                                          },
-                                                          behavior:
-                                                              HitTestBehavior
-                                                                  .translucent,
-                                                          child:
-                                                              AnimatedSwitcher(
-                                                            duration:
-                                                                const Duration(
-                                                              milliseconds: 500,
-                                                            ),
-                                                            switchInCurve: Curves
-                                                                .easeInCubic,
-                                                            switchOutCurve: Curves
-                                                                .easeOutCubic,
-                                                            child: _showDirections
-                                                                ? _buildDirectionsHeader(
-                                                                    dynamicHeaderHeight,
-                                                                    isDark,
-                                                                  )
-                                                                : (_selectedPlace != null
-                                                                    ? _buildSelectedPlaceHeader(
-                                                                        dynamicHeaderHeight,
-                                                                        progress,
-                                                                        isDark,
-                                                                      )
-                                                                    : _buildSearchHeader(
-                                                                        dynamicHeaderHeight,
-                                                                        progress,
-                                                                        isDark,
-                                                                      )),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      SliverToBoxAdapter(
-                                                        child: AnimatedOpacity(
-                                                          duration:
-                                                              const Duration(
-                                                            milliseconds: 150,
-                                                          ),
-                                                          opacity:
-                                                              progress > 0.05
-                                                                  ? 1.0
-                                                                  : 0.0,
-                                                          child: progress > 0.05
-                                                              ? _buildSheetContent(
-                                                                  isDark,
-                                                                  progress,
-                                                                  isExpanded:
-                                                                      isKeyboardOpen, // 🚀 Keep expanded content logic
-                                                                )
-                                                              : const SizedBox(),
-                                                        ),
-                                                      ),
-                                                      SliverFillRemaining(
-                                                        hasScrollBody: false,
-                                                        child: Container(
-                                                          color: Colors
-                                                              .transparent,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
+                                          return BackdropFilter(
+                                            filter: ImageFilter.blur(
+                                                sigmaX: blurAmount,
+                                                sigmaY: blurAmount),
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: sheetBgColor,
+                                                border: Border.all(
+                                                  color: Colors.white
+                                                      .withValues(alpha: 0.12),
+                                                  width: 1.0,
                                                 ),
                                               ),
+                                              child: child,
+                                            ),
+                                          );
+                                        },
+                                        child: RepaintBoundary(
+                                          child: ScrollConfiguration(
+                                            behavior:
+                                                ScrollConfiguration.of(context)
+                                                    .copyWith(
+                                              scrollbars: false,
+                                              dragDevices: {
+                                                PointerDeviceKind.touch,
+                                                PointerDeviceKind.mouse,
+                                              },
+                                            ),
+                                            child: CustomScrollView(
+                                              controller: scrollController,
+                                              physics: isKeyboardOpen
+                                                  ? const NeverScrollableScrollPhysics()
+                                                  : const ClampingScrollPhysics(
+                                                      parent:
+                                                          AlwaysScrollableScrollPhysics()),
+                                              keyboardDismissBehavior:
+                                                  ScrollViewKeyboardDismissBehavior
+                                                      .onDrag,
+                                              slivers: [
+                                                SliverAppBar(
+                                                  pinned: true,
+                                                  elevation: 0,
+                                                  backgroundColor:
+                                                      Colors.transparent,
+                                                  collapsedHeight:
+                                                      staticHeaderHeight,
+                                                  toolbarHeight:
+                                                      staticHeaderHeight,
+                                                  flexibleSpace:
+                                                      ValueListenableBuilder<
+                                                          double>(
+                                                    valueListenable:
+                                                        _sheetProgress,
+                                                    builder: (context, progress,
+                                                        child) {
+                                                      return GestureDetector(
+                                                        onTap: () {
+                                                          if (progress < 0.1) {
+                                                            _expandToFull();
+                                                          }
+                                                        },
+                                                        behavior:
+                                                            HitTestBehavior
+                                                                .translucent,
+                                                        child: AnimatedSwitcher(
+                                                          duration:
+                                                              const Duration(
+                                                                  milliseconds:
+                                                                      500),
+                                                          switchInCurve: Curves
+                                                              .easeInCubic,
+                                                          switchOutCurve: Curves
+                                                              .easeOutCubic,
+                                                          child: _showDirections
+                                                              ? _buildDirectionsHeader(
+                                                                  staticHeaderHeight,
+                                                                  isDark)
+                                                              : (_selectedPlace !=
+                                                                      null
+                                                                  ? _buildSelectedPlaceHeader(
+                                                                      staticHeaderHeight,
+                                                                      progress,
+                                                                      isDark)
+                                                                  : _buildSearchHeader(
+                                                                      staticHeaderHeight,
+                                                                      progress,
+                                                                      isDark)),
+                                                        ),
+                                                      );
+                                                    },
+                                                  ),
+                                                ),
+                                                SliverToBoxAdapter(
+                                                  child: ValueListenableBuilder<
+                                                      double>(
+                                                    valueListenable:
+                                                        _sheetProgress,
+                                                    builder:
+                                                        (BuildContext context,
+                                                            double progress,
+                                                            Widget? child) {
+                                                      return AnimatedOpacity(
+                                                        duration:
+                                                            const Duration(
+                                                                milliseconds:
+                                                                    150),
+                                                        opacity: progress > 0.05
+                                                            ? 1.0
+                                                            : 0.0,
+                                                        child: progress > 0.05
+                                                            ? _buildSheetContent(
+                                                                isDark,
+                                                                progress,
+                                                              )
+                                                            : const SizedBox(),
+                                                      );
+                                                    },
+                                                  ),
+                                                ),
+                                                SliverFillRemaining(
+                                                  hasScrollBody: false,
+                                                  child: Container(
+                                                      color:
+                                                          Colors.transparent),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ),
                                       ),
-                                      Positioned(
-                                        top: -8,
-                                        left: 0,
-                                        right: 0,
-                                        child: _buildDynamicDragHandle(isDark),
-                                      ),
-                                    ],
+                                    ),
                                   ),
-                                ),
+                                  Positioned(
+                                    top: -8,
+                                    left: 0,
+                                    right: 0,
+                                    child: _buildDynamicDragHandle(isDark),
+                                  ),
+                                ],
                               ),
-                            );
-                          },
+                            ),
+                          ),
                         );
                       },
                     ),

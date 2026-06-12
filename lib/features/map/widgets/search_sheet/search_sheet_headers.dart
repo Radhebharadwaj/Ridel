@@ -1,6 +1,5 @@
 part of 'map_search_sheet.dart';
 
-// 🚀 FIX: Named the extension to fix method visibility bugs in the Dart analyzer
 extension _SearchSheetHeadersExt on _MapSearchSheetState {
   Widget _buildPremiumCircleButton({
     required IconData icon,
@@ -20,25 +19,30 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
         height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withValues(alpha: 0.20),
-              Colors.white.withValues(alpha: 0.10),
-              Colors.white.withValues(alpha: 0.06),
-            ],
-          ),
+          gradient: bgColor == null
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withValues(alpha: 0.20),
+                    Colors.white.withValues(alpha: 0.10),
+                    Colors.white.withValues(alpha: 0.06),
+                  ],
+                )
+              : null,
+          color: bgColor,
           border:
               Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 20,
-              spreadRadius: -2,
-              offset: const Offset(0, 14),
-            ),
-          ],
+          boxShadow: bgColor == null
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 20,
+                    spreadRadius: -2,
+                    offset: const Offset(0, 14),
+                  ),
+                ]
+              : null,
         ),
         child: Center(
           child: Icon(icon, color: iconColor, size: iconSize),
@@ -49,7 +53,6 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
 
   Widget _buildDirectionsHeader(double headerHeight, bool isDark) {
     final textColor = isDark ? Colors.white : Colors.black;
-    // 🚀 PREMIUM MATTE PILL BASE FOR INPUTS
     final mattePillBase = isDark ? const Color(0xFF1E2129) : Colors.white;
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.12)
@@ -145,12 +148,11 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                           height: 12,
                           decoration: BoxDecoration(
                             border: Border.all(
-                              // 🚀 FIX: Qualified static reference
                               color: _activeRoutingField == 'origin'
-                                  ? _MapSearchSheetState.neonCyan
+                                  ? _MapSearchSheetState.premiumBlue
                                   : (_originPlace != null
                                       ? Colors.white54
-                                      : _MapSearchSheetState.neonCyan),
+                                      : _MapSearchSheetState.premiumBlue),
                               width: 3,
                             ),
                             shape: BoxShape.circle,
@@ -166,9 +168,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                           width: 12,
                           height: 12,
                           decoration: BoxDecoration(
-                            // 🚀 FIX: Qualified static reference
                             color: _activeRoutingField == 'dest'
-                                ? _MapSearchSheetState.neonCyan
+                                ? _MapSearchSheetState.premiumBlue
                                 : Colors.redAccent,
                             shape: BoxShape.circle,
                           ),
@@ -188,11 +189,10 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                               readOnly: true,
                               onTap: () {
                                 AppHaptics.lightImpact();
-                                // 🚀 FIX: Using the created rebuild() method to bypass setState protection
+                                FocusManager.instance.primaryFocus?.unfocus();
                                 rebuildState(
                                     () => _activeRoutingField = 'origin');
 
-                                // 🚀 FIX: Removed Ugly White Notification & added Custom Service
                                 _showPremiumNotification(
                                   'Tap on the map to set starting point',
                                 );
@@ -209,9 +209,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                                 }
                               },
                               style: TextStyle(
-                                // 🚀 FIX: Qualified static reference
                                 color: _activeRoutingField == 'origin'
-                                    ? _MapSearchSheetState.neonCyan
+                                    ? _MapSearchSheetState.premiumBlue
                                     : textColor,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
@@ -248,10 +247,9 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                                       ),
                                     if (_originPlace != null)
                                       IconButton(
-                                        // 🚀 FIX: Qualified static reference
                                         icon: const Icon(
                                           Icons.my_location,
-                                          color: _MapSearchSheetState.neonCyan,
+                                          color: _MapSearchSheetState.premiumBlue,
                                           size: 18,
                                         ),
                                         onPressed: () {
@@ -280,10 +278,10 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                               readOnly: true,
                               onTap: () {
                                 AppHaptics.lightImpact();
+                                FocusManager.instance.primaryFocus?.unfocus();
                                 rebuildState(
                                     () => _activeRoutingField = 'dest');
 
-                                // 🚀 FIX: Removed Ugly White Notification
                                 _showPremiumNotification(
                                   'Tap on the map to set destination',
                                 );
@@ -300,9 +298,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                                 }
                               },
                               style: TextStyle(
-                                // 🚀 FIX: Qualified static reference
                                 color: _activeRoutingField == 'dest'
-                                    ? _MapSearchSheetState.neonCyan
+                                    ? _MapSearchSheetState.premiumBlue
                                     : textColor,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
@@ -366,7 +363,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                         ),
                         child: const Icon(
                           CupertinoIcons.arrow_up_arrow_down,
-                          color: _MapSearchSheetState.neonCyan,
+                          color: _MapSearchSheetState.premiumBlue,
                           size: 18,
                         ),
                       ),
@@ -381,7 +378,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                 width: double.infinity,
                 height: 52,
                 child: CupertinoButton(
-                  color: _MapSearchSheetState.neonCyan,
+                  color: _MapSearchSheetState.premiumBlue,
                   borderRadius: BorderRadius.circular(16),
                   onPressed: () {
                     AppHaptics.heavyImpact();
@@ -448,8 +445,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                       'https://maps.apple/p/~${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
 
                   await Clipboard.setData(ClipboardData(text: shareLink));
+                  if (!mounted) return;
 
-                  // 🚀 FIX: Removed Ugly White Snackbar
                   _showPremiumNotification(
                     'Link copied successfully!',
                   );
@@ -529,29 +526,23 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
 
   Widget _buildSearchHeader(double headerHeight, double progress, bool isDark) {
     final isDesktop = MediaQuery.of(context).size.width > 600;
-    // 🚀 PREMIUM GLASS SEARCH PILL
+
     final pillBaseColor = isDark
         ? Colors.black.withValues(alpha: 0.4)
         : Colors.white.withValues(alpha: 0.9);
     final borderColor = Colors.white.withValues(alpha: 0.05);
 
-    // Original closed state was 8.0, new open is 24.0
     final horizontalPadding = lerpDouble(8.0, 24.0, progress) ?? 8.0;
-    // Original closed state was 46.0, new open is 54.0
     final dynamicHeight = lerpDouble(46.0, 54.0, progress) ?? 46.0;
-    // Original closed state was 100.0, new open is 20.0
     final dynamicRadius = lerpDouble(100.0, 20.0, progress) ?? 100.0;
 
-    // Original closed top padding was statically 6.0, new open pushes down to 18.0
     final topPadding = lerpDouble(6.0, 18.0, progress) ?? 6.0;
-    // Bottom padding was always 10.0 in the original code
     const bottomPadding = 10.0;
 
     return SizedBox(
       key: const ValueKey('search_header'),
       height: headerHeight,
       child: Padding(
-        // Use the new dynamic top padding here
         padding: EdgeInsets.only(
             top: topPadding,
             bottom: bottomPadding,
@@ -559,8 +550,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
             right: horizontalPadding),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(dynamicRadius),
-          // 🚀 FIX: Wrapped BackdropFilter in RepaintBoundary to prevent extreme frame drops during animations
           child: RepaintBoundary(
+            // 🚀 UX FIX: Added RepaintBoundary around Glass Search Bar
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
               child: Container(
@@ -625,7 +616,9 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                         onSubmitted: (value) async {
                           FocusScope.of(context).unfocus();
                           final query = value.trim();
-                          if (query.isEmpty) return;
+                          if (query.isEmpty) {
+                            return;
+                          }
 
                           List<PlaceModel> suggestions =
                               List.from(_searchResults);
@@ -642,7 +635,9 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                                 .searchPlaces(query, userLocation: latLng);
                           }
 
-                          if (!mounted) return;
+                          if (!mounted) {
+                            return;
+                          }
 
                           if (suggestions.isNotEmpty) {
                             final topSuggestion = suggestions.first;
@@ -715,9 +710,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                               child: Text(
                                 isTyping ? 'Done' : 'Cancel',
                                 style: TextStyle(
-                                  // 🚀 FIX: Qualified static reference
                                   color: isDark
-                                      ? _MapSearchSheetState.neonCyan
+                                      ? _MapSearchSheetState.premiumBlue
                                       : const Color(0xFF00B8D4),
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,
@@ -742,8 +736,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
     final isActive = _selectedNavMode == mode;
     return RidelBounceButton(
       onTap: () {
+        if (_selectedNavMode == mode) return;
         AppHaptics.selectionClick();
-        // 🚀 FIX: Syncing Provider with local UI State to fix Mode Overlap/Routing bug
         Provider.of<MapProvider>(context, listen: false)
             .setNavMode(context, mode);
         rebuildState(() => _selectedNavMode = mode);
@@ -754,14 +748,14 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: isActive
-              ? _MapSearchSheetState.neonCyan.withValues(alpha: 0.15)
+              ? _MapSearchSheetState.premiumBlue.withValues(alpha: 0.15)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(
           icon,
           color: isActive
-              ? _MapSearchSheetState.neonCyan
+              ? _MapSearchSheetState.premiumBlue
               : (isDark ? Colors.white38 : Colors.black38),
           size: 22,
         ),

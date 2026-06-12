@@ -36,16 +36,26 @@ class NetworkFallbackService {
     final keys =
         prefs.getKeys().where((key) => key.startsWith('network_cache_'));
 
-    for (final key in keys) {
+    for (int i = 0; i < keys.length; i++) {
+      final key = keys.elementAt(i);
       final jsonStr = prefs.getString(key);
-      if (jsonStr == null) continue;
-      try {
-        final data = json.decode(jsonStr) as Map<String, dynamic>;
-        final entry = _CacheEntry.fromJson(data);
-        final originalKey = key.substring('network_cache_'.length);
-        _memoryCache[originalKey] = entry;
-      } catch (_) {
-        await prefs.remove(key);
+      if (jsonStr != null) {
+        try {
+          // Yield to event loop every 5 items to prevent frame drops
+          if (i % 5 == 0) await Future.delayed(Duration.zero); 
+
+          final entry = _CacheEntry.fromJson(jsonDecode(jsonStr));
+          if (!entry.isExpired) {
+            _memoryCache[key.replaceFirst('network_cache_', '')] = entry;
+
+            // 🚀 CRITICAL: Enforce RAM limits even during disk hydration
+            if (_memoryCache.length > maxRamCacheItems) {
+               _memoryCache.remove(_memoryCache.keys.first);
+            }
+          } else {
+            prefs.remove(key); // Cleanup expired
+          }
+        } catch (_) {}
       }
     }
     _enforceLRU();

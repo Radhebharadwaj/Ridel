@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:isolate';
 import 'package:flutter/foundation.dart';
@@ -15,7 +16,7 @@ class PlaceIntelligenceService {
 
   static const String _edgeBackendUrl = 'https://api.ridel.com/v1';
 
-  final Map<String, _CacheEntry> _ramCache = {};
+  final LinkedHashMap<String, _CacheEntry> _ramCache = LinkedHashMap<String, _CacheEntry>();
   static const Duration _defaultTTL = Duration(hours: 24);
   bool _diskCacheLoaded = false;
 
@@ -28,6 +29,13 @@ class PlaceIntelligenceService {
   })  : _client = client ?? http.Client(),
         _offlineService = offlineService ?? OfflineService(),
         _fallbackService = fallbackService ?? NetworkFallbackService();
+
+  void _saveToRamCache(String key, _CacheEntry entry) {
+    _ramCache[key] = entry;
+    if (_ramCache.length > 30) {
+      _ramCache.remove(_ramCache.keys.first); // Remove oldest
+    }
+  }
 
   // ────────── Public API ──────────
 
@@ -51,7 +59,7 @@ class PlaceIntelligenceService {
     if (!_diskCacheLoaded) await _loadDiskCache();
     final diskEntry = await _getDiskCache(cacheKey);
     if (diskEntry != null && !diskEntry.isExpired(ttl)) {
-      _ramCache[cacheKey] = diskEntry;
+      _saveToRamCache(cacheKey, diskEntry);
       return diskEntry.data;
     }
 
@@ -66,14 +74,13 @@ class PlaceIntelligenceService {
       return _pendingRequests[cacheKey];
     }
 
-    final future = _performNetworkFetch(placeName, location, radiusMeters, ttl);
-    _pendingRequests[cacheKey] = future;
+    final fetchFuture = _performNetworkFetch(placeName, location, radiusMeters, ttl);
+    _pendingRequests[cacheKey] = fetchFuture;
 
     try {
-      final result = await future;
-      return result;
+      return await fetchFuture;
     } finally {
-      _pendingRequests.remove(cacheKey);
+      _pendingRequests.remove(cacheKey); // 🚀 CRITICAL: Unblock future requests
     }
   }
 
@@ -207,7 +214,7 @@ class PlaceIntelligenceService {
   Future<void> _updateCache(
       String key, PlaceIntelligence data, Duration ttl) async {
     final entry = _CacheEntry(data: data, storedAt: DateTime.now());
-    _ramCache[key] = entry;
+    _saveToRamCache(key, entry);
     _persistToDisk(key, entry);
   }
 
@@ -230,7 +237,7 @@ class PlaceIntelligenceService {
     if (!_diskCacheLoaded) await _loadDiskCache();
     final diskEntry = await _getDiskCache(key);
     if (diskEntry != null && !diskEntry.isExpired(ttl)) {
-      _ramCache[key] = diskEntry;
+      _saveToRamCache(key, diskEntry);
       return diskEntry.data;
     }
     return null;
@@ -247,7 +254,7 @@ class PlaceIntelligenceService {
             () => json.decode(jsonStr) as Map<String, dynamic>);
         final entry = _CacheEntry.fromJson(data);
         final cacheKey = key.substring('place_cache_'.length);
-        _ramCache[cacheKey] = entry;
+        _saveToRamCache(cacheKey, entry);
       } catch (_) {
         await prefs.remove(key);
       }

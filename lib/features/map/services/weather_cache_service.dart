@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,7 +26,7 @@ class WeatherCacheService {
   WeatherCacheService._internal();
 
   // ── L1 In‑Memory Cache ──
-  final Map<String, _WeatherCacheEntry> _ramCache = {};
+  final LinkedHashMap<String, _WeatherCacheEntry> _ramCache = LinkedHashMap<String, _WeatherCacheEntry>();
   static const int _maxRamItems = 20; // 🚀 Prevent Memory Bloat
 
   // ── Request Deduplication ──
@@ -85,7 +86,7 @@ class WeatherCacheService {
   }
 
   /// 🚀 Fallback API for Mock/IP locations using City Name
-  Future<WeatherModel?> getSmartWeatherByCity(String cityName) async {
+  Future<WeatherModel?> getSmartWeatherByCity(String cityName, {double? lat, double? lng}) async {
     String cacheKey = 'city_${cityName.toLowerCase()}';
     _evictOldCache();
 
@@ -98,7 +99,7 @@ class WeatherCacheService {
     }
 
     // 2. FULL FETCH
-    final freshWeather = await WeatherService.getWeatherByCity(cityName);
+    final freshWeather = await WeatherService.getWeatherByCity(cityName, lat: lat, lng: lng);
     if (freshWeather != null) {
       _saveToRAMAndDisk(cacheKey, freshWeather);
       return freshWeather;

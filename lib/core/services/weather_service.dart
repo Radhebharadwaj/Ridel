@@ -60,7 +60,7 @@ class WeatherService {
   
   static DateTime? lastFetchTime;
   static String? lastFetchQuery;
-  static bool _isFetching = false;
+
 
   static WeatherModel _parseWeatherData(Map<String, dynamic> data) {
     List<ForecastDayModel> parsedDaily = [];
@@ -155,8 +155,6 @@ class WeatherService {
       }
     }
 
-    if (_isFetching) return null;
-    _isFetching = true;
 
     try {
       final url = Uri.parse(
@@ -193,11 +191,10 @@ class WeatherService {
       debugPrint('❌ WEATHER FETCH EXCEPTION: $e');
       return null;
     } finally {
-      _isFetching = false;
     }
   }
 
-  static Future<WeatherModel?> getWeatherByCity(String city) async {
+  static Future<WeatherModel?> getWeatherByCity(String city, {double? lat, double? lng}) async {
     if (city.isEmpty || city == 'Select City') {
       debugPrint('⚠️ Weather Fetch Skipped: Invalid City Name');
       return null;
@@ -209,12 +206,13 @@ class WeatherService {
       }
     }
 
-    if (_isFetching) return null;
-    _isFetching = true;
 
     try {
-      final url =
-          Uri.parse('https://ridel.ridel.workers.dev/api/weather?city=$city');
+      // 🚀 FIX: ALWAYS append lat and lng to the URL
+      final double finalLat = lat ?? 28.6139;
+      final double finalLng = lng ?? 77.2090;
+      final url = Uri.parse(
+          'https://ridel.ridel.workers.dev/api/weather?lat=$finalLat&lng=$finalLng&city=${Uri.encodeComponent(city)}');
 
       debugPrint('🚀 Sending Weather Request to: $url');
 
@@ -248,7 +246,6 @@ class WeatherService {
       debugPrint('❌ WEATHER FETCH EXCEPTION: $e');
       return null;
     } finally {
-      _isFetching = false;
     }
   }
 

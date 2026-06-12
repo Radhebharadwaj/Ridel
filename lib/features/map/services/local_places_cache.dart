@@ -33,9 +33,16 @@ class LocalPlacesCache {
     } else {
       places.add(place);
     }
-    // Respect the 5 places limit
+    // 🚀 CRITICAL FIX: Respect the 5 places limit, but NEVER delete Home or Work
     if (places.length > 5) {
-      places.removeAt(0); // Optional: keep recent or drop oldest
+      final removableIndex = places.indexWhere((p) => 
+          p.type.toLowerCase() != 'home' && p.type.toLowerCase() != 'work');
+
+      if (removableIndex != -1) {
+        places.removeAt(removableIndex);
+      } else {
+        places.removeLast(); // Fallback if all are somehow protected
+      }
     }
     await savePlaces(places);
   }

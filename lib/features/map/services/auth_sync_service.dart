@@ -40,10 +40,9 @@ class AuthSyncService {
       // 2. Ensure duplicate limits (max 5) are respected during this sync.
       final placesToSync = localPlaces.take(5).toList();
 
-      // 3. Upload them to the Supabase user_saved_places table.
-      for (final place in placesToSync) {
-        await _supabaseService.savePlace(place);
-      }
+      // 3. Upload them to the Supabase user_saved_places table concurrently
+      // 🚀 CRITICAL FIX: Execute network calls in parallel to prevent background blocking
+      await Future.wait(placesToSync.map((place) => _supabaseService.savePlace(place)));
     } catch (e) {
       // Sync failed, skip
     }

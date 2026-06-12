@@ -139,9 +139,11 @@ class SupabaseSearchService {
 
   // ── 🚀 LRU Cache Manager ──
   void _saveToCache(String query, List<PlaceModel> results) {
+    // 🚀 CRITICAL LRU FIX: Remove the key first to force it to MRU position
+    _cache.remove(query);
+
     if (_cache.length >= _maxCacheSize) {
-      _cache.remove(
-          _cache.keys.first); // Removes the oldest (least recently used)
+      _cache.remove(_cache.keys.first); // Removes the oldest
     }
     _cache[query] = _CacheEntry(data: results, timestamp: DateTime.now());
   }

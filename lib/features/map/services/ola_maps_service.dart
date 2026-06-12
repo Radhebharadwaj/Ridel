@@ -17,7 +17,7 @@ class OlaMapsService {
 
       final response = await http.get(url, headers: {
         'Accept': 'application/json',
-      });
+      }).timeout(const Duration(seconds: 8)); // 🚀 TIMEOUT FIX
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

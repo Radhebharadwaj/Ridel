@@ -20,21 +20,9 @@ class RouteVisualizer {
   /// Clears all route layers and the source from the map.
   static Future<void> clearRoute(MapLibreMapController? controller) async {
     if (controller == null) return;
-
-    // Remove layers in reverse z-order (top → bottom)
-    for (final layerId in [
-      _glowLayerId,
-      _coreLayerId,
-      _casingLayerId,
-      _shadowLayerId,
-    ]) {
-      try {
-        await controller.removeLayer(layerId);
-      } catch (_) {}
-    }
-
     try {
-      await controller.removeSource(_sourceId);
+      // 🚀 VRAM LEAK FIX: Mutate the data to an empty array instead of destroying the layer textures!
+      await controller.setGeoJsonSource(_sourceId, {"type": "FeatureCollection", "features": []});
     } catch (_) {}
   }
 
@@ -68,77 +56,83 @@ class RouteVisualizer {
     };
 
     // 3. Inject GeoJSON Source
-    await controller.addGeoJsonSource(_sourceId, geoJsonData);
+    try {
+      // 🚀 FAST PATH: Update existing data to prevent layer-already-exists crash
+      await controller.setGeoJsonSource(_sourceId, geoJsonData);
+    } catch (_) {
+      // 🚀 SLOW PATH: Create the source and layers natively only once
+      await controller.addGeoJsonSource(_sourceId, geoJsonData);
 
-    // 4. Determine theme-aware colors
-    final bool isDark = theme == true ||
-        (theme != null && theme.toString().toLowerCase().contains('dark'));
+      // 4. Determine theme-aware colors
+      final bool isDark = theme == true ||
+          (theme != null && theme.toString().toLowerCase().contains('dark'));
 
-    final String casingColor = isDark ? '#FFFFFF' : '#000000';
-    final double casingOpacity = isDark ? 0.25 : 0.12;
+      final String casingColor = isDark ? '#FFFFFF' : '#000000';
+      final double casingOpacity = isDark ? 0.25 : 0.12;
 
-    // ──────────────────────────────────────────────────────────────────────
-    // LAYER 1: Shadow — Adds depth and lifts the route off the map
-    // ──────────────────────────────────────────────────────────────────────
-    await controller.addLineLayer(
-      _sourceId,
-      _shadowLayerId,
-      LineLayerProperties(
-        lineColor: _safeColor('#000000'),
-        lineWidth: _safeDouble(12.0, 8.0),
-        lineOpacity: _safeDouble(isDark ? 0.35 : 0.15, 0.15),
-        lineCap: 'round',
-        lineJoin: 'round',
-        lineBlur: _safeDouble(8.0, 4.0), // Soft shadow blur
-        lineTranslate: [0, 3], // Offset downwards for 3D effect
-      ),
-    );
+      // ──────────────────────────────────────────────────────────────────────
+      // LAYER 1: Shadow — Adds depth and lifts the route off the map
+      // ──────────────────────────────────────────────────────────────────────
+      await controller.addLineLayer(
+        _sourceId,
+        _shadowLayerId,
+        LineLayerProperties(
+          lineColor: _safeColor('#000000'),
+          lineWidth: _safeDouble(12.0, 8.0),
+          lineOpacity: _safeDouble(isDark ? 0.35 : 0.15, 0.15),
+          lineCap: 'round',
+          lineJoin: 'round',
+          lineBlur: _safeDouble(8.0, 4.0), // Soft shadow blur
+          lineTranslate: [0, 3], // Offset downwards for 3D effect
+        ),
+      );
 
-    // ──────────────────────────────────────────────────────────────────────
-    // LAYER 2: Casing — White/dark border for contrast
-    // ──────────────────────────────────────────────────────────────────────
-    await controller.addLineLayer(
-      _sourceId,
-      _casingLayerId,
-      LineLayerProperties(
-        lineColor: _safeColor(casingColor),
-        lineWidth: _safeDouble(8.0, 5.0),
-        lineOpacity: _safeDouble(casingOpacity, 0.15),
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-    );
+      // ──────────────────────────────────────────────────────────────────────
+      // LAYER 2: Casing — White/dark border for contrast
+      // ──────────────────────────────────────────────────────────────────────
+      await controller.addLineLayer(
+        _sourceId,
+        _casingLayerId,
+        LineLayerProperties(
+          lineColor: _safeColor(casingColor),
+          lineWidth: _safeDouble(8.0, 5.0),
+          lineOpacity: _safeDouble(casingOpacity, 0.15),
+          lineCap: 'round',
+          lineJoin: 'round',
+        ),
+      );
 
-    // ──────────────────────────────────────────────────────────────────────
-    // LAYER 3: Core — The primary neon cyan route line
-    // ──────────────────────────────────────────────────────────────────────
-    await controller.addLineLayer(
-      _sourceId,
-      _coreLayerId,
-      LineLayerProperties(
-        lineColor: _safeColor('#00E5FF'), // Ridel Neon Cyan
-        lineWidth: _safeDouble(5.0, 5.0),
-        lineOpacity: _safeDouble(1.0, 1.0),
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-    );
+      // ──────────────────────────────────────────────────────────────────────
+      // LAYER 3: Core — The primary neon cyan route line
+      // ──────────────────────────────────────────────────────────────────────
+      await controller.addLineLayer(
+        _sourceId,
+        _coreLayerId,
+        LineLayerProperties(
+          lineColor: _safeColor('#00E5FF'), // Ridel Neon Cyan
+          lineWidth: _safeDouble(5.0, 5.0),
+          lineOpacity: _safeDouble(1.0, 1.0),
+          lineCap: 'round',
+          lineJoin: 'round',
+        ),
+      );
 
-    // ──────────────────────────────────────────────────────────────────────
-    // LAYER 4: Glow — Soft neon bloom effect
-    // ──────────────────────────────────────────────────────────────────────
-    await controller.addLineLayer(
-      _sourceId,
-      _glowLayerId,
-      LineLayerProperties(
-        lineColor: _safeColor('#00E5FF'),
-        lineWidth: _safeDouble(14.0, 10.0),
-        lineOpacity: _safeDouble(0.12, 0.12),
-        lineCap: 'round',
-        lineJoin: 'round',
-        lineBlur: _safeDouble(6.0, 4.0),
-      ),
-    );
+      // ──────────────────────────────────────────────────────────────────────
+      // LAYER 4: Glow — Soft neon bloom effect
+      // ──────────────────────────────────────────────────────────────────────
+      await controller.addLineLayer(
+        _sourceId,
+        _glowLayerId,
+        LineLayerProperties(
+          lineColor: _safeColor('#00E5FF'),
+          lineWidth: _safeDouble(14.0, 10.0),
+          lineOpacity: _safeDouble(0.12, 0.12),
+          lineCap: 'round',
+          lineJoin: 'round',
+          lineBlur: _safeDouble(6.0, 4.0),
+        ),
+      );
+    }
   }
 
   /// Dynamically updates the route source without redrawing the layers.

@@ -1,47 +1,37 @@
+import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LocalLocationCache {
-  static const String _kCachedLocality = 'cachedLocality';
-  static const String _kCachedLat = 'cachedLat';
-  static const String _kCachedLng = 'cachedLng';
+  static const String _keyLocality = 'cached_locality';
+  static const String _keyLat = 'cached_lat';
+  static const String _keyLng = 'cached_lng';
+  static const double _validRadiusMeters = 10000.0; 
 
-  Future<void> saveLocationCache({
-    required String locality,
-    required double lat,
-    required double lng,
-  }) async {
+  Future<void> saveLocationCache({required String locality, required double lat, required double lng}) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kCachedLocality, locality);
-    await prefs.setDouble(_kCachedLat, lat);
-    await prefs.setDouble(_kCachedLng, lng);
+    await prefs.setString(_keyLocality, locality);
+    await prefs.setDouble(_keyLat, lat);
+    await prefs.setDouble(_keyLng, lng);
   }
 
   Future<String?> getCachedLocality() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_kCachedLocality);
+    return prefs.getString(_keyLocality);
   }
 
-  Future<double?> getCachedLat() async {
+  Future<bool> hasValidCache(double currentLat, double currentLng) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getDouble(_kCachedLat);
-  }
+    final cachedLat = prefs.getDouble(_keyLat);
+    final cachedLng = prefs.getDouble(_keyLng);
 
-  Future<double?> getCachedLng() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getDouble(_kCachedLng);
-  }
+    if (cachedLat == null || cachedLng == null) return false;
 
-  Future<bool> hasCache() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.containsKey(_kCachedLocality) &&
-        prefs.containsKey(_kCachedLat) &&
-        prefs.containsKey(_kCachedLng);
-  }
+    var p = 0.017453292519943295;
+    var c = math.cos;
+    var a = 0.5 - c((cachedLat - currentLat) * p)/2 + 
+            c(currentLat * p) * c(cachedLat * p) * (1 - c((cachedLng - currentLng) * p))/2;
+    var distanceMeters = 12742 * math.asin(math.sqrt(a)) * 1000;
 
-  Future<void> clearCache() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kCachedLocality);
-    await prefs.remove(_kCachedLat);
-    await prefs.remove(_kCachedLng);
+    return distanceMeters <= _validRadiusMeters;
   }
 }

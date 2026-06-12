@@ -175,6 +175,14 @@ class SavedPlacesService extends ChangeNotifier {
     await _deletePlaceByType('work');
   }
 
+  static Future<void> saveHome(PlaceModel place) async {
+    await _savePlaceByType('home', place);
+  }
+
+  static Future<void> saveWork(PlaceModel place) async {
+    await _savePlaceByType('work', place);
+  }
+
   static Future<PlaceModel?> _getPlaceModelByType(String type) async {
     final prefs = await SharedPreferences.getInstance();
     final String? placesJson = prefs.getString(_placesKey);
@@ -213,5 +221,24 @@ class SavedPlacesService extends ChangeNotifier {
         debugPrint('Error deleting $type from prefs: $e');
       }
     }
+  }
+
+  static Future<void> _savePlaceByType(String type, PlaceModel place) async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? placesJson = prefs.getString(_placesKey);
+    List<SavedPlace> places = [];
+    if (placesJson != null) {
+      try {
+        final List<dynamic> decodedList = json.decode(placesJson);
+        places = decodedList.map((item) => SavedPlace.fromJson(item)).toList();
+      } catch (e) {
+        debugPrint('Error loading places from prefs: $e');
+      }
+    }
+    
+    places.removeWhere((p) => p.type.toLowerCase() == type.toLowerCase());
+    places.add(SavedPlace(type: type, latitude: place.latitude, longitude: place.longitude));
+    
+    await prefs.setString(_placesKey, json.encode(places.map((p) => p.toJson()).toList()));
   }
 }

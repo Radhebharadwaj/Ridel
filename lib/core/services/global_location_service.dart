@@ -140,6 +140,22 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     if (_permission == LocationPermission.whileInUse || _permission == LocationPermission.always) {
+      // 🚀 OPTIMIZATION: Fast Cache for Location
+      try {
+        final lastPos = await Geolocator.getLastKnownPosition();
+        if (lastPos != null && currentPositionNotifier.value == null) {
+          debugPrint("⚡ Instant Location: Using last known position.");
+          currentPositionNotifier.value = lastPos;
+          _isUsingIpFallback = false;
+          _lastCityGeocodedPosition = lastPos;
+          resolveCityName(lastPos.latitude, lastPos.longitude).then((_) {
+            WeatherService.getWeather(lastPos.latitude, lastPos.longitude);
+            notifyListeners();
+          });
+          notifyListeners();
+        }
+      } catch (_) {}
+
       try {
         final pos = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
