@@ -384,17 +384,17 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
 
     // 🚀 NEW: Handled Error & Loading States smoothly
     if (showLoading || _hasError || activeWeather == null) {
-      return GestureDetector(
-        onTap: () async {
-          debugPrint("🟡 [WEATHER DEBUG] FALLBACK BUTTON TAPPED!");
-          if (_hasError || activeWeather == null) {
-            AppHaptics.lightImpact();
-            if (mounted) setState(() { _isLoading = true; _hasError = false; });
-            await _resolveLocationAndFetchWeather();
-          }
-        },
-        behavior: HitTestBehavior.opaque,
-        child: PointerInterceptor(
+      return PointerInterceptor(
+        child: GestureDetector(
+          onTap: () async {
+            debugPrint("🟡 [WEATHER DEBUG] FALLBACK BUTTON TAPPED!");
+            if (_hasError || activeWeather == null) {
+              AppHaptics.lightImpact();
+              if (mounted) setState(() { _isLoading = true; _hasError = false; });
+              await _resolveLocationAndFetchWeather();
+            }
+          },
+          behavior: HitTestBehavior.opaque,
           child: Container(
             width: _compactWidth,
             height: _compactHeight,
@@ -443,17 +443,17 @@ class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
         double targetHeight = _dragHeight ?? _getCurrentTargetHeight();
         double currentRadius = _currentState == WeatherState.compact ? 24 : 35;
 
-        return MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              debugPrint("🟢 [WEATHER DEBUG] MAIN CARD TAPPED!");
-              _handleTap();
-            },
-            onVerticalDragUpdate: _handleVerticalDragUpdate,
-            onVerticalDragEnd: _handleVerticalDragEnd,
-            child: PointerInterceptor(
+        return PointerInterceptor(
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                debugPrint("🟢 [WEATHER DEBUG] MAIN CARD TAPPED!");
+                _handleTap();
+              },
+              onVerticalDragUpdate: _handleVerticalDragUpdate,
+              onVerticalDragEnd: _handleVerticalDragEnd,
               child: AnimatedContainer(
                 duration: Duration(milliseconds: _dragHeight != null ? 0 : 650),
                 curve: _dragHeight != null ? Curves.linear : Curves.fastOutSlowIn,

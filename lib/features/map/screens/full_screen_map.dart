@@ -131,10 +131,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     }
   }
 
-  // 🚀 HELPER: Mobile par PointerInterceptor memory khata hai, isliye conditionally render karenge
-  Widget _buildPointerSafeWrapper({required Widget child}) {
-    return kIsWeb ? PointerInterceptor(child: child) : child;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -442,9 +438,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   ),
                 );
               },
-              child: _buildPointerSafeWrapper(
-                child: WeatherFloatingWidget(onMapThemeChanged: (isDark) {}),
-              ),
+              // 🚀 FIX: Removed AnimatedAlign and _buildPointerSafeWrapper to destroy the full-screen invisible shield
+              child: WeatherFloatingWidget(onMapThemeChanged: (isDark) {}),
             ),
           ),
 
@@ -465,17 +460,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             top: topMargin,
             left: sideMargin,
             right: sideMargin,
-            child: _buildPointerSafeWrapper(
-              child: TurnByTurnBanner(isDark: isDark),
-            ),
+            child: TurnByTurnBanner(isDark: isDark),
           ),
 
           Positioned(
             bottom:
                 isDesktop ? 32.0 : (MediaQuery.paddingOf(context).bottom + 124),
             left: sideMargin,
-            child: _buildPointerSafeWrapper(
-              child: Selector<MapProvider, bool>(
+            child: Selector<MapProvider, bool>(
                 selector: (context, provider) => provider.isActiveNavigation,
                 builder: (context, isActiveNavigation, child) {
                   if (!isActiveNavigation) return const SizedBox.shrink();
@@ -499,77 +491,81 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                     },
                   );
                 },
-                child: RidelBounceButton(
-                  onTap: () {
-                    AppHaptics.selectionClick();
-                    Provider.of<MapProvider>(context, listen: false)
-                        .engine
-                        .camera
-                        ?.resetCompass();
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(36),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 24,
-                          offset: const Offset(0, 12),
-                        ),
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(36),
-                      child: RepaintBoundary(
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(
-                              sigmaX: kIsWeb ? 4.0 : 24.0,
-                              sigmaY: kIsWeb ? 4.0 : 24.0),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 14),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0B0E17)
-                                  .withValues(alpha: 0.75),
-                              borderRadius: BorderRadius.circular(36),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.08),
-                                width: 1,
-                              ),
+                child: Builder(
+                  builder: (context) {
+                    final content = RidelBounceButton(
+                      onTap: () {
+                        AppHaptics.selectionClick();
+                        Provider.of<MapProvider>(context, listen: false)
+                            .engine
+                            .camera
+                            ?.resetCompass();
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(36),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              blurRadius: 24,
+                              offset: const Offset(0, 12),
                             ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.navigation_rounded,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                                SizedBox(width: 8),
-                                Text(
-                                  "Re-centre",
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -0.2,
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(36),
+                          child: RepaintBoundary(
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(
+                                  sigmaX: kIsWeb ? 4.0 : 24.0,
+                                  sigmaY: kIsWeb ? 4.0 : 24.0),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 20, vertical: 14),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0B0E17)
+                                      .withValues(alpha: 0.75),
+                                  borderRadius: BorderRadius.circular(36),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.08),
+                                    width: 1,
                                   ),
                                 ),
-                              ],
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.navigation_rounded,
+                                      color: Colors.white,
+                                      size: 18,
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      "Re-centre",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: -0.2,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
+                    );
+                    return kIsWeb ? PointerInterceptor(child: content) : content;
+                  }
                 ),
               ),
-            ),
           ),
 
           Positioned(
@@ -627,20 +623,21 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // 🍏 THE APPLE "PILL" (Map Settings + Locate Me)
-                      _buildPointerSafeWrapper(
-                        child: Selector<MapProvider, bool>(
-                          selector: (context, provider) => !provider.isActiveNavigation || !provider.isAutoTracking,
-                          builder: (context, isVisible, child) {
-                            return IgnorePointer(
-                              ignoring: !isVisible,
-                              child: AnimatedOpacity(
-                                duration: const Duration(milliseconds: 300),
-                                opacity: isVisible ? 1.0 : 0.0,
-                                child: child,
-                              ),
-                            );
-                          },
-                          child: Container(
+                      Selector<MapProvider, bool>(
+                        selector: (context, provider) => !provider.isActiveNavigation || !provider.isAutoTracking,
+                        builder: (context, isVisible, child) {
+                          return IgnorePointer(
+                            ignoring: !isVisible,
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 300),
+                              opacity: isVisible ? 1.0 : 0.0,
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: Builder(
+                          builder: (context) {
+                            final content = Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(50),
                               boxShadow: !isDark
@@ -827,14 +824,17 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 ),
                               ),
                             ),
-                          ),
+                          );
+                            return kIsWeb ? PointerInterceptor(child: content) : content;
+                          }
                         ),
-                        ),
+                      ),
                         // 🚀 3. ZOOM PILL: Sirf Desktop par dikhega, mobile par clean layout!
                         if (isDesktop) ...[
                           const SizedBox(height: 16),
-                          _buildPointerSafeWrapper(
-                            child: Container(
+                          Builder(
+                            builder: (context) {
+                              final content = Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(24),
                               boxShadow: !isDark
@@ -928,8 +928,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 ),
                               ),
                             ),
-                          ),
-                          ), // Close _buildPointerSafeWrapper
+                          );
+                            return kIsWeb ? PointerInterceptor(child: content) : content;
+                          }
+                        ), // Close Builder
                         ],
                       ],
                     ),
