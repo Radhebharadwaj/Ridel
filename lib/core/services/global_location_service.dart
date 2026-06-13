@@ -154,7 +154,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           });
           notifyListeners();
         }
-      } catch (_) {}
+      } on Object catch (_) {}
 
       try {
         final pos = await Geolocator.getCurrentPosition(
@@ -172,13 +172,13 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
         WeatherService.getWeather(pos.latitude, pos.longitude);
         
         notifyListeners(); // Notify city/fallback changes
-      } catch (e) {
+      } on Object catch (e) {
         debugPrint("GPS Timeout/Error: $e");
         
         Position? lastPos;
         try {
           lastPos = await Geolocator.getLastKnownPosition();
-        } catch (_) {}
+        } on Object catch (_) {}
         
         if (lastPos != null) {
           debugPrint("Using last known position as safety net.");
@@ -560,7 +560,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
             ),
           );
           _updatePositionAndSpeed(pos);
-        } catch (_) {}
+        } on Object catch (_) {}
       });
       return;
     }

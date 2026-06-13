@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:ui';
+import 'dart:ui' as ui;
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
@@ -43,6 +45,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   bool _isLoadingStyle = true;
   Brightness? _lastBrightness;
   MapLibreMapController? _tempController;
+  Uint8List? _customPinBytes;
 
   MapThemeType? _currentTheme;
   bool _userOverrodeMapTheme = false;
@@ -59,6 +62,24 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       curve: Curves.easeOutCubic,
     );
     widget.searchSheetProgressNotifier.addListener(_onProgressChanged);
+
+    // Pre-load and decode to protect against race conditions
+    _loadAndDecodePinImage();
+  }
+
+  Future<void> _loadAndDecodePinImage() async {
+    try {
+      final ByteData data = await rootBundle.load('assets/images/custom_pin.png');
+      final ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+      final ui.FrameInfo frameInfo = await codec.getNextFrame();
+      final ByteData? rawBytes = await frameInfo.image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      
+      if (rawBytes != null) {
+        _customPinBytes = rawBytes.buffer.asUint8List();
+      }
+    } catch (e) {
+      debugPrint("Error decoding custom_pin: $e");
+    }
   }
 
   void _onProgressChanged() {
@@ -108,7 +129,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
     try {
       final isDark = brightness == Brightness.dark;
-      String finalStyle = await MapStyleHelper.getOlaStyle(isDark, themeType: _currentTheme);
+      String finalStyle =
+          await MapStyleHelper.getOlaStyle(isDark, themeType: _currentTheme);
 
       if (mounted) {
         setState(() {
@@ -117,7 +139,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           _lastBrightness = brightness;
         });
 
-        final themeToSet = _currentTheme ?? (isDark ? MapThemeType.dark : MapThemeType.light);
+        final themeToSet =
+            _currentTheme ?? (isDark ? MapThemeType.dark : MapThemeType.light);
         Provider.of<MapProvider>(context, listen: false).setTheme(themeToSet);
       }
     } catch (e) {
@@ -125,12 +148,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       // 🚀 CRITICAL FIX: Unlock the UI even if the style fetch fails
       if (mounted) {
         setState(() {
-          _isLoadingStyle = false; 
+          _isLoadingStyle = false;
         });
       }
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -169,97 +191,50 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   mapProvider.engine.mapController = controller;
                 },
                 onStyleLoadedCallback: () async {
-                  if (_tempController != null) {
-                    // Failsafe for missing required images that crash WebGL
-                    try {
-                      final Uint8List transparentPixel = Uint8List.fromList([
-                        137,
-                        80,
-                        78,
-                        71,
-                        13,
-                        10,
-                        26,
-                        10,
-                        0,
-                        0,
-                        0,
-                        13,
-                        73,
-                        72,
-                        68,
-                        82,
-                        0,
-                        0,
-                        0,
-                        1,
-                        0,
-                        0,
-                        0,
-                        1,
-                        8,
-                        6,
-                        0,
-                        0,
-                        0,
-                        31,
-                        21,
-                        196,
-                        137,
-                        0,
-                        0,
-                        0,
-                        11,
-                        73,
-                        68,
-                        65,
-                        84,
-                        8,
-                        215,
-                        99,
-                        96,
-                        0,
-                        2,
-                        0,
-                        0,
-                        5,
-                        0,
-                        1,
-                        226,
-                        38,
-                        5,
-                        155,
-                        0,
-                        0,
-                        0,
-                        0,
-                        73,
-                        69,
-                        78,
-                        68,
-                        174,
-                        66,
-                        96,
-                        130
-                      ]);
-                      await _tempController!
-                          .addImage('Arrow', transparentPixel);
-                      await _tempController!
-                          .addImage('arrow', transparentPixel);
-                      await _tempController!
-                          .addImage('custom-marker', transparentPixel);
-                    } catch (_) {}
+                  final controller = _tempController;
+                  if (controller == null) return;
 
-                    if (!context.mounted) return;
-                    Provider.of<MapProvider>(context, listen: false)
-                        .engine
-                        .onMapCreated(
-                            _tempController!,
-                            isDark,
-                            Provider.of<GlobalLocationService>(context,
-                                listen: false),
-                            this);
+                  // Ensure the image is fully decoded
+                  if (_customPinBytes == null) {
+                    await _loadAndDecodePinImage();
                   }
+
+                  if (_customPinBytes != null) {
+                    try {
+                      // Re-inject on every style load to survive MapLibre cache wipes
+                      await controller.addImage('custom_pin', _customPinBytes!);
+                      debugPrint("Custom Pin Successfully Injected (Decoded)");
+                    } catch (e) {
+                      debugPrint("Failed to load custom_pin: $e");
+                    }
+                  }
+
+                  try {
+                    // Failsafe for missing required images that crash WebGL
+                    final Uint8List transparentPixel = Uint8List.fromList([
+                      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68,
+                      82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196,
+                      137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0,
+                      0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68,
+                      174, 66, 96, 130
+                    ]);
+                    await controller.addImage('Arrow', transparentPixel);
+                    await controller.addImage('arrow', transparentPixel);
+                    await controller.addImage('custom-marker', transparentPixel);
+                  } catch (e) {
+                    debugPrint("Asset Load Error: $e");
+                  }
+
+                  if (!context.mounted) return;
+                  final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                  mapProvider
+                      .engine
+                      .onMapCreated(
+                          controller,
+                          isDark,
+                          Provider.of<GlobalLocationService>(context,
+                              listen: false),
+                          this);
                 },
                 onMapClick: (point, latLng) async {
                   FocusScope.of(context).unfocus();
@@ -285,9 +260,22 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   }
                 },
                 onMapLongClick: (point, latLng) {
-                  final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                  AppHaptics.heavyImpact();
+                  final mapProvider =
+                      Provider.of<MapProvider>(context, listen: false);
+
+                  // 🚀 Free the camera from blue dot
+                  mapProvider.setAutoTracking(false);
+                  mapProvider.setUserPanning(true);
+
                   mapProvider.handleMapTap(point, latLng);
                   mapProvider.addNativeDestinationPin(latLng);
+
+                  // 🚀 Fly to pin
+                  mapProvider.controller?.animateCamera(
+                    CameraUpdate.newLatLngZoom(latLng, 16.0),
+                    duration: const Duration(milliseconds: 800),
+                  );
                 },
                 initialCameraPosition: const CameraPosition(
                     target: LatLng(28.6139, 77.2090),
@@ -303,9 +291,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
                 // 🚀 CRITICAL FIX 2: Restore native blue dot logic exactly like custom_map_screen
                 myLocationEnabled: true,
-                myLocationTrackingMode: kIsWeb
-                    ? MyLocationTrackingMode.tracking
-                    : MyLocationTrackingMode.trackingCompass,
+                myLocationTrackingMode: Provider.of<MapProvider>(context).isAutoTracking
+                    ? (kIsWeb ? MyLocationTrackingMode.tracking : MyLocationTrackingMode.trackingCompass)
+                    : MyLocationTrackingMode.none,
                 myLocationRenderMode: MyLocationRenderMode.normal,
                 trackCameraPosition: true,
 
@@ -389,12 +377,15 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 spreadRadius: 10,
                               ),
                               BoxShadow(
-                                color: Colors.purpleAccent.withValues(alpha: 0.15),
+                                color:
+                                    Colors.purpleAccent.withValues(alpha: 0.15),
                                 blurRadius: 40,
                                 spreadRadius: -10,
                               ),
                             ],
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: kIsWeb ? 4.0 : 8.0),
+                            border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.8),
+                                width: kIsWeb ? 4.0 : 8.0),
                           ),
                         ),
                       );
@@ -468,104 +459,104 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                 isDesktop ? 32.0 : (MediaQuery.paddingOf(context).bottom + 124),
             left: sideMargin,
             child: Selector<MapProvider, bool>(
-                selector: (context, provider) => provider.isActiveNavigation,
-                builder: (context, isActiveNavigation, child) {
-                  if (!isActiveNavigation) return const SizedBox.shrink();
+              selector: (context, provider) => provider.isActiveNavigation,
+              builder: (context, isActiveNavigation, child) {
+                if (!isActiveNavigation) return const SizedBox.shrink();
 
-                  final camera = Provider.of<MapProvider>(context, listen: false).engine.camera;
-                  // 🚀 CRITICAL FIX: Do not permanently unmount if camera is momentarily null
-                  if (camera == null) return const SizedBox.shrink(); 
+                final camera = Provider.of<MapProvider>(context, listen: false)
+                    .engine
+                    .camera;
+                // 🚀 CRITICAL FIX: Do not permanently unmount if camera is momentarily null
+                if (camera == null) return const SizedBox.shrink();
 
-                  return ValueListenableBuilder<bool>(
-                    valueListenable: camera.isUserPanning,
-                    builder: (context, isPanning, _) {
-                      final isVisible = isPanning && isActiveNavigation;
-                      return IgnorePointer(
-                        ignoring: !isVisible,
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 200),
-                          opacity: isVisible ? 1.0 : 0.0,
-                          child: child,
+                return ValueListenableBuilder<bool>(
+                  valueListenable: camera.isUserPanning,
+                  builder: (context, isPanning, _) {
+                    final isVisible = isPanning && isActiveNavigation;
+                    return IgnorePointer(
+                      ignoring: !isVisible,
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 200),
+                        opacity: isVisible ? 1.0 : 0.0,
+                        child: child,
+                      ),
+                    );
+                  },
+                );
+              },
+              child: Builder(builder: (context) {
+                final content = RidelBounceButton(
+                  onTap: () {
+                    AppHaptics.selectionClick();
+                    Provider.of<MapProvider>(context, listen: false)
+                        .engine
+                        .camera
+                        ?.resetCompass();
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(36),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 24,
+                          offset: const Offset(0, 12),
                         ),
-                      );
-                    },
-                  );
-                },
-                child: Builder(
-                  builder: (context) {
-                    final content = RidelBounceButton(
-                      onTap: () {
-                        AppHaptics.selectionClick();
-                        Provider.of<MapProvider>(context, listen: false)
-                            .engine
-                            .camera
-                            ?.resetCompass();
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(36),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.4),
-                              blurRadius: 24,
-                              offset: const Offset(0, 12),
-                            ),
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.2),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
                         ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(36),
-                          child: RepaintBoundary(
-                            child: BackdropFilter(
-                              filter: ImageFilter.blur(
-                                  sigmaX: kIsWeb ? 4.0 : 24.0,
-                                  sigmaY: kIsWeb ? 4.0 : 24.0),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 14),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF0B0E17)
-                                      .withValues(alpha: 0.75),
-                                  borderRadius: BorderRadius.circular(36),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.08),
-                                    width: 1,
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(36),
+                      child: RepaintBoundary(
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(
+                              sigmaX: kIsWeb ? 4.0 : 24.0,
+                              sigmaY: kIsWeb ? 4.0 : 24.0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0B0E17)
+                                  .withValues(alpha: 0.75),
+                              borderRadius: BorderRadius.circular(36),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.navigation_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  "Re-centre",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.2,
                                   ),
                                 ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.navigation_rounded,
-                                      color: Colors.white,
-                                      size: 18,
-                                    ),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      "Re-centre",
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: -0.2,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                              ],
                             ),
                           ),
                         ),
                       ),
-                    );
-                    return kIsWeb ? PointerInterceptor(child: content) : content;
-                  }
-                ),
-              ),
+                    ),
+                  ),
+                );
+                return kIsWeb ? PointerInterceptor(child: content) : content;
+              }),
+            ),
           ),
 
           Positioned(
@@ -624,7 +615,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                     children: [
                       // 🍏 THE APPLE "PILL" (Map Settings + Locate Me)
                       Selector<MapProvider, bool>(
-                        selector: (context, provider) => !provider.isActiveNavigation || !provider.isAutoTracking,
+                        selector: (context, provider) =>
+                            !provider.isActiveNavigation ||
+                            !provider.isAutoTracking,
                         builder: (context, isVisible, child) {
                           return IgnorePointer(
                             ignoring: !isVisible,
@@ -635,9 +628,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             ),
                           );
                         },
-                        child: Builder(
-                          builder: (context) {
-                            final content = Container(
+                        child: Builder(builder: (context) {
+                          final content = Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(50),
                               boxShadow: !isDark
@@ -775,9 +767,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                                   "🛣️ Fetching Route...");
 
                                               // 1. Force location refresh to prevent silent routing failures
-                                              final locService = Provider.of<GlobalLocationService>(context, listen: false);
-                                              if (locService.currentPosition == null) {
-                                                await locService.forceRefreshLocation();
+                                              final locService = Provider.of<
+                                                      GlobalLocationService>(
+                                                  context,
+                                                  listen: false);
+                                              if (locService.currentPosition ==
+                                                  null) {
+                                                await locService
+                                                    .forceRefreshLocation();
                                               }
 
                                               if (!context.mounted) return;
@@ -796,22 +793,41 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                             height: 52,
                                             width: 48,
                                             child: Center(
-                                              child: Selector<MapProvider, (bool, bool, bool, bool, bool)>(
-                                                selector: (context, provider) => (
+                                              child: Selector<
+                                                  MapProvider,
+                                                  (
+                                                    bool,
+                                                    bool,
+                                                    bool,
+                                                    bool,
+                                                    bool
+                                                  )>(
+                                                selector: (context, provider) =>
+                                                    (
                                                   provider.isActiveNavigation,
                                                   provider.isAutoTracking,
                                                   provider.isRouteCalculated,
-                                                  provider.targetDestination != null,
-                                                  provider.isUserVisibleOnScreen,
+                                                  provider.targetDestination !=
+                                                      null,
+                                                  provider
+                                                      .isUserVisibleOnScreen,
                                                 ),
                                                 builder: (context, _, __) {
-                                                  final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                                                  final mapProvider =
+                                                      Provider.of<MapProvider>(
+                                                          context,
+                                                          listen: false);
                                                   return AnimatedSwitcher(
-                                                    duration: const Duration(milliseconds: 300),
-                                                    transitionBuilder: (child, animation) {
-                                                      return ScaleTransition(scale: animation, child: child);
+                                                    duration: const Duration(
+                                                        milliseconds: 300),
+                                                    transitionBuilder:
+                                                        (child, animation) {
+                                                      return ScaleTransition(
+                                                          scale: animation,
+                                                          child: child);
                                                     },
-                                                    child: _buildDynamicIcon(context, mapProvider),
+                                                    child: _buildDynamicIcon(
+                                                        context, mapProvider),
                                                   );
                                                 },
                                               ),
@@ -825,16 +841,16 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               ),
                             ),
                           );
-                            return kIsWeb ? PointerInterceptor(child: content) : content;
-                          }
-                        ),
+                          return kIsWeb
+                              ? PointerInterceptor(child: content)
+                              : content;
+                        }),
                       ),
-                        // 🚀 3. ZOOM PILL: Sirf Desktop par dikhega, mobile par clean layout!
-                        if (isDesktop) ...[
-                          const SizedBox(height: 16),
-                          Builder(
-                            builder: (context) {
-                              final content = Container(
+                      // 🚀 3. ZOOM PILL: Sirf Desktop par dikhega, mobile par clean layout!
+                      if (isDesktop) ...[
+                        const SizedBox(height: 16),
+                        Builder(builder: (context) {
+                          final content = Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(24),
                               boxShadow: !isDark
@@ -929,18 +945,17 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               ),
                             ),
                           );
-                            return kIsWeb ? PointerInterceptor(child: content) : content;
-                          }
-                        ), // Close Builder
-                        ],
+                          return kIsWeb
+                              ? PointerInterceptor(child: content)
+                              : content;
+                        }), // Close Builder
                       ],
-                    ),
+                    ],
                   ),
                 ),
+              ),
             ),
           ),
-
-
         ],
       ),
     );
@@ -1112,7 +1127,8 @@ class _AppleStyleCompassState extends State<AppleStyleCompass> {
                             width: 4,
                             height: 12,
                             decoration: BoxDecoration(
-                              color: isDark ? Colors.white : Colors.grey.shade400,
+                              color:
+                                  isDark ? Colors.white : Colors.grey.shade400,
                               borderRadius: const BorderRadius.vertical(
                                   bottom: Radius.circular(2)),
                             ),
@@ -1166,7 +1182,8 @@ class _DesktopDraggableSearchWrapperState
                 setState(() => _isMoveMode = false);
               },
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: kIsWeb ? 4.0 : 10.0, sigmaY: kIsWeb ? 4.0 : 10.0),
+                filter: ImageFilter.blur(
+                    sigmaX: kIsWeb ? 4.0 : 10.0, sigmaY: kIsWeb ? 4.0 : 10.0),
                 child: Container(color: Colors.black.withValues(alpha: 0.65)),
               ),
             ),

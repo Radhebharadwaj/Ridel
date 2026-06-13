@@ -553,7 +553,7 @@ class MapCameraController {
         ));
 
         await map.addSymbolLayer('user-puck-source', 'user-puck-layer', SymbolLayerProperties(
-          iconImage: "assets/images/nav_puck.png",
+          iconImage: "nav_puck",
           iconSize: 1.0,
           iconOpacity: targetPuckOpacity * _blueDotOpacity,
           iconRotate: heading,

@@ -3,6 +3,7 @@ import 'dart:math' show Point;
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -67,49 +68,48 @@ class MapProvider extends ChangeNotifier {
           : 0.0;
 
   // 1. ADD NATIVE VECTOR PIN
-  Future<void> addNativeDestinationPin(LatLng location) async {
-    if (controller == null) return;
+  Future<void> addNativeDestinationPin(LatLng latLng) async {
+    final ctrl = controller ?? engine.mapController;
+    if (ctrl == null) return;
 
-    // 🚨 1. STRICT CLEANUP: Wipe out the old route and reset UI state immediately
-    await clearNativeRoute();
-    isRouteCalculated = false; // Ensure the Start button reverts to Directions
-
-    // 🚨 2. STRICT CLEANUP: Remove the old pin
-    await clearNativeDestinationPin();
-
-    // 3. Drop the new custom pin using SymbolLayer
-    try {
-      await controller!.addGeoJsonSource('destination_pin_source', {
-        "type": "FeatureCollection",
-        "features": [
-          {
-            "type": "Feature",
-            "geometry": {
-              "type": "Point",
-              "coordinates": [location.longitude, location.latitude]
-            }
+    final Map<String, dynamic> geoJsonPayload = {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [latLng.longitude, latLng.latitude]
           }
-        ]
-      });
+        }
+      ]
+    };
 
-      await controller!.addSymbolLayer(
+    // BLOCK 1: Handle Source Independently
+    try {
+      await ctrl.setGeoJsonSource('destination_pin_source', geoJsonPayload);
+    } catch (_) {
+      await ctrl.addGeoJsonSource('destination_pin_source', geoJsonPayload);
+    }
+
+    // BLOCK 2: Handle Layer Independently (CRITICAL FIX)
+    try {
+      // We ALWAYS try to add the layer. If it already exists, MapLibre throws an error which we silently swallow.
+      // If it was missing (the Ghost Layer bug), it instantly gets recreated here.
+      await ctrl.addSymbolLayer(
         'destination_pin_source',
         'destination_pin_layer',
         const SymbolLayerProperties(
           iconImage: 'custom_pin',
-          iconPitchAlignment: 'viewport',
-          iconAnchor: 'bottom',
-          iconSize: 0.65,
+          iconSize: 0.35, // Perfect premium size
+          iconAnchor: 'bottom', // Keeps the pointer exactly on the coordinates
           iconAllowOverlap: true,
           iconIgnorePlacement: true,
+          iconPitchAlignment: 'viewport',
         ),
       );
-
-      targetDestination = location; // Update the internal coordinate tracker
-      debugPrint("🗺️ CUSTOM PIN DROPPED at $location");
-      notifyListeners();
-    } catch (e) {
-      debugPrint("🗺️ PIN ERROR: $e");
+    } catch (_) {
+      // Silently ignore. Layer already exists and is happily pointing to the updated source.
     }
   }
 
@@ -117,7 +117,10 @@ class MapProvider extends ChangeNotifier {
   Future<void> clearNativeDestinationPin() async {
     if (controller != null) {
       try {
-        await controller!.setGeoJsonSource('destination_pin_source', {"type": "FeatureCollection", "features": []});
+        await controller!.setLayerProperties(
+          'destination_pin_layer',
+          const SymbolLayerProperties(iconOpacity: 0.0),
+        );
       } catch (_) {}
       notifyListeners();
     }
@@ -719,7 +722,7 @@ class MapProvider extends ChangeNotifier {
 
       try {
         // Step 2: Add/Update Destination Pin Layer
-        await controller!.addGeoJsonSource('destination_pin_source', {
+        final pinGeojson = {
           "type": "FeatureCollection",
           "features": [
             {
@@ -733,20 +736,25 @@ class MapProvider extends ChangeNotifier {
               }
             }
           ]
-        });
+        };
 
-        await controller!.addSymbolLayer(
-          'destination_pin_source',
-          'destination_pin_layer',
-          const SymbolLayerProperties(
-            iconImage: 'custom_pin',
-            iconPitchAlignment: 'viewport',
-            iconAnchor: 'bottom',
-            iconSize: 0.65,
-            iconAllowOverlap: true,
-            iconIgnorePlacement: true,
-          ),
-        );
+        try {
+          await controller!.setGeoJsonSource('destination_pin_source', pinGeojson);
+        } catch (_) {
+          await controller!.addSource('destination_pin_source', GeojsonSourceProperties(data: pinGeojson));
+          await controller!.addSymbolLayer(
+            'destination_pin_source',
+            'destination_pin_layer',
+            const SymbolLayerProperties(
+              iconImage: 'custom_pin',
+              iconSize: 0.35, // Perfect premium size
+              iconAnchor: 'bottom', // Keeps the pointer exactly on the coordinates
+              iconAllowOverlap: true,
+              iconIgnorePlacement: true,
+              iconPitchAlignment: 'viewport',
+            ),
+          );
+        }
 
         // Step 3: Bring Nav Puck to Front
         try {
@@ -1008,7 +1016,7 @@ class MapProvider extends ChangeNotifier {
   }
 
   // Helper to safely fully clear everything and notify UI
-  Future<void> cancelAndClearRoute() async {
+  Future<void> cancelAndClearRoute({bool resetCamera = true}) async {
     _liveLocationSub?.cancel();
     _liveLocationSub = null;
     // 1. Clear MapLibre Native Layers (Lines AND ETA Pills)
@@ -1061,26 +1069,28 @@ class MapProvider extends ChangeNotifier {
     engine.setUIState(MapUIState.idle);
 
     // 🚀 Cinematic Camera Reset
-    if (controller != null && currentLocation != null) {
-      controller!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: currentLocation!,
-            zoom: 15.0, // Comfortable default zoom
-            tilt: 0.0, // Strictly reset to flat 2D
-            bearing: 0.0, // Strictly reset rotation
+    if (resetCamera) {
+      if (controller != null && currentLocation != null) {
+        controller!.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: currentLocation!,
+              zoom: 15.0, // Comfortable default zoom
+              tilt: 0.0, // Strictly reset to flat 2D
+              bearing: 0.0, // Strictly reset rotation
+            ),
           ),
-        ),
-        duration:
-            const Duration(milliseconds: 1200), // Smooth 1.2s premium flight
-      );
+          duration:
+              const Duration(milliseconds: 1200), // Smooth 1.2s premium flight
+        );
 
-      // Reset modes
-      controller!
-          .updateMyLocationTrackingMode(
-            MyLocationTrackingMode.tracking,
-          )
-          .catchError((_) {});
+        // Reset modes
+        controller!.updateMyLocationTrackingMode(
+          kIsWeb
+              ? MyLocationTrackingMode.tracking
+              : MyLocationTrackingMode.trackingCompass,
+        ).catchError((_) {});
+      }
     }
 
 
@@ -1460,8 +1470,18 @@ class MapProvider extends ChangeNotifier {
   Future<void> handleMapTap(Point<double> point, LatLng latLng) async {
     if (!_isMapReady) return;
 
-    await cancelAndClearRoute();
+    // 🚀 NEW: explicitly disable auto-tracking so the map doesn't fight the camera animation
+    setAutoTracking(false);
+    setUserPanning(true);
+
+    await cancelAndClearRoute(resetCamera: false);
     await addNativeDestinationPin(latLng);
+
+    controller?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+    controller?.animateCamera(
+      CameraUpdate.newLatLng(latLng),
+      duration: const Duration(milliseconds: 800),
+    );
 
     AppHaptics.lightImpact();
 
@@ -1527,6 +1547,27 @@ class MapProvider extends ChangeNotifier {
     await engine.resetUIState();
     _lastRouteData = null;
     isActiveNavigation = false;
+
+    // 🚀 Return Camera to Home & Resume Tracking
+    if (controller != null && currentLocation != null) {
+      controller!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: currentLocation!,
+            zoom: 15.0,
+            tilt: 0.0,
+            bearing: 0.0,
+          ),
+        ),
+        duration: const Duration(milliseconds: 1200),
+      );
+
+      controller!.updateMyLocationTrackingMode(
+        kIsWeb
+            ? MyLocationTrackingMode.tracking
+            : MyLocationTrackingMode.trackingCompass,
+      ).catchError((_) {});
+    }
 
     notifyListeners(); // Force UI components and FAB to revert to standard states
     debugPrint("Map session completely cleared.");
