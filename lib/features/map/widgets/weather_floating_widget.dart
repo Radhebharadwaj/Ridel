@@ -33,14 +33,24 @@ class WeatherFloatingWidget extends StatefulWidget {
   });
 
   @override
-  State<WeatherFloatingWidget> createState() => _WeatherFloatingWidgetState();
+  State<WeatherFloatingWidget> createState() => WeatherFloatingWidgetState();
 }
 
-class _WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
+class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
   static const Color accentColor = Color(0xFF00E5FF);
 
   WeatherModel? _weather;
   WeatherState _currentState = WeatherState.compact;
+
+  bool get isExpanded => _currentState != WeatherState.compact;
+
+  void collapse() {
+    if (mounted && _currentState != WeatherState.compact) {
+      setState(() {
+        _currentState = WeatherState.compact;
+      });
+    }
+  }
 
   // 🚀 OPTIMIZATION: State variables to prevent infinite API loops
   bool _isExecutingFetch = false;

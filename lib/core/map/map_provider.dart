@@ -3,7 +3,7 @@ import 'dart:math' show Point;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
-import 'dart:typed_data';
+
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,6 +20,7 @@ import 'package:ridel/features/map/models/place_model.dart';
 import 'package:ridel/features/map/services/master_search_service.dart';
 import 'package:ridel/features/map/services/place_api_services.dart';
 import 'package:ridel/features/map/services/route_visualizer.dart';
+import 'package:flutter/foundation.dart';
 import 'package:ridel/features/map/services/route_engine_service.dart';
 import 'package:ridel/features/map/map_engine/controllers/map_camera_controller.dart';
 import 'package:ridel/core/utils/toast_service.dart';
@@ -30,6 +31,24 @@ class MapProvider extends ChangeNotifier {
 
   MapLibreMapController? get controller => engine.mapController;
   bool get _isMapReady => controller != null;
+
+  MyLocationTrackingMode _currentTrackingMode = kIsWeb
+      ? MyLocationTrackingMode.tracking
+      : MyLocationTrackingMode.trackingCompass;
+
+  MyLocationTrackingMode get currentTrackingMode => _currentTrackingMode;
+
+  Future<void> setTrackingMode(MyLocationTrackingMode mode) async {
+    if (_currentTrackingMode != mode) {
+      _currentTrackingMode = mode;
+      notifyListeners();
+    }
+    if (controller != null) {
+      try {
+        await controller!.updateMyLocationTrackingMode(mode);
+      } catch (_) {}
+    }
+  }
 
   Circle? _currentMarker;
   Circle? _originMarker;
@@ -148,6 +167,7 @@ class MapProvider extends ChangeNotifier {
 
     // 3. Drop the new custom pin using SymbolLayer
     try {
+      if (controller == null) return;
       await controller!.addGeoJsonSource('destination_pin_source', {
         "type": "FeatureCollection",
         "features": [
@@ -168,7 +188,7 @@ class MapProvider extends ChangeNotifier {
           iconImage: 'custom_pin',
           iconPitchAlignment: 'viewport',
           iconAnchor: 'bottom',
-          iconSize: 0.65,
+          iconSize: 0.20,
           iconAllowOverlap: true,
           iconIgnorePlacement: true,
         ),
@@ -176,6 +196,8 @@ class MapProvider extends ChangeNotifier {
 
       targetDestination = location; // Update the internal coordinate tracker
       debugPrint("🗺️ CUSTOM PIN DROPPED at $location");
+
+      // Removed redundant internal animation. Handled exclusively by caller.
       notifyListeners();
     } catch (e) {
       debugPrint("🗺️ PIN ERROR: $e");
@@ -239,6 +261,8 @@ class MapProvider extends ChangeNotifier {
 
     // 🚨 CRITICAL: Clear old routes and UI state before fetching new ones
     await clearNativeRoute(preserveState: true);
+    if (controller == null) return;
+
     _currentRouteResult = null;
     notifyListeners();
 
@@ -359,7 +383,7 @@ class MapProvider extends ChangeNotifier {
     // 3. THE MAGIC: Lock camera to compass and change puck to Directional Triangle
     try {
       // TrackingCompass makes the map rotate automatically as the device rotates
-      await controller!.updateMyLocationTrackingMode(
+      await setTrackingMode(
         MyLocationTrackingMode.trackingCompass,
       );
     } catch (_) {
@@ -515,7 +539,6 @@ class MapProvider extends ChangeNotifier {
 
       final newResult = RouteResult(
         allRoutesCoordinates: updatedRoutes,
-        geoJson: _currentRouteResult!.geoJson,
         distanceKm: _currentRouteResult!.distanceKm,
         durationMins: _currentRouteResult!.durationMins,
         steps: _currentRouteResult!.steps,
@@ -817,7 +840,7 @@ class MapProvider extends ChangeNotifier {
             iconImage: 'custom_pin',
             iconPitchAlignment: 'viewport',
             iconAnchor: 'bottom',
-            iconSize: 0.65,
+            iconSize: 0.20,
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
           ),
@@ -837,7 +860,7 @@ class MapProvider extends ChangeNotifier {
             iconRotationAlignment: 'map',
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
-            iconSize: 0.4,
+            iconSize: 0.15,
             iconOpacity: 1.0,
             iconRotate: ['get', 'bearing'],
           ),
@@ -853,10 +876,10 @@ class MapProvider extends ChangeNotifier {
         await controller!.animateCamera(
           CameraUpdate.newLatLngBounds(
             _calculateBounds(allRoutes.first),
-            bottom: 120, // Reduced from 300/400
+            bottom: 300, 
             left: 50,
             right: 50,
-            top: 100,
+            top: 50,
           ),
           duration: const Duration(milliseconds: 800),
         );
@@ -1007,7 +1030,7 @@ class MapProvider extends ChangeNotifier {
           layerId,
           SymbolLayerProperties(
             iconImage: imageId,
-            iconSize: 0.35, // Scale down the high-res image
+            iconSize: 0.15, // Scale down the high-res image
             iconAnchor: "bottom",
             iconOffset: [0, -1.0],
             symbolSortKey:
@@ -1110,7 +1133,7 @@ class MapProvider extends ChangeNotifier {
             );
 
             // Reset tracking mode after animation
-            await controller!.updateMyLocationTrackingMode(
+            await setTrackingMode(
               MyLocationTrackingMode.tracking,
             );
           } catch (e) {
@@ -1227,11 +1250,9 @@ class MapProvider extends ChangeNotifier {
       );
 
       // Reset modes
-      controller!
-          .updateMyLocationTrackingMode(
-            MyLocationTrackingMode.tracking,
-          )
-          .catchError((_) {});
+      await setTrackingMode(
+        MyLocationTrackingMode.tracking,
+      );
     }
 
     // 🌟 Explicitly Restore All Dimmed/Hidden Background Layers & Hide Puck
@@ -1289,11 +1310,12 @@ class MapProvider extends ChangeNotifier {
   MapThemeType get currentTheme => _currentTheme;
   void setTheme(MapThemeType theme) {
     _currentTheme = theme;
-    if (isNavigatingToStation &&
-        targetStationLocation != null &&
-        _lastRouteData != null) {
-      if (controller != null) {
-        drawNativeRoute(_lastRouteData!.allRoutesCoordinates);
+    if (controller != null) {
+      if (_lastRouteData != null) {
+        // Explicitly clear layers to prevent memory leaks from overlaying
+        RouteVisualizer.clearRoute(controller).then((_) {
+          drawNativeRoute(_lastRouteData!.allRoutesCoordinates);
+        });
       }
     }
   }
@@ -1621,48 +1643,68 @@ class MapProvider extends ChangeNotifier {
     await cancelAndClearRoute();
     await drawDroppedPin(latLng);
 
-    AppHaptics.lightImpact();
+    AppHaptics.heavyImpact();
 
-    try {
-      final PlaceModel place = await PlaceEnrichmentService().reverseGeocode(
-        latLng.latitude,
-        latLng.longitude,
-      );
-      setTappedPlace(place);
+    // Set placeholder immediately to avoid blocking UI
+    final temporaryPlace = PlaceModel(
+      placeId: 'temp_${latLng.latitude}_${latLng.longitude}',
+      name: 'Fetching address...',
+      address: 'Please wait',
+      latitude: latLng.latitude,
+      longitude: latLng.longitude,
+      categories: const [],
+    );
+    setTappedPlace(temporaryPlace);
 
-      // 🚀 NEW: Force the exact same state as the Search flow!
-      _isDestinationSelected = true;
-      targetDestination = latLng;
-      engine.setUIState(MapUIState.placeSelected);
-      notifyListeners();
+    _isDestinationSelected = true;
+    targetDestination = latLng;
+    engine.setUIState(MapUIState.placeSelected);
+    notifyListeners();
 
-      // 🚀 NEW: Save this tapped location to history!
-      saveNewSearch(place);
+    // Fire-and-forget network call in background
+    Future.microtask(() async {
+      try {
+        final PlaceModel place = await PlaceEnrichmentService().reverseGeocode(
+          latLng.latitude,
+          latLng.longitude,
+        );
+        setTappedPlace(place);
+        saveNewSearch(place);
 
-      // 🚀 ACTION 2: Resolve "Locating..." for Current Location
-      final locService = engine.locService;
-      if (locService != null) {
-        final originAddr = locService.currentAddressName;
-        if (originAddr == null ||
-            originAddr.isEmpty ||
-            originAddr == "Locating...") {
-          final pos = locService.currentPosition;
-          if (pos != null) {
-            try {
-              final currentPlace = await PlaceEnrichmentService()
-                  .reverseGeocode(pos.latitude, pos.longitude);
-              locService.setCurrentAddressName(currentPlace.address.isNotEmpty
-                  ? currentPlace.address
-                  : currentPlace.name);
-            } catch (e) {
-              debugPrint("Origin Reverse Geocode Failed: $e");
+        final locService = engine.locService;
+        if (locService != null) {
+          final originAddr = locService.currentAddressName;
+          if (originAddr == null ||
+              originAddr.isEmpty ||
+              originAddr == "Locating...") {
+            final pos = locService.currentPosition;
+            if (pos != null) {
+              try {
+                final currentPlace = await PlaceEnrichmentService()
+                    .reverseGeocode(pos.latitude, pos.longitude);
+                locService.setCurrentAddressName(currentPlace.address.isNotEmpty
+                    ? currentPlace.address
+                    : currentPlace.name);
+              } catch (e) {
+                debugPrint("Origin Reverse Geocode Failed: $e");
+              }
             }
           }
         }
+      } catch (e) {
+        debugPrint("Tap Handler Reverse Geocode Error: $e");
+        // Fallback to coordinates on failure
+        final fallback = PlaceModel(
+          placeId: temporaryPlace.placeId,
+          name: "Dropped Pin",
+          address: "${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}",
+          latitude: latLng.latitude,
+          longitude: latLng.longitude,
+          categories: const [],
+        );
+        setTappedPlace(fallback);
       }
-    } catch (e) {
-      debugPrint("Tap Handler Error: $e");
-    }
+    });
   }
 
   Future<void> drawDroppedPin(LatLng latLng) async {
@@ -2143,6 +2185,12 @@ class MapProvider extends ChangeNotifier {
 
     isFlying = true;
     try {
+      // 1. Force native layer to drop tracking immediately
+      await controller?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+
+      // 2. CRITICAL FIX: Event loop breaker to safely disengage WebGL tracking lock
+      await Future.delayed(const Duration(milliseconds: 50));
+
       await controller?.animateCamera(CameraUpdate.newLatLngZoom(target, 16.0));
 
       AppHaptics.mediumImpact();
@@ -2297,6 +2345,19 @@ class MapProvider extends ChangeNotifier {
     notifyListeners();
 
     AppHaptics.heavyImpact();
+
+    // Cinematic Flow 3 - Start Navigation Focus
+    await setTrackingMode(MyLocationTrackingMode.trackingCompass);
+    await controller!.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: LatLng(pos.latitude, pos.longitude),
+          zoom: 18.0,
+          tilt: 50.0,
+        ),
+      ),
+      duration: const Duration(milliseconds: 1200),
+    );
 
     // 🚀 Delegate to MapEngine's active navigation lifecycle
     await engine.startActiveNavigation(

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:isolate';
 import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -107,8 +106,8 @@ class PlaceEnrichmentService {
     try {
       final response = await _fetchWithRetry(url);
       if (response != null && response.statusCode == 200) {
-        final PlaceModel? place = await _runInIsolate(
-            () => _parseOlaReverseSync(response.body, lat, lng));
+        final PlaceModel? place = await compute(
+            _parseOlaReverseSyncWrapper, {'body': response.body, 'lat': lat, 'lng': lng});
         if (place != null) {
           _saveToCache(_geocodeCache, cacheKey, place);
           return place;
@@ -142,7 +141,7 @@ class PlaceEnrichmentService {
       }
 
       if (response != null && response.statusCode == 200) {
-        return await _runInIsolate(() => _parseWikiSync(response!.body));
+        return await compute(_parseWikiSync, response.body);
       }
     } catch (_) {}
     return null;
@@ -162,7 +161,7 @@ class PlaceEnrichmentService {
       ).timeout(_apiTimeout);
 
       if (response.statusCode == 200) {
-        return await _runInIsolate(() => _parseOSMSync(response.body));
+        return await compute(_parseOSMSync, response.body);
       }
     } catch (_) {}
     return null;
@@ -196,12 +195,7 @@ class PlaceEnrichmentService {
   // 🧹 MEMORY MANAGEMENT
   // =========================================================================
 
-  static Future<T> _runInIsolate<T>(T Function() callback) async {
-    if (kIsWeb) {
-      return callback();
-    }
-    return await Isolate.run(callback);
-  }
+
 
   void _saveToCache<T>(LinkedHashMap<String, T> cache, String key, T item) {
     if (cache.length >= _maxCacheSize) cache.remove(cache.keys.first);
@@ -268,6 +262,10 @@ class PlaceEnrichmentService {
       return null;
     }
     return null;
+  }
+
+  static PlaceModel? _parseOlaReverseSyncWrapper(Map<String, dynamic> args) {
+    return _parseOlaReverseSync(args['body'], args['lat'], args['lng']);
   }
 
   static PlaceModel? _parseOlaReverseSync(

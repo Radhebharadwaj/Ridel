@@ -11,7 +11,6 @@ import 'package:ridel/core/config/app_config.dart';
 
 class RouteResult {
   final List<List<LatLng>> allRoutesCoordinates;
-  final Map<String, dynamic> geoJson;
   final double distanceKm;
   final int durationMins;
   final List<double> allDurationSeconds;
@@ -29,7 +28,6 @@ class RouteResult {
 
   RouteResult({
     required this.allRoutesCoordinates,
-    required this.geoJson,
     required this.distanceKm,
     required this.durationMins,
     this.allDurationSeconds = const [],
@@ -54,7 +52,6 @@ class RouteResult {
             .map(
                 (route) => route.map((c) => [c.latitude, c.longitude]).toList())
             .toList(),
-        'geoJson': geoJson,
         'distanceKm': distanceKm,
         'durationMins': durationMins,
         'allDurationSeconds': allDurationSeconds,
@@ -73,7 +70,6 @@ class RouteResult {
                   (route as List).map((c) => LatLng(c[0], c[1])).toList())
               .toList()
           : [],
-      geoJson: json['geoJson'],
       distanceKm: json['distanceKm'],
       durationMins: json['durationMins'],
       allDurationSeconds: json['allDurationSeconds'] != null
@@ -202,7 +198,6 @@ class RouteEngineService {
     return RouteResult(
       allRoutesCoordinates: result.allRoutesCoordinates,
       allDurationSeconds: syncedDurations,
-      geoJson: result.geoJson,
       distanceKm: distKm,
       durationMins: currentMins, // Strictly synced with allDurationSeconds[0]
       steps: result.steps,
@@ -271,7 +266,6 @@ class RouteEngineService {
 
             return RouteResult(
               allRoutesCoordinates: allRoutesCoordinates,
-              geoJson: primitiveData['geoJson'],
               distanceKm: safeDoubleFromJson(primitiveData['distanceKm']),
               durationMins: safeIntFromJson(primitiveData['durationMins']),
               allDurationSeconds: List<double>.from(
@@ -451,20 +445,6 @@ class RouteEngineService {
 
     if (rawCoords.isEmpty) return null;
 
-    final geoJson = {
-      "type": "FeatureCollection",
-      "features": [
-        {
-          "type": "Feature",
-          "geometry": {
-            "type": "LineString",
-            "coordinates": rawCoords.map((c) => [c[1], c[0]]).toList()
-          },
-          "properties": {}
-        }
-      ]
-    };
-
     final rawSteps = leg['steps'] as List<dynamic>? ?? [];
     final safeSteps = rawSteps.map((s) => s as Map<String, dynamic>).toList();
     String instruction = "Head to destination";
@@ -522,7 +502,6 @@ class RouteEngineService {
 
     return {
       'coords': rawCoords,
-      'geoJson': geoJson,
       'distanceKm': leg['distance'] / 1000,
       'durationMins': (leg['duration'] / 60).ceil(),
       'durationSeconds': (leg['duration'] as num).toDouble(),

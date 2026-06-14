@@ -13,6 +13,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/features/map/map_engine/map_engine.dart';
 
@@ -930,38 +931,43 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   void _handleCancelTap() {
     AppHaptics.lightImpact();
 
-    final provider = Provider.of<MapProvider>(context, listen: false);
+    Future.microtask(() {
+      if (!mounted) return;
 
-    // 1. Check if there's actually a pin/route to cancel
-    if (provider.targetDestination == null) {
-      // If it's just the search bar open without a pin, just close the keyboard/sheet normally.
-      FocusScope.of(context).unfocus();
+      final provider = Provider.of<MapProvider>(context, listen: false);
 
-      bool hasText = _searchCtrl.text.isNotEmpty;
-      bool isExpanded = _sheetController.isAttached &&
-          _sheetController.size > (_safeMinSize + 0.05);
-      bool isActivelySearching = hasText ||
-          provider.engine.mapUIState.value != MapUIState.idle ||
-          isExpanded;
+      // 1. Check if there's actually a pin/route to cancel
+      if (provider.targetDestination == null) {
+        // If it's just the search bar open without a pin, just close the keyboard/sheet normally.
+        FocusScope.of(context).unfocus();
 
-      if (isActivelySearching) {
-        // CONDITION 1: User is searching -> Reset to Idle State
-        _searchCtrl.clear();
-        if (_sheetController.isAttached) {
-          _safeAnimateSheet(_safeMinSize);
+        bool hasText = _searchCtrl.text.isNotEmpty;
+        bool isExpanded = _sheetController.isAttached &&
+            _sheetController.size > (_safeMinSize + 0.05);
+        bool isActivelySearching = hasText ||
+            provider.engine.mapUIState.value != MapUIState.idle ||
+            isExpanded;
+
+        if (isActivelySearching) {
+          // CONDITION 1: User is searching -> Reset to Idle State
+          _searchCtrl.clear();
+          if (_sheetController.isAttached) {
+            _safeAnimateSheet(_safeMinSize);
+          }
+          if (provider.engine.mapUIState.value != MapUIState.idle) {
+            provider.engine.setUIState(MapUIState.idle);
+          }
+        } else {
+          // CONDITION 2: User is already in Idle state -> Go Back to Dashboard!
+          setState(() => _isSearchMode = false);
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => widget.onSearchModeChanged(false));
+              
+          provider.clearSearchSession(context);
+          Provider.of<AppNavigationProvider>(context, listen: false).setTab(0);
         }
-        if (provider.engine.mapUIState.value != MapUIState.idle) {
-          provider.engine.setUIState(MapUIState.idle);
-        }
-      } else {
-        // CONDITION 2: User is already in Idle state -> Go Back to Dashboard!
-        setState(() => _isSearchMode = false);
-        WidgetsBinding.instance
-            .addPostFrameCallback((_) => widget.onSearchModeChanged(false));
-        widget.onBackToPreviousTab(); // Ridel's specific routing method
+        return;
       }
-      return;
-    }
 
     // 2. Backup the current state in case the user wants to UNDO
     final backupCoords = provider.targetDestination!;
@@ -1024,6 +1030,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         }
       },
     );
+    });
   }
 
   // ignore: unused_element

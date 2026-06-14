@@ -413,26 +413,47 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                               padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
                               child: RidelBounceButton(
                                 scaleFactor: 0.95,
-                                onTap: () async {
+                                onTap: () {
                                   debugPrint('End Route: Start');
                                   AppHaptics.heavyImpact();
                                   rebuildState(
                                       () => _isNavSheetExpanded = false);
-                                  final p = Provider.of<MapProvider>(context,
-                                      listen: false);
-                                      
-                                  debugPrint('End Route: Calling cancelAndClearRoute');
-                                  try {
-                                    await p.cancelAndClearRoute();
-                                    debugPrint('End Route: cancelAndClearRoute success');
-                                  } catch (e) {
-                                    debugPrint('End Route Cleanup Failed: $e');
-                                  } finally {
-                                    debugPrint('End Route: Ensuring UI Dismissal');
-                                    p.isActiveNavigation = false;
-                                    p.clearError(); // Safely triggers notifyListeners()
-                                    debugPrint('End Route: Finished');
-                                  }
+                                  
+                                  Future.microtask(() async {
+                                    if (!mounted) return;
+                                    final p = Provider.of<MapProvider>(context,
+                                        listen: false);
+                                        
+                                    debugPrint('End Route: Calling cancelAndClearRoute');
+                                    try {
+                                      await p.cancelAndClearRoute();
+                                      debugPrint('End Route: cancelAndClearRoute success');
+                                    } catch (e) {
+                                      debugPrint('End Route Cleanup Failed: $e');
+                                    } finally {
+                                      debugPrint('End Route: Ensuring UI Dismissal');
+                                      p.isActiveNavigation = false;
+                                      p.clearError(); // Safely triggers notifyListeners()
+
+                                      // Cinematic Flow 4: End Route Focus (Back to neutral 2D view)
+                                      if (p.controller != null && p.currentLocation != null) {
+                                        p.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+                                        p.controller!.animateCamera(
+                                          CameraUpdate.newCameraPosition(
+                                            CameraPosition(
+                                              target: LatLng(p.currentLocation!.latitude, p.currentLocation!.longitude),
+                                              zoom: 14.0,
+                                              tilt: 0.0,
+                                              bearing: 0.0,
+                                            ),
+                                          ),
+                                          duration: const Duration(milliseconds: 1000),
+                                        );
+                                      }
+
+                                      debugPrint('End Route: Finished');
+                                    }
+                                  });
                                 },
                                 child: RidelLiquidButton(
                                   width: double.infinity,

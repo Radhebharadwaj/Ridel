@@ -503,16 +503,12 @@ class MapCameraController {
       await animateCameraCinematic(
           center: userPos, zoom: 16.5, pitch: targetTilt, bearing: 0.0);
       state = MapCameraState.follow;
-      if (!kIsWeb) {
-        map.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
-      }
+      map.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
     } else if (state == MapCameraState.follow) {
       await animateCameraCinematic(center: userPos, zoom: 17.5, pitch: 50.0);
       state = MapCameraState.heading;
-      if (!kIsWeb) {
-        map.updateMyLocationTrackingMode(
-            MyLocationTrackingMode.trackingCompass);
-      }
+      map.updateMyLocationTrackingMode(
+          MyLocationTrackingMode.trackingCompass);
     }
 
     if (currentMode == CameraMode.explore) {

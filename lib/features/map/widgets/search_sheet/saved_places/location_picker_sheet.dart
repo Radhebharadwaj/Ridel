@@ -31,34 +31,35 @@ class AnimatedMapPin extends StatefulWidget {
 
 class _AnimatedMapPinState extends State<AnimatedMapPin>
     with SingleTickerProviderStateMixin {
-  late AnimationController _bounceController;
-  late Animation<double> _bounceAnimation;
+  late AnimationController _swayController;
+  late Animation<double> _swayAnimation;
 
   @override
   void initState() {
     super.initState();
-    _bounceController = AnimationController(
+    _swayController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 2000),
     )..repeat(reverse: true);
-    _bounceAnimation = Tween<double>(begin: 0, end: -8).animate(
-      CurvedAnimation(parent: _bounceController, curve: Curves.easeInOut),
+    _swayAnimation = Tween<double>(begin: -0.06, end: 0.06).animate(
+      CurvedAnimation(parent: _swayController, curve: Curves.easeInOut),
     );
   }
 
   @override
   void dispose() {
-    _bounceController.dispose();
+    _swayController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _bounceAnimation,
+      animation: _swayAnimation,
       builder: (context, child) {
-        return Transform.translate(
-          offset: Offset(0, _bounceAnimation.value),
+        return Transform.rotate(
+          angle: _swayAnimation.value,
+          alignment: Alignment.bottomCenter, // CRITICAL: Locks the sharp point to the map
           child: child,
         );
       },
@@ -66,8 +67,8 @@ class _AnimatedMapPinState extends State<AnimatedMapPin>
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 50,
+            height: 50,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
@@ -88,13 +89,13 @@ class _AnimatedMapPinState extends State<AnimatedMapPin>
             child: const Icon(
               CupertinoIcons.location_solid,
               color: Colors.white,
-              size: 20,
+              size: 25,
             ),
           ),
           // Pin shadow/tail
           Container(
-            width: 3,
-            height: 14,
+            width: 4,
+            height: 18,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -107,8 +108,8 @@ class _AnimatedMapPinState extends State<AnimatedMapPin>
             ),
           ),
           Container(
-            width: 8,
-            height: 4,
+            width: 10,
+            height: 5,
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(4),
