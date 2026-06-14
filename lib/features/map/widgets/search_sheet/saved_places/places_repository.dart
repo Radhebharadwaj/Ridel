@@ -7,7 +7,7 @@ import 'saved_place.dart';
 class PlacesRepository {
   final LocalPlacesCache _localCache = LocalPlacesCache();
   final SupabasePlacesService _cloudService = SupabasePlacesService();
-  
+
   /// Exposes the list of saved places to the UI.
   final ValueNotifier<List<SavedPlace>> savedPlacesNotifier = ValueNotifier([]);
 
@@ -26,13 +26,13 @@ class PlacesRepository {
     // 1. Update the local ValueNotifier instantly (0ms latency for UI)
     final currentPlaces = List<SavedPlace>.from(savedPlacesNotifier.value);
     final index = currentPlaces.indexWhere((p) => p.id == place.id);
-    
+
     if (index >= 0) {
       currentPlaces[index] = place;
     } else {
       currentPlaces.add(place);
     }
-    
+
     savedPlacesNotifier.value = currentPlaces;
 
     // 2. Persist to local cache first

@@ -17,8 +17,8 @@ class MapStyleHelper {
     final String styleName =
         useDark ? "default-dark-standard" : "default-light-standard";
 
-    // 🚀 CACHE KEY v313 (Bust stale 0.0.1 keys)
-    final String cacheKey = "ola_v313_$styleName";
+    // 🚀 CACHE KEY v311 (Direct Ola URL enforcement)
+    final String cacheKey = "ola_v311_$styleName";
 
     final prefs = await SharedPreferences.getInstance();
     final String? cachedStyle = prefs.getString(cacheKey);
@@ -223,16 +223,13 @@ class MapStyleHelper {
           }
         }
 
-        // 🚀 4. NULL-COLOR & ARROW SANITIZER
+        // 🚀 4. NULL-COLOR SANITIZER
         if (layer.containsKey('paint') && layer['paint'] is Map) {
           final Map<String, dynamic> paint = layer['paint'];
           paint.removeWhere((key, value) => value == null);
         }
         if (layer.containsKey('layout') && layer['layout'] is Map) {
           final Map<String, dynamic> layout = layer['layout'];
-          if (layout['icon-image'] != null && layout['icon-image'].toString().contains('Arrow')) {
-            layout.remove('icon-image');
-          }
           layout.removeWhere((key, value) => value == null);
         }
 

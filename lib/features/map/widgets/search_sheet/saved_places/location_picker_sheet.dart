@@ -19,7 +19,107 @@ import 'places_repository.dart' as saved;
 // ============================================================
 enum SheetState { idle, selectingLocation, editing }
 
-// AnimatedMapPin widget removed entirely to rely on native destination pins.
+// ============================================================
+// 🗺️ ANIMATED MAP PIN (Floating center pin overlay)
+// ============================================================
+class AnimatedMapPin extends StatefulWidget {
+  const AnimatedMapPin({super.key});
+
+  @override
+  State<AnimatedMapPin> createState() => _AnimatedMapPinState();
+}
+
+class _AnimatedMapPinState extends State<AnimatedMapPin>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _bounceController;
+  late Animation<double> _bounceAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _bounceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _bounceAnimation = Tween<double>(begin: 0, end: -8).animate(
+      CurvedAnimation(parent: _bounceController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _bounceController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _bounceAnimation,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, _bounceAnimation.value),
+          child: child,
+        );
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF0A84FF), Color(0xFF5AC8FA)],
+              ),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0A84FF).withValues(alpha: 0.4),
+                  blurRadius: 16,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(
+              CupertinoIcons.location_solid,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+          // Pin shadow/tail
+          Container(
+            width: 3,
+            height: 14,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  const Color(0xFF0A84FF),
+                  const Color(0xFF0A84FF).withValues(alpha: 0.0),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            width: 8,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ============================================================
 // 🏠 LOCATION PICKER CONTROLLER
 // Manages the picker's state independently from the sheet,
@@ -28,8 +128,7 @@ enum SheetState { idle, selectingLocation, editing }
 class LocationPickerController extends ChangeNotifier {
   final saved.PlacesRepository _repository;
 
-  final ValueNotifier<SheetState> sheetState =
-      ValueNotifier(SheetState.idle);
+  final ValueNotifier<SheetState> sheetState = ValueNotifier(SheetState.idle);
 
   String? _activePickerType; // 'home', 'work', 'custom'
   String get activePickerType => _activePickerType ?? '';
@@ -165,10 +264,8 @@ class SavedPlacesRow extends StatelessWidget {
     return ValueListenableBuilder<List<SavedPlace>>(
       valueListenable: repository.savedPlacesNotifier,
       builder: (context, places, _) {
-        final homePlace =
-            places.where((p) => p.type == 'home').firstOrNull;
-        final workPlace =
-            places.where((p) => p.type == 'work').firstOrNull;
+        final homePlace = places.where((p) => p.type == 'home').firstOrNull;
+        final workPlace = places.where((p) => p.type == 'work').firstOrNull;
 
         return ValueListenableBuilder<SheetState>(
           valueListenable: pickerController.sheetState,
@@ -193,8 +290,8 @@ class SavedPlacesRow extends StatelessWidget {
       BuildContext context, SavedPlace? home, SavedPlace? work) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      physics: const ClampingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics()),
+      physics:
+          const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -284,8 +381,7 @@ class SavedPlacesRow extends StatelessWidget {
             // Address display bar
             Container(
               width: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
                 color: isDark
@@ -315,9 +411,8 @@ class SavedPlacesRow extends StatelessWidget {
                                 height: 14,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: isDark
-                                      ? Colors.white54
-                                      : Colors.black38,
+                                  color:
+                                      isDark ? Colors.white54 : Colors.black38,
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -325,9 +420,8 @@ class SavedPlacesRow extends StatelessWidget {
                                 'Locating...',
                                 style: GoogleFonts.inter(
                                   fontSize: 14,
-                                  color: isDark
-                                      ? Colors.white54
-                                      : Colors.black45,
+                                  color:
+                                      isDark ? Colors.white54 : Colors.black45,
                                 ),
                               ),
                             ],
@@ -358,8 +452,7 @@ class SavedPlacesRow extends StatelessWidget {
                   Icon(
                     CupertinoIcons.move,
                     size: 14,
-                    color:
-                        isDark ? Colors.white38 : Colors.black38,
+                    color: isDark ? Colors.white38 : Colors.black38,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -385,8 +478,7 @@ class SavedPlacesRow extends StatelessWidget {
                     glassTint: const Color(0xFF0A84FF).withValues(alpha: 0.2),
                     onTap: () async {
                       AppHaptics.mediumImpact();
-                      final success =
-                          await pickerController.confirmSelection();
+                      final success = await pickerController.confirmSelection();
                       if (success && context.mounted) {
                         ToastService.showSuccess(
                           context,
@@ -419,8 +511,7 @@ class SavedPlacesRow extends StatelessWidget {
                     width: double.infinity,
                     height: 50,
                     enableStretch: true,
-                    glassTint:
-                        Colors.white.withValues(alpha: 0.08),
+                    glassTint: Colors.white.withValues(alpha: 0.08),
                     onTap: () {
                       AppHaptics.lightImpact();
                       pickerController.cancelSelection();
@@ -449,8 +540,9 @@ class SavedPlacesRow extends StatelessWidget {
     final type = pickerController.activePickerType;
     final place = type == 'home' ? home : work;
     final label = type == 'home' ? 'Home' : 'Work';
-    final icon =
-        type == 'home' ? CupertinoIcons.house_fill : CupertinoIcons.briefcase_fill;
+    final icon = type == 'home'
+        ? CupertinoIcons.house_fill
+        : CupertinoIcons.briefcase_fill;
 
     return Column(
       mainAxisSize: MainAxisSize.min,

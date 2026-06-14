@@ -16,7 +16,8 @@ class AuthSyncService {
   }
 
   void _initAuthListener() {
-    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+    _authSubscription =
+        Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       final AuthChangeEvent event = data.event;
       final Session? session = data.session;
 
@@ -41,7 +42,7 @@ class AuthSyncService {
     // 3. Fetch all places from Cloud
     final cloudPlaces = await _cloudService.fetchFromCloud(userId);
 
-    // 4. Merge them (Cloud data overwrites local if there are duplicates, 
+    // 4. Merge them (Cloud data overwrites local if there are duplicates,
     // but in this setup, since we just pushed local to cloud, cloud has everything).
     // We can use a map keyed by place ID to deduplicate.
     final Map<String, SavedPlace> mergedMap = {};

@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:share_plus/share_plus.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:ridel/features/map/models/place_model.dart';
@@ -55,15 +56,15 @@ class MapShareService {
   static Future<void> _executeShare(String title, double lat, double lng,
       {String? address}) async {
     try {
-      String mapUrl = "";
+      String mapUrl;
+
+      // 🚀 FIX: The True Native URL Schemes
       if (kIsWeb) {
-        // Safe Web URL
         mapUrl = "https://www.google.com/maps/search/?api=1&query=$lat,$lng";
-      } else if (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS) {
-        // Native Apple Maps URL
+      } else if (Platform.isIOS || Platform.isMacOS) {
+        // Zero-lag direct intent to Apple Maps without ATS http:// issues
         mapUrl = "maps://?ll=$lat,$lng&q=${Uri.encodeComponent(title)}";
       } else {
-        // Fallback Native Google Maps
         mapUrl = "https://www.google.com/maps/search/?api=1&query=$lat,$lng";
       }
 

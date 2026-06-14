@@ -9,10 +9,8 @@ class SupabasePlacesService {
   /// Fetches saved places from the cloud for the given user ID.
   Future<List<SavedPlace>> fetchFromCloud(String userId) async {
     try {
-      final response = await _supabase
-          .from(_tableName)
-          .select()
-          .eq('user_id', userId);
+      final response =
+          await _supabase.from(_tableName).select().eq('user_id', userId);
 
       final List<dynamic> data = response;
       return data.map((e) => SavedPlace.fromMap(e)).toList();
