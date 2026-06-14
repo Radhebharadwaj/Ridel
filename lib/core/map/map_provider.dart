@@ -156,7 +156,7 @@ class MapProvider extends ChangeNotifier {
 
   // 1. ADD NATIVE VECTOR PIN
   Future<void> addNativeDestinationPin(LatLng location) async {
-    if (controller == null) return;
+    if (controller == null || !engine.isFullyBooted) return;
 
     // 🚨 1. STRICT CLEANUP: Wipe out the old route and reset UI state immediately
     await clearNativeRoute();
@@ -165,9 +165,7 @@ class MapProvider extends ChangeNotifier {
     // 🚨 2. STRICT CLEANUP: Remove the old pin
     await clearNativeDestinationPin();
 
-    // 3. Drop the new custom pin using SymbolLayer
     try {
-      if (controller == null) return;
       await controller!.addGeoJsonSource('destination_pin_source', {
         "type": "FeatureCollection",
         "features": [
@@ -188,7 +186,7 @@ class MapProvider extends ChangeNotifier {
           iconImage: 'custom_pin',
           iconPitchAlignment: 'viewport',
           iconAnchor: 'bottom',
-          iconSize: 0.20,
+          iconSize: 1.5,
           iconAllowOverlap: true,
           iconIgnorePlacement: true,
         ),
@@ -197,8 +195,12 @@ class MapProvider extends ChangeNotifier {
       targetDestination = location; // Update the internal coordinate tracker
       debugPrint("🗺️ CUSTOM PIN DROPPED at $location");
 
-      // Removed redundant internal animation. Handled exclusively by caller.
-      notifyListeners();
+      await engine.mapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(location, 16.0), // The exact tapped location
+        duration: const Duration(milliseconds: 600),
+      );
+
+      // notifyListeners() removed: do not trigger UI rebuild after flight to avoid snap-back
     } catch (e) {
       debugPrint("🗺️ PIN ERROR: $e");
     }
@@ -1641,7 +1643,6 @@ class MapProvider extends ChangeNotifier {
     if (!_isMapReady) return;
 
     await cancelAndClearRoute();
-    await drawDroppedPin(latLng);
 
     AppHaptics.heavyImpact();
 
@@ -1654,12 +1655,22 @@ class MapProvider extends ChangeNotifier {
       longitude: latLng.longitude,
       categories: const [],
     );
-    setTappedPlace(temporaryPlace);
-
+    
+    _tappedPlaceFromMap = temporaryPlace;
     _isDestinationSelected = true;
     targetDestination = latLng;
     engine.setUIState(MapUIState.placeSelected);
+    
+    // 1. Trigger Bottom Sheet UI Rebuild FIRST
     notifyListeners();
+
+    // 🚀 CRITICAL FIX: Yield to the event loop so the UI rebuilds the MapLibreMap
+    // before we start the native camera flight. This prevents the didUpdateWidget
+    // JS channel from interrupting our animateCamera promise and causing a snap-back.
+    await Future.delayed(const Duration(milliseconds: 150));
+
+    // 2. Fly the camera and draw the pin non-blockingly!
+    await drawDroppedPin(latLng);
 
     // Fire-and-forget network call in background
     Future.microtask(() async {
@@ -1708,6 +1719,7 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<void> drawDroppedPin(LatLng latLng) async {
+    if (controller == null || !engine.isFullyBooted) return;
     await addNativeDestinationPin(latLng);
   }
 

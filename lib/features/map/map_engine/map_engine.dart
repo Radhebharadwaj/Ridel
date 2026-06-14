@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -58,6 +59,7 @@ class MapEngine {
 
   bool isDarkTheme = true;
   bool _isSwitchingMode = false;
+  bool isFullyBooted = false;
 
   StreamSubscription<Position>? _positionStream;
   DateTime? _lastActionTime;
@@ -139,8 +141,24 @@ class MapEngine {
       try {
         final ByteData puckBytesData =
             await rootBundle.load('assets/images/nav_puck.png');
-        final Uint8List puckBytes = puckBytesData.buffer.asUint8List();
-        await controller.addImage('nav_puck', puckBytes);
+        final Uint8List rawPuckBytes = puckBytesData.buffer.asUint8List(
+          puckBytesData.offsetInBytes,
+          puckBytesData.lengthInBytes,
+        );
+        final ui.Codec codec = await ui.instantiateImageCodec(rawPuckBytes);
+        final ui.FrameInfo frameInfo = await codec.getNextFrame();
+        final ByteData? decodedData =
+            await frameInfo.image.toByteData(format: ui.ImageByteFormat.png);
+        
+        if (decodedData != null) {
+          final Uint8List puckBytes = decodedData.buffer.asUint8List(
+            decodedData.offsetInBytes,
+            decodedData.lengthInBytes,
+          );
+          await controller.addImage('nav_puck', puckBytes);
+        } else {
+          throw Exception("Decoded nav_puck is null");
+        }
       } catch (e) {
         debugPrint("⚠️ Failed to load nav_puck image, adding transparent fallback: $e");
         final Uint8List transparentPixel = Uint8List.fromList([
@@ -180,8 +198,24 @@ class MapEngine {
       try {
         final ByteData pinBytesData =
             await rootBundle.load('assets/images/custom_pin.png');
-        final Uint8List pinBytes = pinBytesData.buffer.asUint8List();
-        await controller.addImage('custom_pin', pinBytes);
+        final Uint8List rawPinBytes = pinBytesData.buffer.asUint8List(
+          pinBytesData.offsetInBytes,
+          pinBytesData.lengthInBytes,
+        );
+        final ui.Codec codec = await ui.instantiateImageCodec(rawPinBytes);
+        final ui.FrameInfo frameInfo = await codec.getNextFrame();
+        final ByteData? decodedData =
+            await frameInfo.image.toByteData(format: ui.ImageByteFormat.png);
+            
+        if (decodedData != null) {
+          final Uint8List pinBytes = decodedData.buffer.asUint8List(
+            decodedData.offsetInBytes,
+            decodedData.lengthInBytes,
+          );
+          await controller.addImage('custom_pin', pinBytes);
+        } else {
+          throw Exception("Decoded custom_pin is null");
+        }
       } catch (e) {
         debugPrint("⚠️ Failed to load custom_pin image, adding transparent fallback: $e");
         final Uint8List transparentPixel = Uint8List.fromList([
@@ -199,6 +233,7 @@ class MapEngine {
       camera
           ?.setCameraForMode(_getCameraModeForMapMode(mode.currentMode.value));
       _setState(EngineState.idle);
+      isFullyBooted = true;
     } catch (e) {
       _setError('Failed to initialize layers: $e');
     }

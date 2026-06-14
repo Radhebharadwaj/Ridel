@@ -35,7 +35,7 @@ class FullScreenMapPage extends StatefulWidget {
 }
 
 class _FullScreenMapPageState extends State<FullScreenMapPage>
-    with TickerProviderStateMixin, WidgetsBindingObserver {
+    with TickerProviderStateMixin {
   late AnimationController _fadeScaleController;
   late Animation<double> _fadeScaleAnimation;
 
@@ -49,6 +49,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   bool _userOverrodeMapTheme = false;
 
   // 🚀 The map widget strictly acts as a passive canvas
+  double _sheetExtent = 0.3;
 
   final GlobalKey _searchSheetKey = GlobalKey();
   final GlobalKey<WeatherFloatingWidgetState> _weatherWidgetKey =
@@ -57,7 +58,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _fadeScaleController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
@@ -84,21 +84,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     widget.searchSheetProgressNotifier.removeListener(_onProgressChanged);
     _fadeScaleController.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden ||
-        state == AppLifecycleState.detached) {
-      PaintingBinding.instance.imageCache.clear();
-      PaintingBinding.instance.imageCache.clearLiveImages();
-      debugPrint("🧹 App Paused/Hidden/Detached: Image Caches Cleared!");
-    }
   }
 
   @override
@@ -202,16 +190,26 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           },
                           onStyleLoadedCallback: () async {
                             if (_tempController != null) {
-                              mapProvider.engine.onMapCreated(
+                              await mapProvider.engine.onMapCreated(
                                   _tempController!,
                                   isDark,
                                   Provider.of<GlobalLocationService>(context,
                                       listen: false),
                                   this);
 
-                              mapProvider.controller
-                                  ?.updateMyLocationTrackingMode(
-                                      MyLocationTrackingMode.tracking);
+                              // 0. Silence corrupt layer spam
+                              try {
+                                await mapProvider.engine.mapController?.removeLayer('bridge_transit_rail_hatching');
+                              } catch (e) {
+                                // Ignore if it doesn't exist
+                              }
+
+                              // 1. Turn on the GPS stream (mounts the blue dot)
+                              await mapProvider.engine.mapController?.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+                              // 2. Wait for the engine to register the layer
+                              await Future.delayed(const Duration(milliseconds: 150));
+                              // 3. Drop the camera lock, but keep the blue dot alive
+                              await mapProvider.engine.mapController?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
                             }
                           },
                           onMapClick: (point, latLng) async {
@@ -229,10 +227,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           onMapLongClick: (point, latLng) async {
                             AppHaptics.heavyImpact();
 
-                            // 1. Force native layer to drop tracking immediately
-                            await mapProvider.controller
-                                ?.updateMyLocationTrackingMode(
-                                    MyLocationTrackingMode.none);
+                            // 1. Force native layer to drop tracking immediately to prevent WebGL from fighting the flight
+                            await mapProvider.engine.mapController?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
 
                             // 2. CRITICAL FIX: Event loop breaker to safely disengage WebGL tracking lock
                             await Future.delayed(
@@ -240,12 +236,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
                             // 3. Resolve destination and place data non-blockingly (already decoupled)
                             mapProvider.handleMapTap(point, latLng);
-
-                            // 4. Fire EXACTLY ONE camera animation
-                            await mapProvider.controller?.animateCamera(
-                              CameraUpdate.newLatLng(latLng),
-                              duration: const Duration(milliseconds: 600),
-                            );
                           },
                           initialCameraPosition: const CameraPosition(
                               target: LatLng(28.6139, 77.2090), zoom: 12.0),
@@ -353,7 +343,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                 right: sideMargin,
                 child: Consumer<MapProvider>(
                   builder: (context, mapProvider, child) {
-                    final bool showWeather = !mapProvider.isActiveNavigation;
+                    final bool showWeather = !mapProvider.isActiveNavigation && _sheetExtent <= 0.5;
                     return IgnorePointer(
                       ignoring: !showWeather,
                       child: AnimatedOpacity(
@@ -489,46 +479,30 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                 ),
               ),
 
-              Positioned(
-                bottom: isDesktop ? 32.0 : 0.0,
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 0),
+                bottom: isDesktop ? 32.0 : (MediaQuery.sizeOf(context).height * _sheetExtent) + 16.0,
                 right: sideMargin,
-                child: ValueListenableBuilder<double>(
-                  valueListenable: widget.searchSheetProgressNotifier,
-                  builder: (context, progress, pillChild) {
-                    if (isDesktop) {
-                      return pillChild!;
-                    }
-                    final screenSize = MediaQuery.sizeOf(context);
-                    final safeBottom = MediaQuery.paddingOf(context).bottom;
-                    final minS = ((86.0 + safeBottom) / screenSize.height)
-                        .clamp(0.05, 0.40);
-                    const maxS = 0.55;
-
-                    final sheetSize = minS + progress * (maxS - minS);
-                    final sheetHeight = sheetSize * screenSize.height;
-                    final bottomOffset = sheetHeight + 20.0;
-
-                    return AnimatedBuilder(
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 150),
+                  opacity: _sheetExtent > 0.5 ? 0.0 : 1.0,
+                  child: IgnorePointer(
+                    ignoring: _sheetExtent > 0.6,
+                    child: AnimatedBuilder(
                       animation: _fadeScaleAnimation,
                       builder: (context, animChild) {
                         final animValue =
                             (1.0 - _fadeScaleAnimation.value).clamp(0.0, 1.0);
-                        return Transform.translate(
-                          offset: Offset(0, -bottomOffset),
-                          child: Transform.scale(
-                            scale: animValue,
-                            alignment: Alignment.bottomCenter,
-                            child: Opacity(
-                              opacity: animValue,
-                              child: animChild,
-                            ),
+                        return Transform.scale(
+                          scale: animValue,
+                          alignment: Alignment.bottomCenter,
+                          child: Opacity(
+                            opacity: animValue,
+                            child: animChild,
                           ),
                         );
                       },
-                      child: pillChild,
-                    );
-                  },
-                  child: Consumer<MapProvider>(
+                      child: Consumer<MapProvider>(
                       builder: (context, mapProvider, child) {
                     return Column(
                       mainAxisSize: MainAxisSize.min,
@@ -802,6 +776,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   }),
                 ),
               ),
+            ),
+          ),
 
               if (isDesktop)
                 DesktopDraggableSearchWrapper(
@@ -822,20 +798,28 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   ),
                 )
               else
-                MapSearchSheet(
-                  key: _searchSheetKey,
-                  isMapTabActive: widget.isMapTabActive,
-                  onSearchModeChanged: (isSearching) {},
-                  onSearchSubmitted: (query) {
-                    final mapProvider =
-                        Provider.of<MapProvider>(context, listen: false);
-                    if (query == "CLEAR_PIN_COMMAND") {
-                      mapProvider.engine.layers?.removeSearchPin();
-                      return;
-                    }
-                    mapProvider.searchAndNavigate(query);
+                NotificationListener<DraggableScrollableNotification>(
+                  onNotification: (notification) {
+                    setState(() {
+                      _sheetExtent = notification.extent;
+                    });
+                    return false;
                   },
-                  onBackToPreviousTab: () {},
+                  child: MapSearchSheet(
+                    key: _searchSheetKey,
+                    isMapTabActive: widget.isMapTabActive,
+                    onSearchModeChanged: (isSearching) {},
+                    onSearchSubmitted: (query) {
+                      final mapProvider =
+                          Provider.of<MapProvider>(context, listen: false);
+                      if (query == "CLEAR_PIN_COMMAND") {
+                        mapProvider.engine.layers?.removeSearchPin();
+                        return;
+                      }
+                      mapProvider.searchAndNavigate(query);
+                    },
+                    onBackToPreviousTab: () {},
+                  ),
                 ),
               Positioned.fill(
                 child: IgnorePointer(
@@ -855,6 +839,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   }
 
   Future<void> _handleLocateMeTapped(MapProvider mapProvider) async {
+    if (mapProvider.isFlying) return; // Prevent 45 queued taps from choking the thread
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
@@ -886,9 +871,19 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       }
 
       if (mounted) {
-        await Provider.of<GlobalLocationService>(context, listen: false)
-            .forceRefreshLocation();
-        mapProvider.engine.onLocateMeTapped();
+        final locService = Provider.of<GlobalLocationService>(context, listen: false);
+        await locService.forceRefreshLocation();
+        
+        final userLocation = locService.currentPosition;
+        if (userLocation != null) {
+          await mapProvider.controller?.animateCamera(
+            CameraUpdate.newLatLngZoom(
+              LatLng(userLocation.latitude, userLocation.longitude), 
+              16.0
+            ),
+            duration: const Duration(milliseconds: 800),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {

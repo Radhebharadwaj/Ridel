@@ -56,6 +56,9 @@ class PlaceEnrichmentService {
   // =========================================================================
   Future<EnrichedPlaceDetails?> getRichPlaceDetails(
       String placeName, double lat, double lon) async {
+    final trimmed = placeName.trim().toLowerCase();
+    if (trimmed == 'dropped pin' || trimmed.contains('fetching')) return null;
+
     final cacheKey = "${lat.toStringAsFixed(3)}_${lon.toStringAsFixed(3)}";
 
     if (_detailsCache.containsKey(cacheKey)) {

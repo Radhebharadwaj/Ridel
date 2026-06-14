@@ -46,6 +46,7 @@ class MasterSearchService {
   Future<List<PlaceModel>> searchPlaces(String query,
       {LatLng? userLocation}) async {
     final trimmed = query.trim().toLowerCase();
+    if (trimmed == 'dropped pin' || trimmed.contains('fetching')) return [];
     if (trimmed.length < 2) return [];
 
     // 1. Unified RAM Cache Check with LRU Bump & TTL
