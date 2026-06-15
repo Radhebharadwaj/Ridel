@@ -36,11 +36,11 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     final isEmpty = _searchCtrl.text.isEmpty;
     final isSelected = _selectedPlace != null;
 
-    final showTransportModes = isSelected;
+    final showTransportModes = isSelected && !_isAddingStop;
     final showQuickActions =
-        !isSelected && (!isFocused && !provider.isEditingHistory) && isEmpty;
+        !isSelected && (!isFocused && !provider.isEditingHistory) && isEmpty && !_isAddingStop;
     final showRecentSearches =
-        !isSelected && (isFocused || provider.isEditingHistory) && isEmpty;
+        (!isSelected || _isAddingStop) && (isFocused || provider.isEditingHistory) && isEmpty;
 
     final isExpanded = progress > (_safeMinSize + 0.05);
     final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
@@ -891,6 +891,46 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                 color: Colors.grey, thickness: 1)),
                       ),
 
+                      // 🟡 INTERMEDIATE STOPS
+                      ...provider.intermediateStops.asMap().entries.map((entry) {
+                        int idx = entry.key;
+                        var stop = entry.value;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.trip_origin, color: Colors.orangeAccent, size: 20),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text("Stop ${idx + 1}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                      Text(
+                                        stop.name,
+                                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close, color: Colors.white54, size: 20),
+                                  onPressed: () => provider.removeIntermediateStop(idx),
+                                ),
+                              ],
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.only(left: 9.0, top: 4, bottom: 4),
+                              child: SizedBox(height: 12, child: VerticalDivider(color: Colors.grey, thickness: 1)),
+                            ),
+                          ],
+                        );
+                      }),
+
                       // 🔴 DESTINATION
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -937,6 +977,40 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                           ),
                         ],
                       ),
+
+                      // ➕ ADD STOP BUTTON
+                      if (provider.intermediateStops.length < 3)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16.0, bottom: 4.0),
+                          child: InkWell(
+                            onTap: () {
+                              AppHaptics.selectionClick();
+                              setState(() {
+                                _isAddingStop = true;
+                                _searchCtrl.clear();
+                                _searchFocus.requestFocus();
+                              });
+                              if (_sheetController.isAttached) {
+                                _safeAnimateSheet(_safeMaxSize);
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Icon(Icons.add_circle_outline, color: Colors.blueAccent, size: 20),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    "Add Stop",
+                                    style: TextStyle(color: Colors.blueAccent, fontSize: 14, fontWeight: FontWeight.w500),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   );
                 }),
@@ -1256,7 +1330,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
 
   Widget _buildSheetContent(bool isDark, double progress,
       {bool isExpanded = false}) {
-    if (_searchCtrl.text.isNotEmpty && _selectedPlace == null) {
+    if (_searchCtrl.text.isNotEmpty && (_selectedPlace == null || _isAddingStop)) {
       return _buildSearchResultsView(isDark, isExpanded: isExpanded);
     }
     return _buildUnifiedExploreView(isDark, progress,

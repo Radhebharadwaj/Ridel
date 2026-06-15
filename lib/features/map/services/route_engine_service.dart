@@ -128,10 +128,15 @@ class RouteEngineService {
   RouteEngineService();
 
   Future<RouteResult?> getRoute(LatLng origin, LatLng destination,
-      {String mode = "driving"}) async {
+      {String mode = "driving", List<LatLng>? waypoints}) async {
     // 🚀 FIX: Cache precision set to 4 decimal places (~11 meters tolerance)
+    String wpKey = "";
+    if (waypoints != null && waypoints.isNotEmpty) {
+      wpKey = "_" + waypoints.map((w) => "${w.latitude.toStringAsFixed(4)}_${w.longitude.toStringAsFixed(4)}").join('_');
+    }
+    
     final cacheKey =
-        "${mode}_${origin.latitude.toStringAsFixed(4)}_${origin.longitude.toStringAsFixed(4)}_${destination.latitude.toStringAsFixed(4)}_${destination.longitude.toStringAsFixed(4)}";
+        "${mode}_${origin.latitude.toStringAsFixed(4)}_${origin.longitude.toStringAsFixed(4)}_${destination.latitude.toStringAsFixed(4)}_${destination.longitude.toStringAsFixed(4)}$wpKey";
 
     // 1. RAM Cache Check
     if (_lruCache.containsKey(cacheKey)) {
@@ -149,7 +154,7 @@ class RouteEngineService {
     }
 
     // 3. Network Call
-    final futureReq = _fetchWaterfallRoute(origin, destination, mode, cacheKey);
+    final futureReq = _fetchWaterfallRoute(origin, destination, mode, cacheKey, waypoints: waypoints);
     _inFlightRequests[cacheKey] = futureReq;
 
     try {
@@ -208,26 +213,26 @@ class RouteEngineService {
     );
   }
 
-  Future<RouteResult?> _fetchWaterfallRoute(LatLng origin, LatLng destination, String mode, String cacheKey) async {
+  Future<RouteResult?> _fetchWaterfallRoute(LatLng origin, LatLng destination, String mode, String cacheKey, {List<LatLng>? waypoints}) async {
     if (mode == 'walk' || mode == 'walking') {
-      return getWaterfallWalkRoute(origin, destination);
+      return getWaterfallWalkRoute(origin, destination, waypoints: waypoints);
     } else {
       debugPrint("🚗 Trying Direct Ola Maps ($mode) API...");
-      final route = await _getOlaRoute(origin, destination, mode);
+      final route = await _getOlaRoute(origin, destination, mode, waypoints: waypoints);
       if (route != null) return _sanitizeRouteResult(route, mode);
       throw Exception("Ola API returned null.");
     }
   }
 
-  Future<RouteResult?> getWaterfallWalkRoute(LatLng origin, LatLng destination) async {
+  Future<RouteResult?> getWaterfallWalkRoute(LatLng origin, LatLng destination, {List<LatLng>? waypoints}) async {
     debugPrint("🚶‍♂️ Trying Direct Ola Maps (Walking) API...");
-    final route = await _getOlaRoute(origin, destination, 'walking');
+    final route = await _getOlaRoute(origin, destination, 'walking', waypoints: waypoints);
     if (route != null) return _sanitizeRouteResult(route, 'walking');
     throw Exception("Ola API returned null.");
   }
 
   Future<RouteResult?> _getOlaRoute(
-      LatLng origin, LatLng destination, String mode) async {
+      LatLng origin, LatLng destination, String mode, {List<LatLng>? waypoints}) async {
     String apiMode = 'driving';
     if (mode == 'walk' || mode == 'walking' || mode == 'pedestrian') {
       apiMode = 'walking';
@@ -241,8 +246,13 @@ class RouteEngineService {
 
     // 🚀 FIX: Directly appending the API Key from AppConfig
     final apiKey = AppConfig.olaMapsKey;
+    String waypointsParam = "";
+    if (waypoints != null && waypoints.isNotEmpty) {
+      waypointsParam = "&waypoints=" + waypoints.map((wp) => "${wp.latitude},${wp.longitude}").join('|');
+    }
+
     final String olaApiUrl =
-        '$_baseUrl?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&api_key=$apiKey&mode=$apiMode&alternatives=true&steps=true&traffic_metadata=true&overview=full';
+        '$_baseUrl?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}$waypointsParam&api_key=$apiKey&mode=$apiMode&alternatives=true&steps=true&traffic_metadata=true&overview=full';
 
     int attempts = 0;
     while (attempts < 2) {

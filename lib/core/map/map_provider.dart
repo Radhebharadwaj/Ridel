@@ -27,6 +27,24 @@ import 'package:ridel/core/utils/toast_service.dart';
 class MapProvider extends ChangeNotifier {
   final MapEngine engine = MapEngine();
   final RouteEngineService _routingService = RouteEngineService();
+  int _routingSessionCounter = 0;
+  
+  // Multi-stop tracking
+  List<PlaceModel> intermediateStops = [];
+
+  void addIntermediateStop(PlaceModel place) {
+    if (intermediateStops.length < 3) { // Limit to 3 stops for premium UX
+      intermediateStops.add(place);
+      notifyListeners();
+    }
+  }
+
+  void removeIntermediateStop(int index) {
+    if (index >= 0 && index < intermediateStops.length) {
+      intermediateStops.removeAt(index);
+      notifyListeners();
+    }
+  }
 
   static Future<Uint8List> loadAndResizeImage(String assetPath, int targetWidth) async {
     final ByteData data = await rootBundle.load(assetPath);
@@ -95,7 +113,9 @@ class MapProvider extends ChangeNotifier {
       engine.mapUIState.value == MapUIState.routeDrawn; // CRITICAL FIX: Keep native dot visible when route is drawn
 
   double get customPuckOpacity =>
-      (engine.mapUIState.value == MapUIState.navigating) // CRITICAL FIX: Only use custom puck in active 3D navigation
+      (engine.mapUIState.value == MapUIState.navigating || 
+       engine.mapUIState.value == MapUIState.routeDrawn ||
+       engine.mapUIState.value == MapUIState.placeSelected)
           ? 1.0
           : 0.0;
 
@@ -233,21 +253,34 @@ class MapProvider extends ChangeNotifier {
       "📍 [ROUTE ENGINE] Destination: ${targetDestination!.latitude}, ${targetDestination!.longitude}",
     );
 
+    _routingSessionCounter++;
+    final int currentSessionId = _routingSessionCounter;
+
     try {
       // Fetch route from Route Engine.
       debugPrint("⏳ [ROUTE ENGINE] Waiting for Route Engine API...");
 
       RouteResult? routeResult;
+      
+      final waypointsList = intermediateStops.isNotEmpty
+          ? intermediateStops.map((place) => LatLng(place.latitude, place.longitude)).toList()
+          : null;
 
       if (mode == 'walking' || mode == 'walk') {
         routeResult = await _routingService.getWaterfallWalkRoute(
-            origin, targetDestination!);
+            origin, targetDestination!, waypoints: waypointsList).timeout(const Duration(seconds: 10));
       } else {
         routeResult = await _routingService.getRoute(
           origin,
           targetDestination!,
           mode: 'driving',
-        );
+          waypoints: waypointsList,
+        ).timeout(const Duration(seconds: 10));
+      }
+
+      if (currentSessionId != _routingSessionCounter) {
+        debugPrint("⚠️ [ROUTE ENGINE] Discarding stale route response due to new user request.");
+        return; // Completely abort processing this stale data
       }
 
       if (routeResult != null && routeResult.allRoutesCoordinates.isNotEmpty) {
@@ -271,6 +304,12 @@ class MapProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint("💥 [ROUTE ENGINE] CRASH: $e");
+      _setLoading(false);
+      final context = ToastService.navigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        ToastService.showError(context, "Poor internet connection. Please try again.");
+      }
+      return;
     }
   }
 
@@ -867,6 +906,9 @@ class MapProvider extends ChangeNotifier {
           try {
             await controller!.removeSource('connectors-source');
           } catch (_) {}
+          try {
+            await controller!.removeSource('intermediate-pins-source');
+          } catch (_) {}
 
           await controller!.addGeoJsonSource("connectors-source", {
             "type": "Feature",
@@ -989,10 +1031,7 @@ class MapProvider extends ChangeNotifier {
     await engine.layers?.removeSearchPin();
 
     // 8. ROAD SNAP & BULLETPROOF Z-INDEX FOR PIN
-    if (allRoutes.isNotEmpty && allRoutes[0].isNotEmpty && controller != null) {
-      // Snap the pin to the exact endpoint of the calculated route
-      final snappedDestination = allRoutes[0].last; 
-
+    if (targetDestination != null && controller != null) {
       try { await controller!.removeLayer('ultimate-pin-layer'); } catch (_) {}
       try { await controller!.removeSource('ultimate-pin-source'); } catch (_) {}
 
@@ -1001,7 +1040,7 @@ class MapProvider extends ChangeNotifier {
           "type": "Feature",
           "geometry": {
             "type": "Point",
-            "coordinates": [snappedDestination.longitude, snappedDestination.latitude],
+            "coordinates": [targetDestination!.longitude, targetDestination!.latitude], // CRITICAL: Exact user location
           },
         });
 
@@ -1010,7 +1049,7 @@ class MapProvider extends ChangeNotifier {
           'ultimate-pin-layer',
           const SymbolLayerProperties(
             iconImage: 'custom_pin',
-            iconSize: 1.0, // Perfect premium size instantly
+            iconSize: 1.0, 
             iconAnchor: 'bottom',
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
@@ -1018,6 +1057,41 @@ class MapProvider extends ChangeNotifier {
         );
       } catch (e) {
         debugPrint("🗺️ PIN DROP ERROR: $e");
+      }
+    }
+
+    // 9. INTERMEDIATE PINS
+    if (intermediateStops.isNotEmpty && controller != null) {
+      try { await controller!.removeLayer('intermediate-pins-layer'); } catch (_) {}
+      try { await controller!.removeSource('intermediate-pins-source'); } catch (_) {}
+
+      final features = intermediateStops.map((stop) => {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [stop.longitude, stop.latitude]
+        }
+      }).toList();
+
+      try {
+        await controller!.addGeoJsonSource('intermediate-pins-source', {
+          "type": "FeatureCollection",
+          "features": features,
+        });
+
+        await controller!.addSymbolLayer(
+          'intermediate-pins-source',
+          'intermediate-pins-layer',
+          const SymbolLayerProperties(
+            iconImage: 'intermediate_pin',
+            iconSize: 1.0,
+            iconAnchor: 'bottom',
+            iconAllowOverlap: true,
+            iconIgnorePlacement: true,
+          ),
+        );
+      } catch (e) {
+        debugPrint("🗺️ INTERMEDIATE PIN DROP ERROR: $e");
       }
     }
 
@@ -1043,6 +1117,9 @@ class MapProvider extends ChangeNotifier {
       try {
         await controller!.removeLayer('connectors-layer');
       } catch (_) {}
+      try {
+        await controller!.removeLayer('intermediate-pins-layer');
+      } catch (_) {}
 
       for (int i = 0; i < 5; i++) {
         try {
@@ -1062,6 +1139,9 @@ class MapProvider extends ChangeNotifier {
       } catch (_) {}
       try {
         await controller!.removeSource('connectors-source');
+      } catch (_) {}
+      try {
+        await controller!.removeSource('intermediate-pins-source');
       } catch (_) {}
 
       for (int i = 0; i < 5; i++) {
@@ -1124,6 +1204,7 @@ class MapProvider extends ChangeNotifier {
   Future<void> cancelAndClearRoute({bool resetCamera = true}) async {
     _liveLocationSub?.cancel();
     _liveLocationSub = null;
+    intermediateStops.clear();
     // 1. Clear MapLibre Native Layers (Lines AND ETA Pills)
     if (controller != null) {
       if (_drawnRoutesCount > 0 || isRouteCalculated) {
@@ -1142,6 +1223,9 @@ class MapProvider extends ChangeNotifier {
       } catch (_) {}
       try {
         await controller!.removeLayer('connectors-layer');
+      } catch (_) {}
+      try {
+        await controller!.removeLayer('intermediate-pins-layer');
       } catch (_) {}
 
       for (int i = 0; i < 5; i++) {
@@ -1211,11 +1295,8 @@ class MapProvider extends ChangeNotifier {
     _isDestinationSelected = false;
     isActiveNavigation = false;
     engine.setUIState(MapUIState.idle);
-    await updatePuckVisibility();
+    await updatePuckVisibility(); // Forces the puck to redraw if it was wiped
     currentNavMode = 'driving';
-
-    // 🧭 State Machine: Reset to idle
-    engine.setUIState(MapUIState.idle);
 
     // 🚀 Cinematic Camera Reset
     if (resetCamera && controller != null && currentLocation != null) {
@@ -1620,6 +1701,11 @@ class MapProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> handleMapLongPress(LatLng latLng) async {
+    // Delegate entirely to handleMapTap to ensure strict pin-drop flow without auto-routing.
+    await handleMapTap(const Point(0, 0), latLng);
+  }
+
   Future<void> handleMapTap(Point<double> point, LatLng latLng) async {
     if (!_isMapReady) return;
 
@@ -1699,7 +1785,7 @@ class MapProvider extends ChangeNotifier {
         final PlaceModel place = await PlaceEnrichmentService().reverseGeocode(
           latLng.latitude,
           latLng.longitude,
-        );
+        ).timeout(const Duration(seconds: 8));
         setTappedPlace(place);
         saveNewSearch(place);
 
@@ -1725,6 +1811,12 @@ class MapProvider extends ChangeNotifier {
         }
       } catch (e) {
         debugPrint("Tap Handler Reverse Geocode Error: $e");
+        
+        final context = ToastService.navigatorKey.currentContext;
+        if (context != null && context.mounted) {
+          ToastService.showError(context, "Poor internet connection. Pin dropped offline.");
+        }
+
         // Fallback to coordinates on failure
         final fallback = PlaceModel(
           placeId: temporaryPlace.placeId,
@@ -1743,6 +1835,7 @@ class MapProvider extends ChangeNotifier {
 
   Future<void> clearSearchSession(BuildContext context) async {
     targetDestination = null;
+    intermediateStops.clear();
     setDestinationSelected(false);
 
     if (controller != null) {
@@ -1820,9 +1913,14 @@ class MapProvider extends ChangeNotifier {
       debugPrint("🛣️ Fetching route from $origin to $destinationCoords...");
 
       // Fetch from Routing API
+      final waypointsList = intermediateStops.isNotEmpty
+          ? intermediateStops.map((place) => LatLng(place.latitude, place.longitude)).toList()
+          : null;
+
       final routeData = await _routingService.getRoute(
         origin,
         destinationCoords,
+        waypoints: waypointsList,
       );
 
       if (routeData != null && routeData.allRoutesCoordinates.isNotEmpty) {

@@ -191,6 +191,13 @@ class MapEngine {
         await controller.addImage('custom_pin', transparentPixel);
       }
 
+      try {
+        final Uint8List yellowPinBytes = await MapProvider.loadAndResizeImage('assets/images/add_places.png', 32);
+        await controller.addImage('intermediate_pin', yellowPinBytes);
+      } catch (e) {
+        debugPrint("⚠️ Failed to load intermediate_pin image: $e");
+      }
+
       await layers?.initLayerSystem();
 
       _initGPS();

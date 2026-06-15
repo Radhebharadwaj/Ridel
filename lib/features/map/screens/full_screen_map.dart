@@ -184,6 +184,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   }
 
                   try {
+                    final Uint8List yellowPinBytes = await MapProvider.loadAndResizeImage('assets/images/add_places.png', 32);
+                    await controller.addImage('intermediate_pin', yellowPinBytes);
+                    debugPrint("Intermediate Pin Successfully Injected");
+                  } catch (e) {
+                    debugPrint("Failed to load intermediate_pin: $e");
+                  }
+
+                  try {
                     // Failsafe for missing required images that crash WebGL
                     final Uint8List transparentPixel = Uint8List.fromList([
                       137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68,
@@ -233,8 +241,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                     mapProvider.clearTargetLocation();
                   }
                 },
-                onMapLongClick: (point, latLng) {
-                  AppHaptics.heavyImpact();
+                onMapLongClick: (Point<double> point, LatLng coordinates) {
                   final mapProvider =
                       Provider.of<MapProvider>(context, listen: false);
 
@@ -242,7 +249,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   mapProvider.setAutoTracking(false);
                   mapProvider.setUserPanning(true);
 
-                  mapProvider.handleMapTap(point, latLng);
+                  mapProvider.handleMapLongPress(coordinates);
                 },
                 initialCameraPosition: const CameraPosition(
                     target: LatLng(28.6139, 77.2090),

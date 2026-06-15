@@ -95,6 +95,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   bool _isSearchMode = false;
 
   bool _showSearchList = true;
+  bool _isAddingStop = false;
   PlaceModel? _selectedPlace;
 
   // ignore: unused_field
@@ -410,6 +411,22 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     final safeProvider = Provider.of<MapProvider>(context, listen: false);
 
     try {
+      if (_isAddingStop) {
+        safeProvider.addIntermediateStop(place);
+        
+        setState(() {
+          _isAddingStop = false;
+          _searchCtrl.clear();
+        });
+
+        if (_sheetController.isAttached) {
+          _safeAnimateSheet(_safeMidSize);
+        }
+        
+        FocusManager.instance.primaryFocus?.unfocus();
+        return;
+      }
+
       // 1. SAVE THE SEARCH TO HISTORY
       safeProvider.saveNewSearch(place);
 
