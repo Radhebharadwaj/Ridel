@@ -77,10 +77,18 @@ class RouteVisualizer {
     final String casingColor = isDark ? '#FFFFFF' : '#000000';
     final double casingOpacity = isDark ? 0.25 : 0.12;
 
+    Future<void> safeAddLineLayer(String sourceId, String layerId, LineLayerProperties props) async {
+      try {
+        await controller.addLineLayer(sourceId, layerId, props, belowLayerId: 'ultimate-pin-layer');
+      } catch (_) {
+        await controller.addLineLayer(sourceId, layerId, props);
+      }
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     // LAYER 1: Shadow — Adds depth and lifts the route off the map
     // ──────────────────────────────────────────────────────────────────────
-    await controller.addLineLayer(
+    await safeAddLineLayer(
       _sourceId,
       _shadowLayerId,
       LineLayerProperties(
@@ -97,7 +105,7 @@ class RouteVisualizer {
     // ──────────────────────────────────────────────────────────────────────
     // LAYER 2: Casing — White/dark border for contrast
     // ──────────────────────────────────────────────────────────────────────
-    await controller.addLineLayer(
+    await safeAddLineLayer(
       _sourceId,
       _casingLayerId,
       LineLayerProperties(
@@ -112,7 +120,7 @@ class RouteVisualizer {
     // ──────────────────────────────────────────────────────────────────────
     // LAYER 3: Core — The primary neon cyan route line
     // ──────────────────────────────────────────────────────────────────────
-    await controller.addLineLayer(
+    await safeAddLineLayer(
       _sourceId,
       _coreLayerId,
       LineLayerProperties(
@@ -127,7 +135,7 @@ class RouteVisualizer {
     // ──────────────────────────────────────────────────────────────────────
     // LAYER 4: Glow — Soft neon bloom effect
     // ──────────────────────────────────────────────────────────────────────
-    await controller.addLineLayer(
+    await safeAddLineLayer(
       _sourceId,
       _glowLayerId,
       LineLayerProperties(

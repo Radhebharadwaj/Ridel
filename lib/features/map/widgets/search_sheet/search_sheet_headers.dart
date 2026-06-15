@@ -965,18 +965,18 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
           'Lat: ${_selectedPlace!.latitude.toStringAsFixed(4)}, Lng: ${_selectedPlace!.longitude.toStringAsFixed(4)}';
     }
 
-    return SizedBox(
+    return Center(
       key: const ValueKey('place_header'),
-      height: headerHeight,
-      child: Center(
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: 12 + (8 * progress),
-            right: 12 + (8 * progress),
-            top: 5 * progress,
-          ),
-          child: Row(
-            children: [
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 12 + (8 * progress),
+          right: 12 + (8 * progress),
+          top: 2 + (3 * progress), // Reduced top padding
+          bottom: 2, // Explicit small bottom padding
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
               _buildPremiumCircleButton(
                 icon: CupertinoIcons.share,
                 iconColor: btnIconColor,
@@ -1061,8 +1061,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildSearchHeader(double headerHeight, double progress, bool isDark) {

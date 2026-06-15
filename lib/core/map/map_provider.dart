@@ -373,9 +373,12 @@ class MapProvider extends ChangeNotifier {
   }
 
   List<String> activeFocusLayerIds = [];
+  bool _isCurrentFocusModeActive = false;
 
   Future<void> _toggleFocusModeLayers(bool isFocusMode) async {
     if (controller == null) return;
+    if (_isCurrentFocusModeActive == isFocusMode) return;
+    _isCurrentFocusModeActive = isFocusMode;
 
     if (activeFocusLayerIds.isEmpty) {
       final allLayers = await controller!.getLayerIds();
@@ -400,11 +403,13 @@ class MapProvider extends ChangeNotifier {
     // This avoids using setLayerProperties which destroys iconImages on the WebGL bridge.
     final dynamic filter = isFocusMode ? ['==', 'id', 'nothing'] : null;
 
-    for (String layerId in activeFocusLayerIds) {
-      try {
-        await controller!.setFilter(layerId, filter);
-      } catch (_) {}
-    }
+    Future.microtask(() async {
+      for (String layerId in activeFocusLayerIds) {
+        try {
+          await controller!.setFilter(layerId, filter);
+        } catch (_) {}
+      }
+    });
 
     debugPrint(
         "🔍 Focus Mode set to $isFocusMode using non-destructive filters for ${activeFocusLayerIds.length} layers.");
@@ -532,6 +537,16 @@ class MapProvider extends ChangeNotifier {
   Future<void> drawNativeRoute(List<List<LatLng>> allRoutes) async {
     if (controller == null || allRoutes.isEmpty) return;
 
+    Future<void> safeAddLineLayer(String sourceId, String layerId, LineLayerProperties props) async {
+      try {
+        await controller!.addLineLayer(sourceId, layerId, props, belowLayerId: 'ultimate-pin-layer');
+      } catch (_) {
+        try {
+          await controller!.addLineLayer(sourceId, layerId, props);
+        } catch (_) {}
+      }
+    }
+
     // 1. Clear previous route if it exists
     await clearNativeRoute(preserveState: true);
 
@@ -598,7 +613,7 @@ class MapProvider extends ChangeNotifier {
         final bool isWalking = currentNavMode == 'walking';
         if (isWalking) {
           await controller!.addGeoJsonSource('alt-source-$i', geoJson);
-          await controller!.addLineLayer(
+          await safeAddLineLayer(
             'alt-source-$i',
             'alt-walk-layer-$i',
             const LineLayerProperties(
@@ -606,13 +621,12 @@ class MapProvider extends ChangeNotifier {
               lineWidth: 4.5,
               lineCap: "round",
               lineJoin: "round",
-              lineDasharray: [0.01, 2.5],
+              lineDasharray: [0.001, 2.0],
             ),
-            belowLayerId: 'nav_puck_layer',
           );
         } else {
           await controller!.addGeoJsonSource('route-source-$i', geoJson);
-          await controller!.addLineLayer(
+          await safeAddLineLayer(
             'route-source-$i',
             'route-layer-$i',
             const LineLayerProperties(
@@ -622,7 +636,6 @@ class MapProvider extends ChangeNotifier {
               lineJoin: "round",
               lineOpacity: 0.6,
             ),
-            belowLayerId: 'nav_puck_layer',
           );
         }
       } catch (e) {
@@ -687,7 +700,7 @@ class MapProvider extends ChangeNotifier {
 
         if (isWalking) {
           await controller!.addGeoJsonSource('primary-source', geoJson);
-          await controller!.addLineLayer(
+          await safeAddLineLayer(
             'primary-source',
             'primary-walk-layer',
             const LineLayerProperties(
@@ -695,15 +708,14 @@ class MapProvider extends ChangeNotifier {
               lineWidth: 6.5, // Thicker to cover grey lines
               lineCap: "round",
               lineJoin: "round",
-              lineDasharray: [0.01, 2.0], // Safe values for circular dots
+              lineDasharray: [0.001, 2.0], // Safe values for circular dots
             ),
-            belowLayerId: 'nav_puck_layer',
           );
         } else {
           await controller!.addGeoJsonSource('route-source-0', geoJson);
 
           // 1. BOTTOM: Casing (Deep shadow to give height/3D effect)
-          await controller!.addLineLayer(
+          await safeAddLineLayer(
             "route-source-0",
             "primary-casing",
             const LineLayerProperties(
@@ -712,11 +724,10 @@ class MapProvider extends ChangeNotifier {
               lineCap: "round",
               lineJoin: "round",
             ),
-            belowLayerId: 'nav_puck_layer',
           );
 
           // 2. MIDDLE: Core (Solid Neon Blue or Traffic Colors)
-          await controller!.addLineLayer(
+          await safeAddLineLayer(
             "route-source-0",
             "primary-core",
             const LineLayerProperties(
@@ -733,11 +744,10 @@ class MapProvider extends ChangeNotifier {
               lineCap: "round",
               lineJoin: "round",
             ),
-            belowLayerId: 'nav_puck_layer',
           );
 
           // 3. TOP: Shine (Ultra-thin 1px Sky Blue reflection perfectly blending)
-          await controller!.addLineLayer(
+          await safeAddLineLayer(
             "route-source-0",
             "primary-shine",
             const LineLayerProperties(
@@ -749,7 +759,6 @@ class MapProvider extends ChangeNotifier {
               lineBlur:
                   1.0, // Adds a tiny glow effect to blend the edges seamlessly into the core
             ),
-            belowLayerId: 'nav_puck_layer',
           );
         }
       } catch (e) {
@@ -858,7 +867,7 @@ class MapProvider extends ChangeNotifier {
             },
           });
 
-          await controller!.addLineLayer(
+          await safeAddLineLayer(
             "connectors-source",
             "connectors-layer",
             const LineLayerProperties(
@@ -866,7 +875,7 @@ class MapProvider extends ChangeNotifier {
               lineWidth: 3.5,
               lineCap: "round",
               lineJoin: "round",
-              lineDasharray: [0.0, 2.5], // Premium circular dots
+              lineDasharray: [0.001, 2.0], // Premium circular dots
             ),
           );
         }
@@ -917,8 +926,7 @@ class MapProvider extends ChangeNotifier {
 
       final String sourceId = 'time-tag-source-$i';
       final String layerId = 'time-tag-layer-$i';
-      final String imageId =
-          'time-tag-image-$i-${DateTime.now().millisecondsSinceEpoch}';
+      final String imageId = 'time-tag-image-$i';
 
       LatLng midpoint;
       if (isPrimary) {
@@ -964,27 +972,44 @@ class MapProvider extends ChangeNotifier {
       }
     }
 
-    // 8. FORCE PIN TO TOP LAYER (Z-INDEX FIX)
-    if (targetDestination != null && controller != null) {
-      // Remove the existing hidden pin
-      if (_droppedPinSymbol != null) {
-        await controller!.removeSymbol(_droppedPinSymbol!);
+    // 8. ROAD SNAP & BULLETPROOF Z-INDEX FOR PIN
+    if (allRoutes.isNotEmpty && allRoutes[0].isNotEmpty && controller != null) {
+      // Snap the pin to the exact endpoint of the calculated route
+      final snappedDestination = allRoutes[0].last; 
+
+      try { await controller!.removeLayer('ultimate-pin-layer'); } catch (_) {}
+      try { await controller!.removeSource('ultimate-pin-source'); } catch (_) {}
+
+      try {
+        await controller!.addGeoJsonSource('ultimate-pin-source', {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [snappedDestination.longitude, snappedDestination.latitude],
+          },
+        });
+
+        await controller!.addSymbolLayer(
+          'ultimate-pin-source',
+          'ultimate-pin-layer',
+          const SymbolLayerProperties(
+            iconImage: 'custom_pin',
+            iconSize: 0.35, // Perfect premium size instantly
+            iconAnchor: 'bottom',
+            iconAllowOverlap: true,
+            iconIgnorePlacement: true,
+          ),
+        );
+      } catch (e) {
+        debugPrint("🗺️ PIN DROP ERROR: $e");
       }
-      // Re-drop the pin so it renders strictly above the route layers
-      _droppedPinSymbol = await controller!.addSymbol(
-        SymbolOptions(
-          geometry: targetDestination,
-          iconImage: 'custom_pin',
-          iconSize: 0.35, 
-          iconAnchor: 'bottom',
-        ),
-      );
     }
 
     notifyListeners();
   }
 
   Future<void> clearNativeRoute({bool preserveState = false}) async {
+    if (_drawnRoutesCount == 0) return; // Do not spam the bridge if already clear
     if (controller != null && _drawnRoutesCount > 0) {
       // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
       try {
@@ -1146,6 +1171,9 @@ class MapProvider extends ChangeNotifier {
       try {
         await controller!.removeSource('selected-destination-source');
       } catch (_) {}
+      
+      try { await controller!.removeLayer('ultimate-pin-layer'); } catch (_) {}
+      try { await controller!.removeSource('ultimate-pin-source'); } catch (_) {}
 
       // Remove the manual dropped pin or search symbol layer
       if (_droppedPinSymbol != null) {

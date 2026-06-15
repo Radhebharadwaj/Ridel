@@ -1445,132 +1445,87 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                               width: 1.0,
                                                             ),
                                                           ),
-                                                          child:
-                                                              ScrollConfiguration(
-                                                            behavior:
-                                                                ScrollConfiguration.of(
-                                                                        context)
-                                                                    .copyWith(
-                                                              scrollbars: false,
-                                                              dragDevices: {
-                                                                PointerDeviceKind
-                                                                    .touch,
-                                                                PointerDeviceKind
-                                                                    .mouse,
-                                                              },
-                                                            ),
-                                                            child:
-                                                                CustomScrollView(
-                                                              controller:
-                                                                  scrollController,
-                                                              // 🚀 FIX: Prevent overscroll bouncing
-                                                              physics:
-                                                                  const ClampingScrollPhysics(
-                                                                      parent:
-                                                                          AlwaysScrollableScrollPhysics()),
-                                                              keyboardDismissBehavior:
-                                                                  ScrollViewKeyboardDismissBehavior
-                                                                      .onDrag,
-                                                              slivers: [
-                                                                SliverAppBar(
-                                                                  pinned: true,
-                                                                  elevation: 0,
-                                                                  backgroundColor:
-                                                                      Colors
-                                                                          .transparent,
-                                                                  collapsedHeight:
-                                                                      dynamicHeaderHeight,
-                                                                  toolbarHeight:
-                                                                      dynamicHeaderHeight,
-                                                                  flexibleSpace:
-                                                                      GestureDetector(
+                                                          child: Stack(
+                                                            children: [
+                                                              // Bottom Layer: Scrollable Content
+                                                              Positioned.fill(
+                                                                child: ScrollConfiguration(
+                                                                  behavior: ScrollConfiguration.of(context).copyWith(
+                                                                    scrollbars: false,
+                                                                    dragDevices: { PointerDeviceKind.touch, PointerDeviceKind.mouse },
+                                                                  ),
+                                                                  child: CustomScrollView(
+                                                                    controller: scrollController,
+                                                                    physics: const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                                                                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                                                                    slivers: [
+                                                                      SliverPadding(
+                                                                        padding: EdgeInsets.only(top: dynamicHeaderHeight),
+                                                                      ),
+                                                                      SliverToBoxAdapter(
+                                                                        child: AnimatedOpacity(
+                                                                          duration: const Duration(milliseconds: 150),
+                                                                          opacity: (!provider.isActiveNavigation && progress > 0.05) ? 1.0 : 0.0,
+                                                                          child: (!provider.isActiveNavigation && progress > 0.05)
+                                                                              ? _buildSheetContent(isDark, progress, isExpanded: isKeyboardOpen)
+                                                                              : const SizedBox(),
+                                                                        ),
+                                                                      ),
+                                                                      SliverPadding(
+                                                                        padding: EdgeInsets.only(bottom: keyboardHeight),
+                                                                      ),
+                                                                      SliverFillRemaining(
+                                                                        hasScrollBody: false,
+                                                                        child: Container(color: Colors.transparent),
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                              // Top Layer: Floating Header with Gradient Fade
+                                                              Positioned(
+                                                                top: 0,
+                                                                left: 0,
+                                                                right: 0,
+                                                                child: Container(
+                                                                  decoration: BoxDecoration(
+                                                                    gradient: LinearGradient(
+                                                                      begin: Alignment.topCenter,
+                                                                      end: Alignment.bottomCenter,
+                                                                      colors: [
+                                                                        sheetBgColor, // Exact match to the sheet's base color and alpha
+                                                                        sheetBgColor, // Maintain camouflage over the header content
+                                                                        sheetBgColor.withValues(alpha: 0.0), // Smoothly fade to transparent
+                                                                      ],
+                                                                      stops: const [0.0, 0.75, 1.0], // Fade occurs only at the bottom 25% edge
+                                                                    ),
+                                                                  ),
+                                                                  height: dynamicHeaderHeight,
+                                                                  child: GestureDetector(
                                                                     onTap: () {
-                                                                      if (progress <
-                                                                          0.1) {
+                                                                      if (progress < 0.1) {
                                                                         _expandToFull();
                                                                       }
                                                                     },
-                                                                    behavior:
-                                                                        HitTestBehavior
-                                                                            .translucent,
-                                                                    child:
-                                                                        AnimatedSwitcher(
-                                                                      duration:
-                                                                          const Duration(
-                                                                        milliseconds:
-                                                                            500,
-                                                                      ),
-                                                                      switchInCurve:
-                                                                          Curves
-                                                                              .easeInCubic,
-                                                                      switchOutCurve:
-                                                                          Curves
-                                                                              .easeOutCubic,
+                                                                    behavior: HitTestBehavior.translucent,
+                                                                    child: AnimatedSwitcher(
+                                                                      duration: const Duration(milliseconds: 500),
+                                                                      switchInCurve: Curves.easeInCubic,
+                                                                      switchOutCurve: Curves.easeOutCubic,
                                                                       child: (_showDirections
-                                                                          ? _buildDirectionsHeader(
-                                                                              dynamicHeaderHeight,
-                                                                              isDark,
-                                                                            )
+                                                                          ? _buildDirectionsHeader(dynamicHeaderHeight, isDark)
                                                                           : (_selectedPlace != null
-                                                                              ? _buildSelectedPlaceHeader(
-                                                                                  dynamicHeaderHeight,
-                                                                                  progress,
-                                                                                  isDark,
-                                                                                )
-                                                                              : _buildSearchHeader(
-                                                                                  dynamicHeaderHeight,
-                                                                                  progress,
-                                                                                  isDark,
-                                                                                ))),
+                                                                              ? _buildSelectedPlaceHeader(dynamicHeaderHeight, progress, isDark)
+                                                                              : _buildSearchHeader(dynamicHeaderHeight, progress, isDark))),
                                                                     ),
                                                                   ),
                                                                 ),
-                                                                SliverToBoxAdapter(
-                                                                  child:
-                                                                      AnimatedOpacity(
-                                                                    duration:
-                                                                        const Duration(
-                                                                      milliseconds:
-                                                                          150,
-                                                                    ),
-                                                                    opacity: (!provider.isActiveNavigation &&
-                                                                            progress >
-                                                                                0.05)
-                                                                        ? 1.0
-                                                                        : 0.0,
-                                                                    child: (!provider.isActiveNavigation &&
-                                                                            progress >
-                                                                                0.05)
-                                                                        ? _buildSheetContent(
-                                                                            isDark,
-                                                                            progress,
-                                                                            isExpanded:
-                                                                                isKeyboardOpen,
-                                                                          )
-                                                                        : const SizedBox(),
-                                                                  ),
-                                                                ),
-                                                                SliverPadding(
-                                                                  padding: EdgeInsets
-                                                                      .only(
-                                                                          bottom:
-                                                                              keyboardHeight),
-                                                                ),
-                                                                SliverFillRemaining(
-                                                                  hasScrollBody:
-                                                                      false,
-                                                                  child:
-                                                                      Container(
-                                                                    color: Colors
-                                                                        .transparent,
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ),
+                                                              ),
+                                                            ],
                                                           ),
-                                                        ),
-                                                      ),
-                                                    ),
+                                                ),
+                                              ),
+                                            ),
                                                   ),
                                                 ),
                                                 Positioned(

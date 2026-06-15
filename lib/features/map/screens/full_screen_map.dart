@@ -13,14 +13,11 @@ import 'package:ridel/core/map/map_style_helper.dart';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
-import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/features/map/widgets/search_sheet/map_search_sheet.dart';
 import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/features/map/widgets/map_theme_selector.dart';
 import 'package:ridel/features/map/widgets/weather_floating_widget.dart';
 import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
-import 'package:ridel/features/map/widgets/animated_map_pin.dart';
-import 'package:ridel/features/map/map_engine/map_engine.dart';
 import 'package:ridel/core/utils/location_guard.dart';
 
 class FullScreenMapPage extends StatefulWidget {
@@ -702,6 +699,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
                                             // Fire and forget - do not block the UI!
                                             Future.microtask(() async {
+                                              if (!context.mounted) return;
                                               bool hasLocation =
                                                   await LocationGuard
                                                       .checkAndRequestLocation(
@@ -1388,12 +1386,12 @@ class AppleCompassDialPainter extends CustomPainter {
     final radius = size.width / 2 - 4.0; // Inner padding
 
     final tickPaint = Paint()
-      ..color = (isDark ? Colors.white : Colors.black).withOpacity(0.3)
+      ..color = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.3)
       ..strokeWidth = 1.0
       ..strokeCap = StrokeCap.round;
 
     final boldTickPaint = Paint()
-      ..color = (isDark ? Colors.white : Colors.black).withOpacity(0.6)
+      ..color = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.6)
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round;
 
