@@ -176,8 +176,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   if (controller == null) return;
 
                   try {
-                    final ByteData pinBytes = await rootBundle.load('assets/images/custom_pin.png');
-                    final Uint8List bytes = pinBytes.buffer.asUint8List();
+                    final Uint8List bytes = await MapProvider.loadAndResizeImage('assets/images/custom_pin.png', 36);
                     await controller.addImage('custom_pin', bytes);
                     debugPrint("Custom Pin Successfully Injected");
                   } catch (e) {

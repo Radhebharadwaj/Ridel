@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -14,6 +13,7 @@ import 'controllers/map_mode_controller.dart';
 import 'controllers/map_navigation_controller.dart';
 import 'package:ridel/features/map/services/route_engine_service.dart';
 import 'package:ridel/features/map/services/route_visualizer.dart';
+import 'package:ridel/core/map/map_provider.dart';
 
 enum EngineState { idle, switchingMode, animatingCamera, updatingLayers, error }
 
@@ -139,26 +139,8 @@ class MapEngine {
     try {
       // 🚀 Load and Add Custom Navigation Puck and Pin Images
       try {
-        final ByteData puckBytesData =
-            await rootBundle.load('assets/images/nav_puck.png');
-        final Uint8List rawPuckBytes = puckBytesData.buffer.asUint8List(
-          puckBytesData.offsetInBytes,
-          puckBytesData.lengthInBytes,
-        );
-        final ui.Codec codec = await ui.instantiateImageCodec(rawPuckBytes);
-        final ui.FrameInfo frameInfo = await codec.getNextFrame();
-        final ByteData? decodedData =
-            await frameInfo.image.toByteData(format: ui.ImageByteFormat.png);
-        
-        if (decodedData != null) {
-          final Uint8List puckBytes = decodedData.buffer.asUint8List(
-            decodedData.offsetInBytes,
-            decodedData.lengthInBytes,
-          );
-          await controller.addImage('nav_puck', puckBytes);
-        } else {
-          throw Exception("Decoded nav_puck is null");
-        }
+        final Uint8List puckBytes = await MapProvider.loadAndResizeImage('assets/images/nav_puck.png', 36);
+        await controller.addImage('nav_puck', puckBytes);
       } catch (e) {
         debugPrint("⚠️ Failed to load nav_puck image, adding transparent fallback: $e");
         final Uint8List transparentPixel = Uint8List.fromList([
@@ -186,7 +168,7 @@ class MapEngine {
             iconRotationAlignment: 'map',
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
-            iconSize: 0.4,
+            iconSize: 1.0,
             iconOpacity: 1.0,
             iconRotate: ['get', 'bearing'],
           ),
@@ -196,26 +178,8 @@ class MapEngine {
       }
 
       try {
-        final ByteData pinBytesData =
-            await rootBundle.load('assets/images/custom_pin.png');
-        final Uint8List rawPinBytes = pinBytesData.buffer.asUint8List(
-          pinBytesData.offsetInBytes,
-          pinBytesData.lengthInBytes,
-        );
-        final ui.Codec codec = await ui.instantiateImageCodec(rawPinBytes);
-        final ui.FrameInfo frameInfo = await codec.getNextFrame();
-        final ByteData? decodedData =
-            await frameInfo.image.toByteData(format: ui.ImageByteFormat.png);
-            
-        if (decodedData != null) {
-          final Uint8List pinBytes = decodedData.buffer.asUint8List(
-            decodedData.offsetInBytes,
-            decodedData.lengthInBytes,
-          );
-          await controller.addImage('custom_pin', pinBytes);
-        } else {
-          throw Exception("Decoded custom_pin is null");
-        }
+        final Uint8List pinBytes = await MapProvider.loadAndResizeImage('assets/images/custom_pin.png', 36);
+        await controller.addImage('custom_pin', pinBytes);
       } catch (e) {
         debugPrint("⚠️ Failed to load custom_pin image, adding transparent fallback: $e");
         final Uint8List transparentPixel = Uint8List.fromList([

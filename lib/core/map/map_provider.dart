@@ -3,8 +3,7 @@ import 'dart:math' show Point;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
-
-
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -28,6 +27,17 @@ import 'package:ridel/core/utils/toast_service.dart';
 class MapProvider extends ChangeNotifier {
   final MapEngine engine = MapEngine();
   final RouteEngineService _routingService = RouteEngineService();
+
+  static Future<Uint8List> loadAndResizeImage(String assetPath, int targetWidth) async {
+    final ByteData data = await rootBundle.load(assetPath);
+    final ui.Codec codec = await ui.instantiateImageCodec(
+      data.buffer.asUint8List(),
+      targetWidth: targetWidth, // CRITICAL: Locks the pixel width strictly
+    );
+    final ui.FrameInfo fi = await codec.getNextFrame();
+    final ByteData? resizedData = await fi.image.toByteData(format: ui.ImageByteFormat.png);
+    return resizedData!.buffer.asUint8List();
+  }
 
   MapLibreMapController? get controller => engine.mapController;
   bool get _isMapReady => controller != null;
@@ -462,10 +472,11 @@ class MapProvider extends ChangeNotifier {
     }
 
     // Alt layers start from index 1 (index 0 is primary)
-    List<String> altLayerIds = List.generate(
-      _drawnRoutesCount - 1,
-      (i) => 'route-layer-${i + 1}',
-    );
+    List<String> altLayerIds = [];
+    for (int i = 1; i < _drawnRoutesCount; i++) {
+      altLayerIds.add('route-layer-$i');
+      altLayerIds.add('alt-walk-layer-$i'); // CRITICAL: Makes walking routes clickable!
+    }
     final features = await controller!.queryRenderedFeatures(
       point,
       altLayerIds,
@@ -539,11 +550,9 @@ class MapProvider extends ChangeNotifier {
 
     Future<void> safeAddLineLayer(String sourceId, String layerId, LineLayerProperties props) async {
       try {
-        await controller!.addLineLayer(sourceId, layerId, props, belowLayerId: 'ultimate-pin-layer');
-      } catch (_) {
-        try {
-          await controller!.addLineLayer(sourceId, layerId, props);
-        } catch (_) {}
+        await controller!.addLineLayer(sourceId, layerId, props);
+      } catch (e) {
+        debugPrint("🗺️ LINE DRAW ERROR for $layerId: $e");
       }
     }
 
@@ -789,7 +798,7 @@ class MapProvider extends ChangeNotifier {
             iconRotationAlignment: 'map',
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
-            iconSize: 0.15,
+            iconSize: 1.0,
             iconOpacity: 1.0,
             iconRotate: ['get', 'bearing'],
           ),
@@ -972,6 +981,13 @@ class MapProvider extends ChangeNotifier {
       }
     }
 
+    // KILL GHOST PINS TO PREVENT DOUBLE PINS
+    if (_droppedPinSymbol != null && controller != null) {
+      await controller!.removeSymbol(_droppedPinSymbol!);
+      _droppedPinSymbol = null;
+    }
+    await engine.layers?.removeSearchPin();
+
     // 8. ROAD SNAP & BULLETPROOF Z-INDEX FOR PIN
     if (allRoutes.isNotEmpty && allRoutes[0].isNotEmpty && controller != null) {
       // Snap the pin to the exact endpoint of the calculated route
@@ -994,7 +1010,7 @@ class MapProvider extends ChangeNotifier {
           'ultimate-pin-layer',
           const SymbolLayerProperties(
             iconImage: 'custom_pin',
-            iconSize: 0.35, // Perfect premium size instantly
+            iconSize: 1.0, // Perfect premium size instantly
             iconAnchor: 'bottom',
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
@@ -1649,7 +1665,7 @@ class MapProvider extends ChangeNotifier {
         SymbolOptions(
           geometry: latLng,
           iconImage: 'custom_pin',
-          iconSize: 0.35, 
+          iconSize: 1.0, 
           iconAnchor: 'bottom',
           iconRotate: 15.0, // Head tilted right
         ),
@@ -2179,6 +2195,7 @@ class MapProvider extends ChangeNotifier {
         await clearRouteData();
         targetLocation = target;
         isCinematicSearch = true;
+        await flyToPlace(target.latitude, target.longitude);
         notifyListeners();
       }
     } catch (e) {
@@ -2231,7 +2248,7 @@ class MapProvider extends ChangeNotifier {
           SymbolOptions(
             geometry: target,
             iconImage: 'custom_pin',
-            iconSize: 0.35, 
+            iconSize: 1.0, 
             iconAnchor: 'bottom',
             iconRotate: 15.0, // Head tilted right
           ),
