@@ -303,11 +303,12 @@ class SavedPlacesRow extends StatelessWidget {
             isDark: isDark,
             iconColor: const Color(0xFF0A84FF),
             hasValue: home != null,
-            onTap: () {
+            onTap: () async {
               if (home != null) {
                 // Navigate to saved home
                 final provider =
                     Provider.of<MapProvider>(context, listen: false);
+                await provider.cancelAndClearRoute(resetCamera: false);
                 provider.flyToPlace(home.lat, home.lng);
                 onPlaceTapped?.call();
               } else {
@@ -330,10 +331,11 @@ class SavedPlacesRow extends StatelessWidget {
             isDark: isDark,
             iconColor: const Color(0xFF5856D6),
             hasValue: work != null,
-            onTap: () {
+            onTap: () async {
               if (work != null) {
                 final provider =
                     Provider.of<MapProvider>(context, listen: false);
+                await provider.cancelAndClearRoute(resetCamera: false);
                 provider.flyToPlace(work.lat, work.lng);
                 onPlaceTapped?.call();
               } else {

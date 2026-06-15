@@ -449,6 +449,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
       // 4. Fly Camera
       if (lat != 0.0 && lng != 0.0) {
+        await safeProvider.cancelAndClearRoute(resetCamera: false);
         safeProvider.setTargetDestination(LatLng(lat, lng));
         setState(() => _selectedPlace = place);
         if (_sheetController.isAttached) {
@@ -608,6 +609,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
               // Update provider with valid data
               final provider = Provider.of<MapProvider>(context, listen: false);
+              await provider.cancelAndClearRoute(resetCamera: false);
               provider.setTargetDestination(validLatLng);
               provider.addNativeDestinationPin(validLatLng);
 

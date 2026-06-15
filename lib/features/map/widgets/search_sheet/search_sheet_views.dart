@@ -386,9 +386,17 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
 
                                                 // 4. Fly Camera
                                                 if (lat != 0.0 && lng != 0.0) {
-                                                  safeProvider
-                                                      .setTargetDestination(
-                                                          LatLng(lat, lng));
+                                                  await safeProvider.cancelAndClearRoute(resetCamera: false);
+                                                  
+                                                  // 1. Set the tapped place so the bottom sheet shows the details UI
+                                                  safeProvider.setTappedPlace(place);
+
+                                                  // 2. Set the routing destination
+                                                  safeProvider.setTargetDestination(LatLng(lat, lng));
+
+                                                  // 3. Force the UI state to Place Selected (This stops the sheet from closing)
+                                                  safeProvider.engine.setUIState(MapUIState.placeSelected);
+
                                                   rebuildState(() =>
                                                       _selectedPlace = place);
                                                   if (_sheetController

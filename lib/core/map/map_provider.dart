@@ -52,6 +52,7 @@ class MapProvider extends ChangeNotifier {
 
   Circle? _currentMarker;
   Circle? _originMarker;
+  Symbol? _droppedPinSymbol;
 
   AnimationController? _pinAnimController;
 
@@ -80,10 +81,11 @@ class MapProvider extends ChangeNotifier {
 
   bool get showNativeBlueDot =>
       engine.mapUIState.value == MapUIState.idle ||
-      engine.mapUIState.value == MapUIState.placeSelected;
+      engine.mapUIState.value == MapUIState.placeSelected ||
+      engine.mapUIState.value == MapUIState.routeDrawn; // CRITICAL FIX: Keep native dot visible when route is drawn
+
   double get customPuckOpacity =>
-      (engine.mapUIState.value == MapUIState.navigating ||
-              engine.mapUIState.value == MapUIState.routeDrawn)
+      (engine.mapUIState.value == MapUIState.navigating) // CRITICAL FIX: Only use custom puck in active 3D navigation
           ? 1.0
           : 0.0;
 
@@ -154,69 +156,15 @@ class MapProvider extends ChangeNotifier {
     await _updatePuckGeoJson(_lastPuckLocation, _lastPuckBearing, 0.0);
   }
 
-  // 1. ADD NATIVE VECTOR PIN
+  // 1. ADD NATIVE VECTOR PIN (DEPRECATED: Using Flutter Overlay)
   Future<void> addNativeDestinationPin(LatLng location) async {
-    if (controller == null || !engine.isFullyBooted) return;
-
-    // 🚨 1. STRICT CLEANUP: Wipe out the old route and reset UI state immediately
-    await clearNativeRoute();
-    isRouteCalculated = false; // Ensure the Start button reverts to Directions
-
-    // 🚨 2. STRICT CLEANUP: Remove the old pin
-    await clearNativeDestinationPin();
-
-    try {
-      await controller!.addGeoJsonSource('destination_pin_source', {
-        "type": "FeatureCollection",
-        "features": [
-          {
-            "type": "Feature",
-            "geometry": {
-              "type": "Point",
-              "coordinates": [location.longitude, location.latitude]
-            }
-          }
-        ]
-      });
-
-      await controller!.addSymbolLayer(
-        'destination_pin_source',
-        'destination_pin_layer',
-        const SymbolLayerProperties(
-          iconImage: 'custom_pin',
-          iconPitchAlignment: 'viewport',
-          iconAnchor: 'bottom',
-          iconSize: 1.5,
-          iconAllowOverlap: true,
-          iconIgnorePlacement: true,
-        ),
-      );
-
-      targetDestination = location; // Update the internal coordinate tracker
-      debugPrint("🗺️ CUSTOM PIN DROPPED at $location");
-
-      await engine.mapController?.animateCamera(
-        CameraUpdate.newLatLngZoom(location, 16.0), // The exact tapped location
-        duration: const Duration(milliseconds: 600),
-      );
-
-      // notifyListeners() removed: do not trigger UI rebuild after flight to avoid snap-back
-    } catch (e) {
-      debugPrint("🗺️ PIN ERROR: $e");
-    }
+    targetDestination = location; // Update the internal coordinate tracker
+    debugPrint("🗺️ CUSTOM PIN DROPPED at $location");
   }
 
-  // 2. CLEAR NATIVE PIN
+  // 2. CLEAR NATIVE PIN (DEPRECATED)
   Future<void> clearNativeDestinationPin() async {
-    if (controller != null) {
-      try {
-        await controller!.removeLayer('destination_pin_layer');
-      } catch (_) {}
-      try {
-        await controller!.removeSource('destination_pin_source');
-      } catch (_) {}
-      notifyListeners();
-    }
+    // Intentionally empty. We use a Flutter UI overlay pin now.
   }
 
   // State flag for UI
@@ -818,36 +766,6 @@ class MapProvider extends ChangeNotifier {
       await Future.delayed(const Duration(milliseconds: 150));
 
       try {
-        // Step 2: Add/Update Destination Pin Layer
-        await controller!.addGeoJsonSource('destination_pin_source', {
-          "type": "FeatureCollection",
-          "features": [
-            {
-              "type": "Feature",
-              "geometry": {
-                "type": "Point",
-                "coordinates": [
-                  targetDestination!.longitude,
-                  targetDestination!.latitude
-                ]
-              }
-            }
-          ]
-        });
-
-        await controller!.addSymbolLayer(
-          'destination_pin_source',
-          'destination_pin_layer',
-          const SymbolLayerProperties(
-            iconImage: 'custom_pin',
-            iconPitchAlignment: 'viewport',
-            iconAnchor: 'bottom',
-            iconSize: 0.20,
-            iconAllowOverlap: true,
-            iconIgnorePlacement: true,
-          ),
-        );
-
         // Step 3: Bring Nav Puck to Front
         try {
           await controller!.removeLayer('nav_puck_layer');
@@ -1032,22 +950,35 @@ class MapProvider extends ChangeNotifier {
           layerId,
           SymbolLayerProperties(
             iconImage: imageId,
-            iconSize: 0.15, // Scale down the high-res image
-            iconAnchor: "bottom",
-            iconOffset: [0, -1.0],
-            symbolSortKey:
-                i, // 🚨 THE FIX: MapLibre prioritizes LOWER numbers (i=0 is top priority)
+            iconSize: 0.32,
+            iconAnchor: "center", // Centered perfectly on the route line
+            symbolSortKey: i,
             symbolPlacement: "point",
-            // 🚨 SELECTIVE ANTI-COLLISION:
-            // Main Route (i==0): Force it to ALWAYS show, ignoring overlaps.
-            // Alternate Routes (i>0): Hide gracefully if they collide.
             iconAllowOverlap: isPrimary ? true : false,
             iconIgnorePlacement: isPrimary ? true : false,
           ),
+          belowLayerId: 'nav_puck_layer', // CRITICAL Z-INDEX FIX: Forces tags beneath the user dot
         );
       } catch (e) {
         debugPrint("🗺️ ETA TAG DRAW ERROR for index $i: $e");
       }
+    }
+
+    // 8. FORCE PIN TO TOP LAYER (Z-INDEX FIX)
+    if (targetDestination != null && controller != null) {
+      // Remove the existing hidden pin
+      if (_droppedPinSymbol != null) {
+        await controller!.removeSymbol(_droppedPinSymbol!);
+      }
+      // Re-drop the pin so it renders strictly above the route layers
+      _droppedPinSymbol = await controller!.addSymbol(
+        SymbolOptions(
+          geometry: targetDestination,
+          iconImage: 'custom_pin',
+          iconSize: 0.35, 
+          iconAnchor: 'bottom',
+        ),
+      );
     }
 
     notifyListeners();
@@ -1149,13 +1080,14 @@ class MapProvider extends ChangeNotifier {
   }
 
   // Helper to safely fully clear everything and notify UI
-  Future<void> cancelAndClearRoute() async {
+  Future<void> cancelAndClearRoute({bool resetCamera = true}) async {
     _liveLocationSub?.cancel();
     _liveLocationSub = null;
     // 1. Clear MapLibre Native Layers (Lines AND ETA Pills)
     if (controller != null) {
-      // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
-      try {
+      if (_drawnRoutesCount > 0 || isRouteCalculated) {
+        // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
+        try {
         await controller!.removeLayer('primary-casing');
       } catch (_) {}
       try {
@@ -1202,6 +1134,7 @@ class MapProvider extends ChangeNotifier {
           await controller!.removeSource('time-tag-source-$i');
         } catch (_) {}
       }
+      }
 
       // Also clear destination pin circle if it exists
       await clearNativeDestinationPin();
@@ -1215,6 +1148,10 @@ class MapProvider extends ChangeNotifier {
       } catch (_) {}
 
       // Remove the manual dropped pin or search symbol layer
+      if (_droppedPinSymbol != null) {
+        await controller!.removeSymbol(_droppedPinSymbol!);
+        _droppedPinSymbol = null;
+      }
       await engine.layers?.removeSearchPin();
     }
 
@@ -1237,7 +1174,7 @@ class MapProvider extends ChangeNotifier {
     engine.setUIState(MapUIState.idle);
 
     // 🚀 Cinematic Camera Reset
-    if (controller != null && currentLocation != null) {
+    if (resetCamera && controller != null && currentLocation != null) {
       controller!.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
@@ -1642,7 +1579,7 @@ class MapProvider extends ChangeNotifier {
   Future<void> handleMapTap(Point<double> point, LatLng latLng) async {
     if (!_isMapReady) return;
 
-    await cancelAndClearRoute();
+    await cancelAndClearRoute(resetCamera: false);
 
     AppHaptics.heavyImpact();
 
@@ -1664,16 +1601,56 @@ class MapProvider extends ChangeNotifier {
     // 1. Trigger Bottom Sheet UI Rebuild FIRST
     notifyListeners();
 
-    // 🚀 CRITICAL FIX: Yield to the event loop so the UI rebuilds the MapLibreMap
-    // before we start the native camera flight. This prevents the didUpdateWidget
-    // JS channel from interrupting our animateCamera promise and causing a snap-back.
-    await Future.delayed(const Duration(milliseconds: 150));
+    // 2. Ensure native tracking is dead so it doesn't fight the flight
+    await engine.mapController?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+    // 3. Execute the flight to the PIN coordinates (tappedCoordinates), NOT user location instantly!
+    await engine.mapController?.animateCamera(
+      CameraUpdate.newLatLngZoom(latLng, 16.0),
+      duration: const Duration(milliseconds: 800),
+    );
 
-    // 2. Fly the camera and draw the pin non-blockingly!
-    await drawDroppedPin(latLng);
+    // Clear existing pin if any
+    if (_droppedPinSymbol != null && controller != null) {
+      await controller!.removeSymbol(_droppedPinSymbol!);
+      _droppedPinSymbol = null;
+    }
 
-    // Fire-and-forget network call in background
-    Future.microtask(() async {
+    if (controller != null) {
+      // 1. Drop the pin tilted slightly right
+      _droppedPinSymbol = await controller!.addSymbol(
+        SymbolOptions(
+          geometry: latLng,
+          iconImage: 'custom_pin',
+          iconSize: 0.35, 
+          iconAnchor: 'bottom',
+          iconRotate: 15.0, // Head tilted right
+        ),
+      );
+
+      // 2. Sway Left
+      Future.delayed(const Duration(milliseconds: 150), () async {
+        if (_droppedPinSymbol != null && controller != null) {
+          await controller!.updateSymbol(_droppedPinSymbol!, const SymbolOptions(iconRotate: -10.0));
+        }
+      });
+
+      // 3. Sway slightly Right
+      Future.delayed(const Duration(milliseconds: 300), () async {
+        if (_droppedPinSymbol != null && controller != null) {
+          await controller!.updateSymbol(_droppedPinSymbol!, const SymbolOptions(iconRotate: 5.0));
+        }
+      });
+
+      // 4. Settle firmly in the center
+      Future.delayed(const Duration(milliseconds: 450), () async {
+        if (_droppedPinSymbol != null && controller != null) {
+          await controller!.updateSymbol(_droppedPinSymbol!, const SymbolOptions(iconRotate: 0.0));
+        }
+      });
+    }
+
+    // Fire-and-forget network call in background, deferred to allow 60FPS camera flight
+    Future.delayed(const Duration(milliseconds: 800), () async {
       try {
         final PlaceModel place = await PlaceEnrichmentService().reverseGeocode(
           latLng.latitude,
@@ -1718,10 +1695,7 @@ class MapProvider extends ChangeNotifier {
     });
   }
 
-  Future<void> drawDroppedPin(LatLng latLng) async {
-    if (controller == null || !engine.isFullyBooted) return;
-    await addNativeDestinationPin(latLng);
-  }
+
 
   Future<void> clearSearchSession(BuildContext context) async {
     targetDestination = null;
@@ -1732,6 +1706,10 @@ class MapProvider extends ChangeNotifier {
       await RouteVisualizer.clearRoute(controller);
 
       // 2. Remove the manual dropped pin or search symbol layer
+      if (_droppedPinSymbol != null) {
+        await controller!.removeSymbol(_droppedPinSymbol!);
+        _droppedPinSymbol = null;
+      }
       await engine.layers?.removeSearchPin();
 
       await clearNativeDestinationPin();
@@ -2193,17 +2171,65 @@ class MapProvider extends ChangeNotifier {
     if (!_isMapReady) return;
     final target = LatLng(lat, lng);
     targetDestination = target;
+
+    setAutoTracking(false); // 🚨 CRITICAL FIX: Stops the background GPS from snapping the camera back!
+    notifyListeners();
+
+    engine.setUIState(MapUIState.placeSelected);
+    isFlying = true;
     notifyListeners(); // 🧭 Triggers Consumer → AnimatedMapPin overlay appears
 
-    isFlying = true;
     try {
       // 1. Force native layer to drop tracking immediately
       await controller?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
 
       // 2. CRITICAL FIX: Event loop breaker to safely disengage WebGL tracking lock
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 150));
 
-      await controller?.animateCamera(CameraUpdate.newLatLngZoom(target, 16.0));
+      await controller?.animateCamera(
+        CameraUpdate.newLatLngZoom(target, 16.0),
+        duration: const Duration(milliseconds: 1200),
+      );
+
+      // Clear existing pin if any
+      if (_droppedPinSymbol != null && controller != null) {
+        await controller!.removeSymbol(_droppedPinSymbol!);
+        _droppedPinSymbol = null;
+      }
+
+      if (controller != null) {
+        // 1. Drop the pin tilted slightly right
+        _droppedPinSymbol = await controller!.addSymbol(
+          SymbolOptions(
+            geometry: target,
+            iconImage: 'custom_pin',
+            iconSize: 0.35, 
+            iconAnchor: 'bottom',
+            iconRotate: 15.0, // Head tilted right
+          ),
+        );
+
+        // 2. Sway Left
+        Future.delayed(const Duration(milliseconds: 150), () async {
+          if (_droppedPinSymbol != null && controller != null) {
+            await controller!.updateSymbol(_droppedPinSymbol!, const SymbolOptions(iconRotate: -10.0));
+          }
+        });
+
+        // 3. Sway slightly Right
+        Future.delayed(const Duration(milliseconds: 300), () async {
+          if (_droppedPinSymbol != null && controller != null) {
+            await controller!.updateSymbol(_droppedPinSymbol!, const SymbolOptions(iconRotate: 5.0));
+          }
+        });
+
+        // 4. Settle firmly in the center
+        Future.delayed(const Duration(milliseconds: 450), () async {
+          if (_droppedPinSymbol != null && controller != null) {
+            await controller!.updateSymbol(_droppedPinSymbol!, const SymbolOptions(iconRotate: 0.0));
+          }
+        });
+      }
 
       AppHaptics.mediumImpact();
     } catch (e) {
@@ -2221,6 +2247,8 @@ class MapProvider extends ChangeNotifier {
   }) async {
     if (!_isMapReady) return;
     try {
+      setAutoTracking(false);
+      await controller?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
       await controller?.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(target: target, zoom: zoom, tilt: tilt, bearing: 0),
