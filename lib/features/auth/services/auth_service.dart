@@ -97,6 +97,11 @@ class AuthService {
         isNew = lastSignIn.difference(createdAt).inSeconds < 5;
       }
       return AuthResult(isSuccess: true, isNewUser: isNew);
+    } on AuthException catch (_) {
+      return AuthResult(
+          isSuccess: false,
+          errorMessage:
+              'Invalid OTP entered. Please check your code and try again.');
     } catch (e) {
       return AuthResult(
           isSuccess: false, errorMessage: _translatePremiumError(e));

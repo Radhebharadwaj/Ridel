@@ -95,7 +95,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   bool _isSearchMode = false;
 
   bool _showSearchList = true;
-  bool _isAddingStop = false;
   PlaceModel? _selectedPlace;
 
   // ignore: unused_field
@@ -411,11 +410,11 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     final safeProvider = Provider.of<MapProvider>(context, listen: false);
 
     try {
-      if (_isAddingStop) {
+      if (safeProvider.isAddingStopMode) {
         safeProvider.addIntermediateStop(place);
+        safeProvider.setAddingStopMode(false);
         
         setState(() {
-          _isAddingStop = false;
           _searchCtrl.clear();
         });
 

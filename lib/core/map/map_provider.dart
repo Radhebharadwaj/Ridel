@@ -32,6 +32,23 @@ class MapProvider extends ChangeNotifier {
   // Multi-stop tracking
   List<PlaceModel> intermediateStops = [];
 
+  bool isAddingStopMode = false;
+  bool isDropPinMode = false;
+  
+  void setAddingStopMode(bool value) {
+    if (isAddingStopMode != value) {
+      isAddingStopMode = value;
+      notifyListeners();
+    }
+  }
+
+  void setDropPinMode(bool value) {
+    if (isDropPinMode != value) {
+      isDropPinMode = value;
+      notifyListeners();
+    }
+  }
+
   void addIntermediateStop(PlaceModel place) {
     if (intermediateStops.length < 3) { // Limit to 3 stops for premium UX
       intermediateStops.add(place);
@@ -870,12 +887,12 @@ class MapProvider extends ChangeNotifier {
         await controller!.animateCamera(
           CameraUpdate.newLatLngBounds(
             _calculateBounds(allRoutes.first),
-            bottom: 300, 
+            bottom: 380, 
             left: 50,
             right: 50,
-            top: 50,
+            top: 100,
           ),
-          duration: const Duration(milliseconds: 800),
+          duration: const Duration(milliseconds: 1000),
         );
       } catch (e) {
         debugPrint(
@@ -2043,9 +2060,9 @@ class MapProvider extends ChangeNotifier {
               left: 50,
               top: 100,
               right: 50,
-              bottom: 120,
+              bottom: 380,
             ),
-            duration: const Duration(milliseconds: 1500),
+            duration: const Duration(milliseconds: 1000),
           );
         } catch (e) {
           debugPrint(
@@ -2172,9 +2189,9 @@ class MapProvider extends ChangeNotifier {
               left: 50,
               top: 100,
               right: 50,
-              bottom: 120,
+              bottom: 380,
             ),
-            duration: const Duration(milliseconds: 1500),
+            duration: const Duration(milliseconds: 1000),
           );
         } catch (e) {
           debugPrint(
@@ -2348,7 +2365,7 @@ class MapProvider extends ChangeNotifier {
 
       await controller?.animateCamera(
         CameraUpdate.newLatLngZoom(target, 16.0),
-        duration: const Duration(milliseconds: 1200),
+        duration: const Duration(milliseconds: 1000),
       );
 
       // Clear existing pin if any
@@ -2502,9 +2519,9 @@ class MapProvider extends ChangeNotifier {
               right: 50,
               top: 100,
               bottom:
-                  120, // Reduced from 400 padding to account for the UI sheet
+                  380, // Prevent route from hiding behind the bottom sheet
             ),
-            duration: const Duration(milliseconds: 1200),
+            duration: const Duration(milliseconds: 1000),
           );
         } catch (e) {
           debugPrint(

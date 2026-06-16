@@ -140,4 +140,5 @@ flutter:
     - assets/images/splash.png
     - assets/images/nav_puck.png
     - assets/images/custom_pin.png
+    - assets/images/add_places.png
     - .env

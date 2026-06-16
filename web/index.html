@@ -4,7 +4,7 @@
 <head>
   <script>
     const originalWarn = console.warn;
-    console.warn = function(...args) {
+    console.warn = function (...args) {
       if (typeof args[0] === 'string' && args[0].includes('Could not set property') && args[0].includes('layer')) {
         return; // Silence MapLibre style parsing spam
       }
@@ -170,6 +170,8 @@
 </head>
 
 <body>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js" crossorigin="anonymous"
     referrerpolicy="no-referrer" integrity="PLACEHOLDER_CROPPER_JS"></script>
   <script src="flutter_bootstrap.js" async=""></script>

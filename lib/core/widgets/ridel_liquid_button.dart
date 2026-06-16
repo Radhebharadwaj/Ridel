@@ -50,7 +50,7 @@ class _RidelLiquidButtonState extends State<RidelLiquidButton> {
     if (widget.onTap != null) {
       AppHaptics.buttonClick();
       setState(() => _isPressed = false);
-      widget.onTap!();
+      Future.microtask(() => widget.onTap!());
     }
   }
 
@@ -153,7 +153,7 @@ class _RidelLiquidButtonState extends State<RidelLiquidButton> {
                 Positioned.fill(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(borderRadius),
-                    clipBehavior: Clip.antiAliasWithSaveLayer,
+                    clipBehavior: Clip.antiAlias,
                     child: BackdropFilter(
                       filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                       child: Container(

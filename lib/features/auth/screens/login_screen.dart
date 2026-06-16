@@ -167,7 +167,7 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _isLoading = false);
       _startCountdown();
       if (mounted) {
-        ToastService.showSuccess(context, 'OTP resent! Valid for 5 minutes.');
+        ToastService.showSuccess(context, 'New code sent! Please note: any previous codes are now invalid.');
         AppHaptics.mediumImpact();
       }
     } on AuthException catch (e) {
@@ -198,7 +198,7 @@ class _LoginScreenState extends State<LoginScreen> {
               result.errorMessage?.toLowerCase().contains('token') ?? false;
           if (isInvalid || isTokenError) {
             ToastService.showError(context,
-                'Invalid OTP entered. Please check your code and try again.');
+                'Invalid code entered. Please check your latest email and try again.');
           } else {
             ToastService.showError(
                 context, result.errorMessage ?? 'Invalid OTP');
@@ -210,14 +210,14 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
         ToastService.showError(context,
-            'Invalid OTP entered. Please check your code and try again.');
+            'Invalid code entered. Please check your latest email and try again.');
         AppHaptics.error();
       }
     } catch (_) {
       if (mounted) {
         setState(() => _isLoading = false);
         ToastService.showError(context,
-            'Invalid OTP entered. Please check your code and try again.');
+            'Invalid code entered. Please check your latest email and try again.');
         AppHaptics.error();
       }
     }
@@ -311,13 +311,19 @@ class _LoginScreenState extends State<LoginScreen> {
                           isPaused: _isLoading,
                         ),
                         const SizedBox(height: 32),
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 400),
-                          switchInCurve: Curves.easeOutCubic,
-                          switchOutCurve: Curves.easeInCubic,
-                          child: _mailSent
-                              ? _buildOtpView(isLightMode)
-                              : _buildEmailForm(isLightMode),
+                        SizedBox(
+                          height: 260,
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 400),
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeInCubic,
+                              child: _mailSent
+                                  ? _buildOtpView(isLightMode)
+                                  : _buildEmailForm(isLightMode),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 40),
                         TextButton(
@@ -338,6 +344,39 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         ),
+                        if (_showTurnstile) ...[
+                          const SizedBox(height: 24),
+                          CloudFlareTurnstile(
+                            siteKey: '0x4AAAAAADP3RBwUMZczFXPO',
+                            onTokenReceived: (token) {
+                              debugPrint('Turnstile: Token received successfully.');
+                              if (!_isRequestPending) {
+                                debugPrint('Turnstile: Ignored token because request timed out or was already processed.');
+                                return;
+                              }
+                              setState(() {
+                                _showTurnstile = false;
+                                _isRequestPending = false;
+                              });
+                              _handleEmailContinue(captchaToken: token);
+                            },
+                            onError: (err) {
+                              debugPrint('Turnstile: Error $err');
+                              setState(() {
+                                _isLoading = false;
+                                _showTurnstile = false;
+                                _isRequestPending = false;
+                              });
+                              ToastService.showError(context,
+                                  'Turnstile Error: Captcha failed to load.');
+                            },
+                            options: TurnstileOptions(
+                                theme: isLightMode
+                                    ? TurnstileTheme.light
+                                    : TurnstileTheme.dark,
+                                mode: TurnstileMode.managed),
+                          ),
+                        ],
 
                         if (isLoggedIn) ...[
                           const SizedBox(height: 24),
@@ -469,47 +508,7 @@ class _LoginScreenState extends State<LoginScreen> {
           },
         ),
       ),
-      if (_showTurnstile)
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: Opacity(
-            opacity: 0.0,
-            child: SizedBox(
-              width: 300,
-              height: 60,
-              child: CloudFlareTurnstile(
-                siteKey: '0x4AAAAAADP3RBwUMZczFXPO',
-                onTokenReceived: (token) {
-                  debugPrint('Turnstile: Token received successfully.');
-                  if (!_isRequestPending) {
-                    debugPrint('Turnstile: Ignored token because request timed out or was already processed.');
-                    return;
-                  }
-                  setState(() {
-                    _showTurnstile = false;
-                    _isRequestPending = false;
-                  });
-                  _handleEmailContinue(captchaToken: token);
-                },
-                onError: (err) {
-                  debugPrint('Turnstile: Error $err');
-                  setState(() {
-                    _isLoading = false;
-                    _showTurnstile = false;
-                    _isRequestPending = false;
-                  });
-                  ToastService.showError(context,
-                      'Turnstile Error: Captcha failed to load.');
-                },
-                options: TurnstileOptions(
-                    theme: isLightMode
-                        ? TurnstileTheme.light
-                        : TurnstileTheme.dark,
-                    mode: TurnstileMode.managed),
-              ),
-            ),
-          ),
-        ),
+
       ],
     ),
     );
@@ -551,14 +550,40 @@ class _LoginScreenState extends State<LoginScreen> {
         fontWeight: FontWeight.w600,
       ),
       decoration: BoxDecoration(
-        color: isLightMode ? Colors.grey.shade200 : const Color(0xFF1E1E1E),
+        color: isLightMode
+            ? Colors.black.withValues(alpha: 0.05)
+            : Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.transparent),
       ),
     );
 
-    final focusedPinTheme = defaultPinTheme.copyDecorationWith(
-      border: Border.all(color: const Color(0xFF00BFA5)),
-      borderRadius: BorderRadius.circular(12),
+    final focusedPinTheme = defaultPinTheme.copyWith(
+      width: 54,
+      height: 54,
+      decoration: defaultPinTheme.decoration?.copyWith(
+        border: Border.all(
+            color: const Color(0xFF00E5FF).withValues(alpha: 0.5), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF00E5FF).withValues(alpha: 0.2),
+            blurRadius: 8,
+            spreadRadius: 1,
+          )
+        ],
+      ),
+    );
+
+    final submittedPinTheme = defaultPinTheme.copyWith(
+      width: 50,
+      height: 50,
+      decoration: defaultPinTheme.decoration?.copyWith(
+        color: isLightMode
+            ? Colors.black.withValues(alpha: 0.08)
+            : Colors.white.withValues(alpha: 0.1),
+        border: Border.all(
+            color: const Color(0xFF00E5FF).withValues(alpha: 0.3), width: 1),
+      ),
     );
 
     return Column(
@@ -578,6 +603,7 @@ class _LoginScreenState extends State<LoginScreen> {
           length: 6,
           defaultPinTheme: defaultPinTheme,
           focusedPinTheme: focusedPinTheme,
+          submittedPinTheme: submittedPinTheme,
           showCursor: true,
           autofocus: true,
           onCompleted: (pin) => _verifyOtp(pin),
@@ -591,6 +617,7 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               TextButton(
                 onPressed: () {
+                  FocusScope.of(context).unfocus();
                   setState(() {
                     _mailSent = false;
                     _resendTimer = 0;

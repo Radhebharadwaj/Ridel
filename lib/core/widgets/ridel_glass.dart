@@ -250,5 +250,12 @@ class _GlassBorderPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _GlassBorderPainter oldDelegate) {
+    return oldDelegate.borderRadius != borderRadius ||
+        oldDelegate.isVerticalCard != isVerticalCard ||
+        oldDelegate.isLargeRect != isLargeRect ||
+        oldDelegate.isWeatherCompact != isWeatherCompact ||
+        oldDelegate.isVerticalPill != isVerticalPill ||
+        oldDelegate.isCircle != isCircle;
+  }
 }

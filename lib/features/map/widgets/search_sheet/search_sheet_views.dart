@@ -36,11 +36,10 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     final isEmpty = _searchCtrl.text.isEmpty;
     final isSelected = _selectedPlace != null;
 
-    final showTransportModes = isSelected && !_isAddingStop;
-    final showQuickActions =
-        !isSelected && (!isFocused && !provider.isEditingHistory) && isEmpty && !_isAddingStop;
+    final showTransportModes = isSelected && !provider.isAddingStopMode;
+    final showQuickActions = isEmpty && (!isSelected || provider.isAddingStopMode);
     final showRecentSearches =
-        (!isSelected || _isAddingStop) && (isFocused || provider.isEditingHistory) && isEmpty;
+        (!isSelected || provider.isAddingStopMode) && (isFocused || provider.isEditingHistory) && isEmpty;
 
     final isExpanded = progress > (_safeMinSize + 0.05);
     final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
@@ -93,6 +92,12 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                   onRequestSearch: (actionType) {
                     _selectedActionType = actionType;
                     _searchFocus.requestFocus();
+                  },
+                  onDropPinTapped: () {
+                    _searchFocus.unfocus();
+                    if (_sheetController.isAttached) {
+                      _safeAnimateSheet(0.1);
+                    }
                   },
                   onNavigateReady: (destination) {
                     AppHaptics.heavyImpact();
@@ -1010,13 +1015,19 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                           child: InkWell(
                             onTap: () {
                               AppHaptics.selectionClick();
+                              provider.setAddingStopMode(true);
                               setState(() {
-                                _isAddingStop = true;
                                 _searchCtrl.clear();
                                 _searchFocus.requestFocus();
                               });
                               if (_sheetController.isAttached) {
-                                _safeAnimateSheet(_safeMaxSize);
+                                unawaited(
+                                  _sheetController.animateTo(
+                                    0.55,
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeOutCubic,
+                                  ),
+                                );
                               }
                             },
                             borderRadius: BorderRadius.circular(8),
@@ -1355,7 +1366,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
 
   Widget _buildSheetContent(bool isDark, double progress,
       {bool isExpanded = false}) {
-    if (_searchCtrl.text.isNotEmpty && (_selectedPlace == null || _isAddingStop)) {
+    final provider = Provider.of<MapProvider>(context);
+    if (_searchCtrl.text.isNotEmpty && (_selectedPlace == null || provider.isAddingStopMode)) {
       return _buildSearchResultsView(isDark, isExpanded: isExpanded);
     }
     return _buildUnifiedExploreView(isDark, progress,

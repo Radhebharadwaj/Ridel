@@ -322,7 +322,29 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             ),
           ),
 
-
+          // 🚀 DROP PIN MODE CENTER OVERLAY
+          Positioned.fill(
+            child: Selector<MapProvider, bool>(
+              selector: (context, provider) => provider.isDropPinMode || provider.isAddingStopMode,
+              builder: (context, showPin, child) {
+                if (!showPin) return const SizedBox.shrink();
+                
+                return IgnorePointer(
+                  child: Center(
+                    child: FractionalTranslation(
+                      // Shift it up by half its height so the bottom tip points to the exact center
+                      translation: const Offset(0.0, -0.5), 
+                      child: Image.asset(
+                        'assets/images/add_places.png',
+                        height: 48,
+                        width: 48,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
 
           // 🚀 0.5: SKELETON MAP OVERLAY
           Positioned.fill(

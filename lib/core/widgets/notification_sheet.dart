@@ -297,206 +297,201 @@ class _ExpandableNotificationPillState
     }
 
     return GestureDetector(
-        onTap: () {
-          AppHaptics.selectionClick(); // Smooth tick on expand/collapse
-          setState(() => _isExpanded = !_isExpanded);
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOutCubic,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(30),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black
-                    .withValues(alpha: widget.isDark ? 0.2 : 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              )
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(30),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(
-                  sigmaX: 10, sigmaY: 10), // Glass blur intensity
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  // Dynamic color: Light mode gets light frost, Dark mode gets deep charcoal frost
-                  color: Theme.of(context).brightness == Brightness.light
-                      ? Colors.white.withValues(alpha: 0.6)
-                      : Colors.black.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(
-                    color: Colors.white
-                        .withValues(alpha: 0.2), // Subtle glass edge
-                    width: 0.5,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 🚀 TOP HEADER ROW (Always visible)
-                    LayoutBuilder(builder: (context, constraints) {
-                      return FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: constraints.maxWidth < 240 ? 240 : constraints.maxWidth,
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: widget.isDark
-                                      ? const Color(0xFF121419)
-                                      : iconColor.withValues(alpha: 0.1),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: widget.isDark
-                                        ? Colors.white.withValues(alpha: 0.03)
-                                        : Colors.transparent,
-                                  ),
-                                ),
-                                child: Icon(icon, color: iconColor, size: 20),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    if (!widget.notif.isRead) ...[
-                                      Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF00E5FF),
-                                          shape: BoxShape.circle,
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: const Color(0xFF00E5FF)
-                                                  .withValues(alpha: 0.5),
-                                              blurRadius: 6,
-                                            )
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                    ],
-                                    Expanded(
-                                      child: Text(
-                                        widget.notif.title,
-                                        style: GoogleFonts.inter(
-                                          color: Theme.of(context)
-                                                  .textTheme
-                                                  .bodyMedium
-                                                  ?.color ??
-                                              widget.textColor,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 14,
-                                        ),
-                                        maxLines: 1, // Hamesha 1 line pill me
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _formatTime(widget.notif.timestamp),
-                                style: GoogleFonts.inter(
-                                  color: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium
-                                          ?.color
-                                          ?.withValues(alpha: 0.6) ??
-                                      widget.subColor,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }),
-
-                        // 🚀 EXPANDED MESSAGE CONTENT
-                        AnimatedSize(
-                          duration: const Duration(milliseconds: 350),
-                          curve: Curves.easeOutCubic,
-                          alignment: Alignment.topCenter,
-                          child: _isExpanded
-                              ? Padding(
-                                  padding: const EdgeInsets.only(
-                                      top: 16.0, left: 4, right: 4),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          widget.notif.message,
-                                          style: GoogleFonts.inter(
-                                            color: Theme.of(context)
-                                                    .textTheme
-                                                    .bodyMedium
-                                                    ?.color
-                                                    ?.withValues(alpha: 0.8) ??
-                                                widget.subColor,
-                                            fontSize: 13,
-                                            height: 1.5,
-                                          ),
-                                        ),
-                                      ),
-                                      GestureDetector(
-                                        behavior: HitTestBehavior.opaque,
-                                        onTap: () {
-                                          AppHaptics
-                                              .lightImpact(); // Save krte hi light impact
-                                          NotificationService()
-                                              .toggleSaveNotification(
-                                                  widget.notif.id,
-                                                  widget.notif.isSaved);
-                                        },
-                                        child: Padding(
-                                          padding:
-                                              const EdgeInsets.only(left: 16.0),
-                                          child: AnimatedSwitcher(
-                                            duration: const Duration(
-                                                milliseconds: 200),
-                                            child: Icon(
-                                              widget.notif.isSaved
-                                                  ? Icons.bookmark_rounded
-                                                  : Icons
-                                                      .bookmark_border_rounded,
-                                              key: ValueKey(
-                                                  widget.notif.isSaved),
-                                              size: 24,
-                                              color: widget.notif.isSaved
-                                                  ? const Color(0xFF00E5FF)
-                                                  : widget.subColor
-                                                      .withValues(alpha: 0.5),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              : const SizedBox(
-                                  width: double.infinity, height: 0),
-                        ),
-                      ],
-                    ),
-                  ),
+      onTap: () {
+        AppHaptics.selectionClick(); // Smooth tick on expand/collapse
+        setState(() => _isExpanded = !_isExpanded);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: widget.isDark ? 0.2 : 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(30),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(
+                sigmaX: 10, sigmaY: 10), // Glass blur intensity
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                // Dynamic color: Light mode gets light frost, Dark mode gets deep charcoal frost
+                color: Theme.of(context).brightness == Brightness.light
+                    ? Colors.white.withValues(alpha: 0.6)
+                    : Colors.black.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(
+                  color:
+                      Colors.white.withValues(alpha: 0.2), // Subtle glass edge
+                  width: 0.5,
                 ),
               ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 🚀 TOP HEADER ROW (Always visible)
+                  LayoutBuilder(builder: (context, constraints) {
+                    return FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: constraints.maxWidth < 240
+                              ? 240
+                              : constraints.maxWidth,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: widget.isDark
+                                    ? const Color(0xFF121419)
+                                    : iconColor.withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: widget.isDark
+                                      ? Colors.white.withValues(alpha: 0.03)
+                                      : Colors.transparent,
+                                ),
+                              ),
+                              child: Icon(icon, color: iconColor, size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  if (!widget.notif.isRead) ...[
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF00E5FF),
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFF00E5FF)
+                                                .withValues(alpha: 0.5),
+                                            blurRadius: 6,
+                                          )
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Expanded(
+                                    child: Text(
+                                      widget.notif.title,
+                                      style: GoogleFonts.inter(
+                                        color: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.color ??
+                                            widget.textColor,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                      ),
+                                      maxLines: 1, // Hamesha 1 line pill me
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _formatTime(widget.notif.timestamp),
+                              style: GoogleFonts.inter(
+                                color: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.color
+                                        ?.withValues(alpha: 0.6) ??
+                                    widget.subColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+
+                  // 🚀 EXPANDED MESSAGE CONTENT
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    child: _isExpanded
+                        ? Padding(
+                            padding: const EdgeInsets.only(
+                                top: 16.0, left: 4, right: 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    widget.notif.message,
+                                    style: GoogleFonts.inter(
+                                      color: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.color
+                                              ?.withValues(alpha: 0.8) ??
+                                          widget.subColor,
+                                      fontSize: 13,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ),
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () {
+                                    AppHaptics
+                                        .lightImpact(); // Save krte hi light impact
+                                    NotificationService()
+                                        .toggleSaveNotification(widget.notif.id,
+                                            widget.notif.isSaved);
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(left: 16.0),
+                                    child: AnimatedSwitcher(
+                                      duration:
+                                          const Duration(milliseconds: 200),
+                                      child: Icon(
+                                        widget.notif.isSaved
+                                            ? Icons.bookmark_rounded
+                                            : Icons.bookmark_border_rounded,
+                                        key: ValueKey(widget.notif.isSaved),
+                                        size: 24,
+                                        color: widget.notif.isSaved
+                                            ? const Color(0xFF00E5FF)
+                                            : widget.subColor
+                                                .withValues(alpha: 0.5),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : const SizedBox(width: double.infinity, height: 0),
+                  ),
+                ],
+              ),
             ),
-          );
+          ),
+        ),
+      ),
+    );
   }
 
   String _formatTime(DateTime time) {

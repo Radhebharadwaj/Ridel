@@ -310,35 +310,37 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
                 height: 52,
                 child: ElevatedButton(
                   onPressed: confirmDelete && selectedReason != null
-                      ? () async {
-                          AppHaptics.heavyImpact();
-                          try {
-                            await Supabase.instance.client.rpc(
-                              'request_account_deletion',
-                              params: {
-                                'reason': selectedReason,
-                                'feedback': feedbackCtrl.text.trim(),
-                              },
-                            );
+                      ? () {
+                          Future.microtask(() async {
+                            AppHaptics.heavyImpact();
+                            try {
+                              await Supabase.instance.client.rpc(
+                                'request_account_deletion',
+                                params: {
+                                  'reason': selectedReason,
+                                  'feedback': feedbackCtrl.text.trim(),
+                                },
+                              );
 
-                            await Supabase.instance.client.auth.signOut();
+                              await Supabase.instance.client.auth.signOut();
 
-                            if (context.mounted) {
-                              Navigator.pop(context);
-                              ToastService.showSuccess(context,
-                                  "Account deletion scheduled. We're sorry to see you go! 💔");
+                              if (context.mounted) {
+                                Navigator.pop(context);
+                                ToastService.showSuccess(context,
+                                    "Account deletion scheduled. We're sorry to see you go! 💔");
 
-                              Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (_) => const LoginScreen()));
+                                Navigator.pushReplacement(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => const LoginScreen()));
+                              }
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              debugPrint("Deletion Error: $e");
+                              ToastService.showError(context,
+                                  "Error requesting deletion. Check your connection.");
                             }
-                          } catch (e) {
-                            if (!context.mounted) return;
-                            debugPrint("Deletion Error: $e");
-                            ToastService.showError(context,
-                                "Error requesting deletion. Check your connection.");
-                          }
+                          });
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
@@ -481,7 +483,7 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
                       fontSize: 24,
                       fontWeight: FontWeight.bold)),
               TextButton(
-                  onPressed: _openEditProfile,
+                  onPressed: () => Future.microtask(_openEditProfile),
                   child: Text(_isGuest ? 'Log in to Ridel' : 'Edit Profile',
                       style: const TextStyle(
                           color: Colors.cyan, fontWeight: FontWeight.bold))),
@@ -696,7 +698,7 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
                         style: TextStyle(color: Colors.redAccent)),
                     leading: const Icon(Icons.delete_outline,
                         color: Colors.redAccent),
-                    onTap: _showDeleteAccountSheet,
+                    onTap: () => Future.microtask(_showDeleteAccountSheet),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -710,14 +712,16 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
                           color: _isGuest ? Colors.cyan : Colors.red)),
                   leading: Icon(_isGuest ? Icons.login : Icons.logout,
                       color: _isGuest ? Colors.cyan : Colors.red),
-                  onTap: () async {
-                    AppHaptics.warning();
-                    if (!_isGuest) {
-                      await Supabase.instance.client.auth.signOut();
-                    }
-                    if (!context.mounted) return;
-                    Navigator.pushReplacement(context,
-                        MaterialPageRoute(builder: (_) => const LoginScreen()));
+                  onTap: () {
+                    Future.microtask(() async {
+                      AppHaptics.warning();
+                      if (!_isGuest) {
+                        await Supabase.instance.client.auth.signOut();
+                      }
+                      if (!context.mounted) return;
+                      Navigator.pushReplacement(context,
+                          MaterialPageRoute(builder: (_) => const LoginScreen()));
+                    });
                   },
                 ),
               ),
@@ -767,7 +771,7 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
                         color: isLink ? Colors.cyan : subColor, fontSize: 14)),
                 if (isLink) Icon(Icons.chevron_right, color: subColor, size: 16)
               ]),
-              onTap: onTap != null ? () => onTap(ctx) : null));
+              onTap: onTap != null ? () => Future.microtask(() => onTap(ctx)) : null));
   Widget _tile(IconData icon, String title, String sub, Color iconColor,
           Color textColor, Color subColor, VoidCallback onTap) =>
       ListTile(
@@ -777,5 +781,5 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
             Text(sub, style: TextStyle(color: subColor)),
             Icon(Icons.chevron_right, color: subColor, size: 16)
           ]),
-          onTap: onTap);
+          onTap: () => Future.microtask(onTap));
 }
