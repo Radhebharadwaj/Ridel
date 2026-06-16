@@ -34,6 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
   late final StreamSubscription<AuthState> _authSubscription;
 
   bool _showTurnstile = false;
+  bool _isRequestPending = false;
   int _resendTimer = 0;
   Timer? _countdownTimer;
   bool _mailSent = false;
@@ -67,7 +68,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _startCountdown() {
-    setState(() => _resendTimer = 60);
+    setState(() => _resendTimer = 300);
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         if (_resendTimer == 0) {
@@ -79,25 +80,18 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  bool _validateEmailLocally() {
-    final email = _emailController.text.trim();
-    final emailRegex = RegExp(r'^[a-zA-Z0-9.]+@[a-zA-Z0-9]+\.[a-zA-Z]+');
-
-    if (email.isEmpty || email.length > 254 || !emailRegex.hasMatch(email)) {
-      ToastService.showError(context, 'Please enter a valid email address');
-      HapticFeedback.heavyImpact();
-      return false;
-    }
-    return true;
-  }
-
   void _onContinuePressed() {
+    debugPrint('Auth Flow: _onContinuePressed triggered');
+    FocusManager.instance.primaryFocus?.unfocus();
     if (_isLoading) return;
-    
-    if (!_validateEmailLocally()) {
+
+    final email = _emailController.text.trim();
+    if (email.isEmpty || AppValidators.validateEmail(email) != null) {
+      ToastService.showError(context, 'Please enter a valid email address');
+      AppHaptics.error();
       return;
     }
-    
+
     if (_resendTimer > 0) {
       ToastService.showError(
           context, "Please wait for the timer to resend the code.");
@@ -106,13 +100,30 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _isLoading = true;
       _showTurnstile = true;
+      _isRequestPending = true;
+    });
+
+    Future.delayed(const Duration(seconds: 20), () {
+      if (mounted && _isRequestPending) {
+        debugPrint('Turnstile: Timeout after 20 seconds. Aborting request.');
+        debugPrint('Turnstile Timed Out');
+        setState(() {
+          _isLoading = false;
+          _showTurnstile = false;
+          _isRequestPending = false;
+        });
+        ToastService.showError(
+            context, 'Security check timed out. Please try again.');
+      }
     });
   }
 
   Future<void> _handleEmailContinue({String? captchaToken}) async {
+    debugPrint('Auth Flow: _handleEmailContinue triggered with token: $captchaToken');
     try {
       await _authService.sendOtp(
         _emailController.text.trim(),
+        captchaToken: captchaToken,
       );
       setState(() {
         _isLoading = false;
@@ -120,8 +131,16 @@ class _LoginScreenState extends State<LoginScreen> {
       });
       _startCountdown();
       if (mounted) {
-        ToastService.showSuccess(context, 'OTP sent to your email!');
+        ToastService.showSuccess(context, 'OTP sent! Valid for 5 minutes.');
       }
+    } on AuthException catch (e) {
+      debugPrint('AuthException in _handleEmailContinue: ${e.message}');
+      setState(() {
+        _isLoading = false;
+        _showTurnstile = false;
+      });
+      if (mounted) ToastService.showError(context, e.message);
+      AppHaptics.error();
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -135,7 +154,10 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _resendOtp() async {
     if (_isLoading) return;
 
-    if (!_validateEmailLocally()) {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || AppValidators.validateEmail(email) != null) {
+      ToastService.showError(context, 'Please enter a valid email address');
+      AppHaptics.error();
       return;
     }
 
@@ -145,9 +167,14 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _isLoading = false);
       _startCountdown();
       if (mounted) {
-        ToastService.showSuccess(context, 'OTP resent to your email!');
+        ToastService.showSuccess(context, 'OTP resent! Valid for 5 minutes.');
         AppHaptics.mediumImpact();
       }
+    } on AuthException catch (e) {
+      debugPrint('AuthException in _resendOtp: ${e.message}');
+      setState(() => _isLoading = false);
+      if (mounted) ToastService.showError(context, e.message);
+      AppHaptics.error();
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) ToastService.showError(context, e.toString());
@@ -157,13 +184,40 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _verifyOtp(String otp) async {
     setState(() => _isLoading = true);
-    final result = await _authService.verifyOtp(_emailController.text.trim(), otp);
-    if (mounted) {
-      setState(() => _isLoading = false);
-      if (result.isSuccess) {
-        _goToHome();
-      } else {
-        ToastService.showError(context, result.errorMessage ?? 'Invalid OTP');
+    try {
+      final result =
+          await _authService.verifyOtp(_emailController.text.trim(), otp);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        if (result.isSuccess) {
+          _goToHome();
+        } else {
+          final isInvalid =
+              result.errorMessage?.toLowerCase().contains('invalid') ?? false;
+          final isTokenError =
+              result.errorMessage?.toLowerCase().contains('token') ?? false;
+          if (isInvalid || isTokenError) {
+            ToastService.showError(context,
+                'Invalid OTP entered. Please check your code and try again.');
+          } else {
+            ToastService.showError(
+                context, result.errorMessage ?? 'Invalid OTP');
+          }
+          AppHaptics.error();
+        }
+      }
+    } on AuthException catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ToastService.showError(context,
+            'Invalid OTP entered. Please check your code and try again.');
+        AppHaptics.error();
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ToastService.showError(context,
+            'Invalid OTP entered. Please check your code and try again.');
         AppHaptics.error();
       }
     }
@@ -223,9 +277,11 @@ class _LoginScreenState extends State<LoginScreen> {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
 
     return Scaffold(
-      backgroundColor: isLightMode ? Colors.white : const Color(0xFF000000),
-      body: SafeArea(
-        child: LayoutBuilder(
+      backgroundColor: isLightMode ? Colors.white : const Color(0xFF0B0E17),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -255,7 +311,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           isPaused: _isLoading,
                         ),
                         const SizedBox(height: 32),
-                        
                         AnimatedSwitcher(
                           duration: const Duration(milliseconds: 400),
                           switchInCurve: Curves.easeOutCubic,
@@ -264,7 +319,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               ? _buildOtpView(isLightMode)
                               : _buildEmailForm(isLightMode),
                         ),
-
                         const SizedBox(height: 40),
                         TextButton(
                           onPressed: _isLoading ? null : _handleSkip,
@@ -284,6 +338,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         ),
+
                         if (isLoggedIn) ...[
                           const SizedBox(height: 24),
                           const Align(
@@ -414,6 +469,49 @@ class _LoginScreenState extends State<LoginScreen> {
           },
         ),
       ),
+      if (_showTurnstile)
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Opacity(
+            opacity: 0.0,
+            child: SizedBox(
+              width: 300,
+              height: 60,
+              child: CloudFlareTurnstile(
+                siteKey: '0x4AAAAAADP3RBwUMZczFXPO',
+                onTokenReceived: (token) {
+                  debugPrint('Turnstile: Token received successfully.');
+                  if (!_isRequestPending) {
+                    debugPrint('Turnstile: Ignored token because request timed out or was already processed.');
+                    return;
+                  }
+                  setState(() {
+                    _showTurnstile = false;
+                    _isRequestPending = false;
+                  });
+                  _handleEmailContinue(captchaToken: token);
+                },
+                onError: (err) {
+                  debugPrint('Turnstile: Error $err');
+                  setState(() {
+                    _isLoading = false;
+                    _showTurnstile = false;
+                    _isRequestPending = false;
+                  });
+                  ToastService.showError(context,
+                      'Turnstile Error: Captcha failed to load.');
+                },
+                options: TurnstileOptions(
+                    theme: isLightMode
+                        ? TurnstileTheme.light
+                        : TurnstileTheme.dark,
+                    mode: TurnstileMode.managed),
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
     );
   }
 
@@ -423,34 +521,20 @@ class _LoginScreenState extends State<LoginScreen> {
       children: [
         _buildEmailField(isLightMode),
         const SizedBox(height: 16),
-        if (_showTurnstile)
-          CloudFlareTurnstile(
-            siteKey: '0x4AAAAAADP3RBwUMZczFXPO',
-            onTokenReceived: (token) {
-              setState(() => _showTurnstile = false);
-              _handleEmailContinue(captchaToken: token);
-            },
-            onError: (err) {
-              setState(() {
-                _isLoading = false;
-                _showTurnstile = false;
-              });
-              ToastService.showError(
-                  context, 'Security check failed. Try again.');
-            },
-            options: TurnstileOptions(
-                theme: isLightMode
-                    ? TurnstileTheme.light
-                    : TurnstileTheme.dark,
-                mode: TurnstileMode.invisible),
-          ),
-        _buildContinueButton(isLightMode),
-        const SizedBox(height: 32),
+        _buildContinueButton(isLightMode,
+            onTap: _isLoading ? null : _onContinuePressed),
+        const SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: _buildGoogleButton(isLightMode)),
+            Expanded(
+              child: _buildGoogleButton(isLightMode,
+                  onTap: _isLoading ? null : _handleGoogleLogin),
+            ),
             const SizedBox(width: 16),
-            Expanded(child: _buildAppleButton(isLightMode)),
+            Expanded(
+              child: _buildAppleButton(isLightMode,
+                  onTap: _isLoading ? null : _handleAppleLogin),
+            ),
           ],
         ),
       ],
@@ -521,7 +605,9 @@ class _LoginScreenState extends State<LoginScreen> {
               TextButton(
                 onPressed: _resendTimer == 0 ? _resendOtp : null,
                 child: Text(
-                  _resendTimer == 0 ? 'Resend Code' : 'Resend in ${_resendTimer}s',
+                  _resendTimer == 0
+                      ? 'Resend Code'
+                      : 'Resend in ${(_resendTimer ~/ 60).toString().padLeft(2, '0')}:${(_resendTimer % 60).toString().padLeft(2, '0')}',
                   style: TextStyle(
                     color: _resendTimer == 0
                         ? const Color(0xFF00BFA5)
@@ -540,7 +626,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (isLightMode) {
       return Container(
         width: double.infinity,
-        constraints: const BoxConstraints(minHeight: 56),
+        height: 56,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(100),
@@ -559,7 +645,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return RidelLiquidButton(
       width: double.infinity,
-      height: MediaQuery.of(context).size.height * 0.07,
+      height: 56,
       enableStretch: false,
       glassTint: const Color(0x1AFFFFFF),
       onTap: null,
@@ -617,77 +703,106 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildContinueButton(bool isLightMode) {
+  Widget _buildContinueButton(bool isLightMode, {VoidCallback? onTap}) {
     if (isLightMode) {
-      return GestureDetector(
-        onTap: _isLoading ? null : _onContinuePressed,
-        child: Container(
-          width: double.infinity,
-          constraints: const BoxConstraints(minHeight: 56),
-          decoration: BoxDecoration(
-            color: Colors.black87,
-            borderRadius: BorderRadius.circular(100),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              )
-            ],
-          ),
-          child: Center(
-            child: _isLoading
-                ? const SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: Colors.white),
-                  )
-                : const Text(
-                    'Continue',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
+      return SizedBox(
+        height: 56,
+        width: double.infinity,
+        child: _ScaleButton(
+          onTap: onTap,
+          child: Container(
+            width: double.infinity,
+            height: 56,
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.circular(100),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                )
+              ],
+            ),
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                switchInCurve: Curves.easeInOutCubic,
+                switchOutCurve: Curves.easeInOutCubic,
+                child: _isLoading
+                    ? const SizedBox(
+                        key: ValueKey('loading'),
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2.5, color: Colors.white),
+                      )
+                    : const Text(
+                        'Continue',
+                        key: ValueKey('text'),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+              ),
+            ),
           ),
         ),
       );
     }
 
-    return RidelLiquidButton(
+    return SizedBox(
+      height: 56,
       width: double.infinity,
-      height: MediaQuery.of(context).size.height * 0.07,
-      enableStretch: true,
-      glassTint: neonColor.withValues(alpha: 0.15),
-      onTap: _isLoading ? null : _onContinuePressed,
-      child: _isLoading
-          ? const SizedBox(
-              height: 24,
-              width: 24,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2.5, color: Colors.white),
-            )
-          : const Text(
-              'Continue',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.5,
+      child: _ScaleButton(
+        onTap: onTap,
+        child: IgnorePointer(
+          child: RidelLiquidButton(
+            width: double.infinity,
+            height: 56,
+            enableStretch: false,
+            glassTint: neonColor.withValues(alpha: 0.15),
+            onTap: null,
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                switchInCurve: Curves.easeInOutCubic,
+                switchOutCurve: Curves.easeInOutCubic,
+                child: _isLoading
+                    ? const SizedBox(
+                        key: ValueKey('loading'),
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2.5, color: Colors.white),
+                      )
+                    : const Text(
+                        'Continue',
+                        key: ValueKey('text'),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
               ),
             ),
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildGoogleButton(bool isLightMode) {
+  Widget _buildGoogleButton(bool isLightMode, {VoidCallback? onTap}) {
     if (isLightMode) {
-      return GestureDetector(
-        onTap: _isLoading ? null : _handleGoogleLogin,
+      return _ScaleButton(
+        onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 56),
+          height: 56,
           decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(100),
@@ -720,38 +835,43 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     }
 
-    return RidelLiquidButton(
-      width: double.infinity,
-      height: MediaQuery.of(context).size.height * 0.07,
-      enableStretch: true,
-      glassTint: const Color(0x1AFFFFFF),
-      onTap: _isLoading ? null : _handleGoogleLogin,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SvgPicture.string(GoogleLoginButton.googleSvgCode,
-              height: 20, width: 20),
-          const SizedBox(width: 10),
-          const Flexible(
-            child: Text('Google',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600)),
+    return _ScaleButton(
+      onTap: onTap,
+      child: IgnorePointer(
+        child: RidelLiquidButton(
+          width: double.infinity,
+          height: 56,
+          enableStretch: false,
+          glassTint: const Color(0x1AFFFFFF),
+          onTap: null,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SvgPicture.string(GoogleLoginButton.googleSvgCode,
+                  height: 20, width: 20),
+              const SizedBox(width: 10),
+              const Flexible(
+                child: Text('Google',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildAppleButton(bool isLightMode) {
+  Widget _buildAppleButton(bool isLightMode, {VoidCallback? onTap}) {
     if (isLightMode) {
-      return GestureDetector(
-        onTap: _isLoading ? null : _handleAppleLogin,
+      return _ScaleButton(
+        onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 56),
+          height: 56,
           decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(100),
@@ -783,27 +903,85 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     }
 
-    return RidelLiquidButton(
-      width: double.infinity,
-      height: MediaQuery.of(context).size.height * 0.07,
-      enableStretch: true,
-      glassTint: const Color(0x1AFFFFFF),
-      onTap: _isLoading ? null : _handleAppleLogin,
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.apple, color: Colors.white, size: 24),
-          SizedBox(width: 8),
-          Flexible(
-            child: Text('Apple',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600)),
+    return _ScaleButton(
+      onTap: onTap,
+      child: const IgnorePointer(
+        child: RidelLiquidButton(
+          width: double.infinity,
+          height: 56,
+          enableStretch: false,
+          glassTint: Color(0x1AFFFFFF),
+          onTap: null,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.apple, color: Colors.white, size: 24),
+              SizedBox(width: 8),
+              Flexible(
+                child: Text('Apple',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ],
           ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScaleButton extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+
+  const _ScaleButton({required this.child, this.onTap});
+
+  @override
+  State<_ScaleButton> createState() => _ScaleButtonState();
+}
+
+class _ScaleButtonState extends State<_ScaleButton> {
+  bool _isPressed = false;
+
+  void _handleTapDown(TapDownDetails details) {
+    if (widget.onTap == null) return;
+    AppHaptics.lightImpact();
+    setState(() => _isPressed = true);
+  }
+
+  void _handleTapUp(TapUpDetails details) {
+    if (widget.onTap == null) return;
+    setState(() => _isPressed = false);
+  }
+
+  void _handleTapCancel() {
+    if (widget.onTap == null) return;
+    setState(() => _isPressed = false);
+  }
+
+  void _handleTap() {
+    if (widget.onTap == null) return;
+    AppHaptics.mediumImpact();
+    widget.onTap!();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: _handleTapDown,
+      onTapUp: _handleTapUp,
+      onTapCancel: _handleTapCancel,
+      onTap: _handleTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedScale(
+        scale: _isPressed ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeInOut,
+        child: widget.child,
       ),
     );
   }

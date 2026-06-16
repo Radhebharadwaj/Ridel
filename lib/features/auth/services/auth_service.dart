@@ -46,24 +46,37 @@ class AuthService {
   // ==========================================
 
   Future<void> sendSecureResetLink(String email, {String? captchaToken}) async {
+    debugPrint('Auth Flow: Entered sendSecureResetLink for email: $email');
     try {
       await _supabase.auth.resetPasswordForEmail(
         email,
         redirectTo: kIsWeb ? null : 'ridel://reset-password',
         captchaToken: captchaToken,
       );
+      debugPrint('Supabase Auth: Reset link sent successfully.');
+    } on AuthException catch (e) {
+      debugPrint('Supabase Auth Error: ${e.message}');
+      rethrow;
     } catch (e) {
+      debugPrint('Supabase Auth Unexpected Error: $e');
       throw _translatePremiumError(e);
     }
   }
 
-  Future<void> sendOtp(String email) async {
+  Future<void> sendOtp(String email, {String? captchaToken}) async {
+    debugPrint('Auth Flow: Entered sendOtp for email: $email');
     try {
       await _supabase.auth.signInWithOtp(
         email: email,
         shouldCreateUser: false,
+        captchaToken: captchaToken,
       );
+      debugPrint('Supabase Auth: OTP email sent successfully.');
+    } on AuthException catch (e) {
+      debugPrint('Supabase Auth Error: ${e.message}');
+      rethrow;
     } catch (e) {
+      debugPrint('Supabase Auth Unexpected Error: $e');
       throw _translatePremiumError(e);
     }
   }

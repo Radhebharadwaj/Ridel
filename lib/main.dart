@@ -102,6 +102,12 @@ void main() {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
+    try {
+      await dotenv.load(fileName: ".env");
+    } catch (e) {
+      debugPrint("❌ Env Error: $e");
+    }
+
     FlutterError.onError = (FlutterErrorDetails details) {
       FlutterError.presentError(details);
       debugPrint('⚠️ FLUTTER UI ERROR: ${details.exception}');
@@ -113,60 +119,50 @@ void main() {
     };
 
     ThemeService.init();
-    MetroService().initialize(); // Sync init early
+    await AppHaptics.init();
 
-    // 1. Parallel Independent Initializations
-    await Future.wait([
-      AppHaptics.init(),
-      dotenv.load(fileName: ".env").catchError((e) {
-        debugPrint("❌ Env Error: $e");
-        return null;
-      }),
-    ]);
+    // 1. Core Backend Initialization
+    try {
+      await Supabase.initialize(
+        url: AppConfig.supabaseUrl,
+        anonKey: AppConfig.supabaseAnonKey,
+      );
 
-    // 2. Parallel Dependent Initializations
-    await Future.wait([
-      () async {
-        try {
-          if (kIsWeb) {
-            await Firebase.initializeApp(
-              options: const FirebaseOptions(
-                apiKey: "AIzaSyCylXea35MHpJ4SlcODDAgB5wj6h5SgnzY",
-                authDomain: "pixra-ridel.firebaseapp.com",
-                projectId: "pixra-ridel",
-                storageBucket: "pixra-ridel.firebasestorage.app",
-                messagingSenderId: "20390923828",
-                appId: "1:20390923828:web:8206196e9cfd1b16790461",
-                measurementId: "G-NK274DS7S2",
-              ),
-            );
-          } else {
-            await Firebase.initializeApp();
-            FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-          }
-          debugPrint("🔥 Firebase Ready!");
-        } catch (e) {
-          debugPrint("❌ Firebase Error: $e");
-        }
-        await NotificationService().init();
-      }(),
-      () async {
-        try {
-          await Supabase.initialize(
-            url: AppConfig.supabaseUrl,
-            anonKey: AppConfig.supabaseAnonKey,
-          );
+      final supabaseClient = Supabase.instance.client;
+      if (supabaseClient.auth.currentSession != null) {
+        DatabaseHelper.instance.initBackgroundSync();
+        AuthService().setupAndSaveDeviceToken();
+      }
+    } catch (e) {
+      debugPrint("❌ Supabase Error: $e");
+    }
 
-          final supabaseClient = Supabase.instance.client;
-          if (supabaseClient.auth.currentSession != null) {
-            DatabaseHelper.instance.initBackgroundSync();
-            AuthService().setupAndSaveDeviceToken();
-          }
-        } catch (e) {
-          debugPrint("❌ Supabase Error: $e");
-        }
-      }(),
-    ]);
+    // 2. Services that depend on Supabase being initialized
+    MetroService().initialize();
+
+    // 3. Firebase & Notifications
+    try {
+      if (kIsWeb) {
+        await Firebase.initializeApp(
+          options: const FirebaseOptions(
+            apiKey: "AIzaSyCylXea35MHpJ4SlcODDAgB5wj6h5SgnzY",
+            authDomain: "pixra-ridel.firebaseapp.com",
+            projectId: "pixra-ridel",
+            storageBucket: "pixra-ridel.firebasestorage.app",
+            messagingSenderId: "20390923828",
+            appId: "1:20390923828:web:8206196e9cfd1b16790461",
+            measurementId: "G-NK274DS7S2",
+          ),
+        );
+      } else {
+        await Firebase.initializeApp();
+        FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      }
+      debugPrint("🔥 Firebase Ready!");
+    } catch (e) {
+      debugPrint("❌ Firebase Error: $e");
+    }
+    await NotificationService().init();
 
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(

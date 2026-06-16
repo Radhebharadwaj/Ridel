@@ -142,13 +142,6 @@ class ToastService {
     // 🚨 CRITICAL FIX: Fallback to Overlay.of(requestContext) if navigatorKey fails
     final overlayState = navigatorKey.currentState?.overlay ?? Overlay.of(requestContext);
 
-    if (overlayState == null) {
-      debugPrint("⚠️ [ToastService] FATAL: Both NavigatorKey and Context Overlays are null!");
-      _isShowing = false;
-      _processQueue();
-      return;
-    }
-
     switch (type) {
       case ToastType.error:
         AppHaptics.warning();
@@ -184,6 +177,17 @@ class ToastService {
       ),
     );
     overlayState.insert(_overlayEntry!);
+
+    // 🚨 SAFETY FALLBACK: Guarantee toast queue unblocks even if animation stalls
+    Future.delayed(const Duration(seconds: 8), () {
+      if (_currentShowingMessage == message && _isShowing) {
+        _overlayEntry?.remove();
+        _overlayEntry = null;
+        _isShowing = false;
+        _currentShowingMessage = null;
+        _processQueue();
+      }
+    });
   }
 }
 
@@ -252,7 +256,10 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
   }
 
   void _dismiss() {
-    if (!mounted) return;
+    if (!mounted) {
+      widget.onDismiss();
+      return;
+    }
     setState(() {
       _isEntering = true;
       _scale = 0.85; // 🌟 Shrink only when leaving or tapped
@@ -297,11 +304,18 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    final navProvider = context.watch<AppNavigationProvider>();
-    final isMapScreen = navProvider.currentIndex == 1;
+    AppNavigationProvider? navProvider;
+    try {
+      navProvider = context.read<AppNavigationProvider>();
+    } catch (_) {}
+    
+    final isMapScreen = navProvider?.currentIndex == 1;
     final bool shouldHide = isMapScreen && widget.type != ToastType.error && widget.type != ToastType.warning;
 
-    double targetTop = MediaQuery.of(context).padding.top + 16;
+    double targetTop = 16.0;
+    try {
+      targetTop = MediaQuery.of(context).padding.top + 16;
+    } catch (_) {}
 
     if (_isEntering) {
       targetTop = -100;
@@ -331,12 +345,12 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
                 onTap: () {
                   if (widget.isDynamicTransportToast && widget.onTapUpdateOrigin != null) {
                     final transportMode = globalTransportMode.value;
-                    final provider = context.read<AppNavigationProvider>();
+                    final provider = navProvider;
                     String? name;
                     if (transportMode == 0) {
-                      name = provider.nearestMetroStation?['stop_name'];
+                      name = provider?.nearestMetroStation?['stop_name'];
                     } else {
-                      name = provider.nearestBusStop?['stop_name'];
+                      name = provider?.nearestBusStop?['stop_name'];
                     }
                     if (name != null) {
                       widget.onTapUpdateOrigin!(_toTitleCase(name));
@@ -409,7 +423,7 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
                           if (widget.isDynamicTransportToast) {
                             if (transportMode == 0) {
                               dynamicTitle = "Nearest Station";
-                              final stopName = navProvider.nearestMetroStation?['stop_name'];
+                              final stopName = navProvider?.nearestMetroStation?['stop_name'];
                               if (stopName != null) {
                                 dynamicMessage = _toTitleCase(stopName);
                               } else {
@@ -417,7 +431,7 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
                               }
                             } else {
                               dynamicTitle = "Nearest Stop";
-                              final stopName = navProvider.nearestBusStop?['stop_name'];
+                              final stopName = navProvider?.nearestBusStop?['stop_name'];
                               if (stopName != null) {
                                 dynamicMessage = _toTitleCase(stopName);
                               } else {
