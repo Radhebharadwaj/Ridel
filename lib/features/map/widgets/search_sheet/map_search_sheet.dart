@@ -379,6 +379,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
     // 2. Clear the UI and Map
     provider.cancelAndClearRoute();
+    provider.setDropPinMode(false); // 🚨 CRITICAL FIX
+    provider.setAddingStopMode(false); // 🚨 CRITICAL FIX
 
     // 3. Show the Undo Toast
     ToastService.showActionToast(context,

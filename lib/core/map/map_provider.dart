@@ -1065,7 +1065,7 @@ class MapProvider extends ChangeNotifier {
     await engine.layers?.removeSearchPin();
 
     // 8. ROAD SNAP & BULLETPROOF Z-INDEX FOR PIN
-    if (targetDestination != null && controller != null) {
+    if (targetDestination != null && controller != null && !isDropPinMode) {
       try { await controller!.removeLayer('ultimate-pin-layer'); } catch (_) {}
       try { await controller!.removeSource('ultimate-pin-source'); } catch (_) {}
 
@@ -1779,7 +1779,7 @@ class MapProvider extends ChangeNotifier {
       _droppedPinSymbol = null;
     }
 
-    if (controller != null) {
+      if (controller != null && !isDropPinMode) {
       // 1. Drop the pin tilted slightly right
       _droppedPinSymbol = await controller!.addSymbol(
         SymbolOptions(
@@ -2374,7 +2374,7 @@ class MapProvider extends ChangeNotifier {
         _droppedPinSymbol = null;
       }
 
-      if (controller != null) {
+        if (controller != null && !isDropPinMode) {
         // 1. Drop the pin tilted slightly right
         _droppedPinSymbol = await controller!.addSymbol(
           SymbolOptions(

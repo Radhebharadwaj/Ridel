@@ -1023,7 +1023,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                               if (_sheetController.isAttached) {
                                 unawaited(
                                   _sheetController.animateTo(
-                                    0.55,
+                                    0.38,
                                     duration: const Duration(milliseconds: 300),
                                     curve: Curves.easeOutCubic,
                                   ),
