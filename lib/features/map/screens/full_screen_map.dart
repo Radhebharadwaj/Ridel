@@ -19,7 +19,8 @@ import 'package:ridel/features/map/widgets/map_theme_selector.dart';
 import 'package:ridel/features/map/widgets/weather_floating_widget.dart';
 import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
 import 'package:ridel/core/utils/location_guard.dart';
-
+import 'package:geolocator/geolocator.dart';
+import 'package:ridel/core/utils/toast_service.dart';
 class FullScreenMapPage extends StatefulWidget {
   final ValueNotifier<double> searchSheetProgressNotifier;
   final bool isMapTabActive;
@@ -936,23 +937,42 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   Future<void> _handleLocateMeTapped(MapProvider mapProvider) async {
     // We already played haptics. Now we fetch silently in the background.
-    bool hasLocation = await LocationGuard.checkAndRequestLocation(context);
-    if (!hasLocation || !mounted) return;
+    final localContext = ToastService.navigatorKey.currentContext ?? context;
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
 
-    final locService = Provider.of<GlobalLocationService>(context, listen: false);
-    await locService.forceRefreshLocation(); // Will use IP fallback if GPS times out
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          throw Exception("Permission denied by user.");
+        }
+      }
 
-    final pos = locService.currentPosition;
-    if (pos != null && mapProvider.controller != null) {
-      await mapProvider.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+      if (permission == LocationPermission.deniedForever) {
+        throw Exception("Permission denied forever.");
+      }
 
-      await mapProvider.controller!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(target: LatLng(pos.latitude, pos.longitude), zoom: 16.5, tilt: 0.0, bearing: 0.0),
-        ),
-        duration: const Duration(milliseconds: 1000),
-      );
-      mapProvider.setAutoTracking(true);
+      // If permission is granted, proceed with fetching location and moving camera
+      final locService = Provider.of<GlobalLocationService>(context, listen: false);
+      await locService.forceRefreshLocation(); // Will use IP fallback if GPS times out
+
+      final pos = locService.currentPosition;
+      if (pos != null && mapProvider.controller != null) {
+        await mapProvider.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+
+        await mapProvider.controller!.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(target: LatLng(pos.latitude, pos.longitude), zoom: 16.5, tilt: 0.0, bearing: 0.0),
+          ),
+          duration: const Duration(milliseconds: 1000),
+        );
+        mapProvider.setAutoTracking(true);
+      }
+    } catch (e) {
+      debugPrint("📍 Locate Me Error: $e");
+      if (localContext.mounted) {
+         ToastService.showError(localContext, "Location access denied. Please enable it in browser/device settings.");
+      }
     }
   }
 
