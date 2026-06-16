@@ -3,6 +3,7 @@ import 'dart:convert'; // 🚀 NEW: For JSON parsing
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart'; // 🚀 NEW: Needed for WidgetsBindingObserver
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:http/http.dart' as http; // 🚀 NEW: For IP Fallback
 // Native geocoding removed, using Ola Maps.
 import 'package:ridel/features/profile/services/profile_repository.dart';
@@ -13,6 +14,7 @@ import 'package:ridel/core/services/weather_service.dart';
 class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
   // --- STATE VARIABLES ---
   final ValueNotifier<Position?> currentPositionNotifier = ValueNotifier(null);
+  final ValueNotifier<double> currentHeadingNotifier = ValueNotifier(0.0);
   final ValueNotifier<String> currentCityName = ValueNotifier('Locating...');
   double? cachedLat;
   double? cachedLng;
@@ -29,6 +31,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
 
   // LIVE TRACKING & MAP ENGINE STREAMS
   StreamSubscription<Position>? _positionStreamSubscription;
+  StreamSubscription<CompassEvent>? _compassStreamSubscription;
   bool _isLiveTrackingActive = false;
   final StreamController<Position> _engineStreamController =
       StreamController<Position>.broadcast();
@@ -45,6 +48,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
   bool get hasValidLocation => currentPositionNotifier.value != null;
   bool get isLiveTracking => _isLiveTrackingActive;
   double get currentSpeedKmph => currentSpeedKmphNotifier.value;
+  double get currentHeading => currentHeadingNotifier.value;
   bool get isUsingIpFallback =>
       _isUsingIpFallback; // UI can show "Approximate Location"
   String get currentCity => _currentCity;
@@ -77,6 +81,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     } else if (state == AppLifecycleState.resumed) {
       debugPrint("App resumed, resuming GPS stream...");
       _positionStreamSubscription?.resume();
+      _compassStreamSubscription?.resume();
     }
   }
 
@@ -571,10 +576,27 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     ).listen((Position position) {
       _updatePositionAndSpeed(position);
     });
+
+    if (!kIsWeb) {
+      _compassStreamSubscription?.cancel();
+      _compassStreamSubscription = FlutterCompass.events?.listen((event) {
+        if (event.heading != null) {
+          currentHeadingNotifier.value = event.heading!;
+        }
+      });
+    }
   }
 
   void _updatePositionAndSpeed(Position position) {
     currentPositionNotifier.value = position;
+    
+    if (kIsWeb) {
+      if (position.speed > 0.5) {
+        currentHeadingNotifier.value = position.heading;
+      }
+    } else {
+      // On native, heading is managed by compass
+    }
 
     double rawSpeed = (position.speed * 3.6).clamp(0.0, 240.0);
     _speedHistory.add(rawSpeed);
@@ -596,9 +618,10 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
   void stopLiveTracking() {
     if (!_isLiveTrackingActive) return;
 
-    _positionStreamSubscription?.cancel();
-    _positionStreamSubscription = null;
     _isLiveTrackingActive = false;
+    _positionStreamSubscription?.cancel();
+    _compassStreamSubscription?.cancel();
+    debugPrint("🛑 STOPPED Live GPS Tracking");
     _speedHistory.clear();
     notifyListeners(); // Notify tracking state change
   }
@@ -613,6 +636,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     _engineStreamController.close();
     currentPositionNotifier.dispose();
     currentSpeedKmphNotifier.dispose();
+    currentHeadingNotifier.dispose();
     currentCityName.dispose();
     super.dispose();
   }

@@ -686,6 +686,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       }
     });
   }
+  void _triggerAddStopFocus() {
+    setState(() {
+      _searchCtrl.clear();
+      _searchFocus.requestFocus();
+    });
+  }
 
   void _openDirectionsView() {
     AppHaptics.mediumImpact();

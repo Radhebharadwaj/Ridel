@@ -19,6 +19,7 @@ dependencies:
   # --- 1. CORE MAP ENGINE ---
   # 🔥 Git override hata diya hai. Hum strict stable version use karenge jo Java 21 nahi mangta.
   maplibre_gl: any   
+  flutter_compass: ^0.8.0
 
   # --- 2. UI & UX ---
   sliding_up_panel: ^2.0.0+1 

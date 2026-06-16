@@ -577,7 +577,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                           });
                         },
                         leading: const Icon(Icons.directions_transit_rounded,
-                            color: Color(0xFF00E5FF)),
+                            color: Color(0xFF0A84FF)),
                         title: Text(
                           'Transit Quick Actions',
                           style: TextStyle(
@@ -650,7 +650,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                 horizontal: 16,
                               ),
                               leading: const Icon(CupertinoIcons.share,
-                                  color: Color(0xFF00E5FF), size: 22),
+                                  color: Color(0xFF0A84FF), size: 22),
                               title: Text(
                                 'Share My Location',
                                 style: TextStyle(
@@ -697,7 +697,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                   horizontal: 16,
                                 ),
                                 leading: const Icon(CupertinoIcons.pin,
-                                    color: Color(0xFF00E5FF), size: 22),
+                                    color: Color(0xFF0A84FF), size: 22),
                                 title: Text(
                                   'Mark My Location',
                                   style: TextStyle(
@@ -908,7 +908,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                         itemBuilder: (context, index) {
                           final stop = provider.intermediateStops[index];
                           return Container(
-                            key: ValueKey(stop.placeId ?? stop.name ?? index.toString()),
+                            key: ValueKey(stop.placeId),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -1016,10 +1016,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                             onTap: () {
                               AppHaptics.selectionClick();
                               provider.setAddingStopMode(true);
-                              setState(() {
-                                _searchCtrl.clear();
-                                _searchFocus.requestFocus();
-                              });
+                              _triggerAddStopFocus();
                               if (_sheetController.isAttached) {
                                 unawaited(
                                   _sheetController.animateTo(
@@ -1031,11 +1028,11 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                               }
                             },
                             borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
-                                children: const [
+                                children: [
                                   Icon(Icons.add_circle_outline, color: Colors.blueAccent, size: 20),
                                   SizedBox(width: 12),
                                   Text(

@@ -132,7 +132,7 @@ class RouteEngineService {
     // 🚀 FIX: Cache precision set to 4 decimal places (~11 meters tolerance)
     String wpKey = "";
     if (waypoints != null && waypoints.isNotEmpty) {
-      wpKey = "_" + waypoints.map((w) => "${w.latitude.toStringAsFixed(4)}_${w.longitude.toStringAsFixed(4)}").join('_');
+      wpKey = "_${waypoints.map((w) => "${w.latitude.toStringAsFixed(4)}_${w.longitude.toStringAsFixed(4)}").join('_')}";
     }
     
     final cacheKey =
@@ -248,7 +248,7 @@ class RouteEngineService {
     final apiKey = AppConfig.olaMapsKey;
     String waypointsParam = "";
     if (waypoints != null && waypoints.isNotEmpty) {
-      waypointsParam = "&waypoints=" + waypoints.map((wp) => "${wp.latitude},${wp.longitude}").join('|');
+      waypointsParam = "&waypoints=${waypoints.map((wp) => "${wp.latitude},${wp.longitude}").join('|')}";
     }
 
     final String olaApiUrl =

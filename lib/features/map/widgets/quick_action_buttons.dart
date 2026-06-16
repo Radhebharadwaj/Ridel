@@ -224,10 +224,9 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
                                   _buildPremiumCircleButton(
                                     icon: CupertinoIcons.house_fill,
                                     iconColor: _homePlace != null
-                                        ? const Color(0xFF00E5FF)
-                                        : (isDark
-                                            ? Colors.white70
-                                            : Colors.black87),
+                                        ? const Color(0xFF0A84FF)
+                                        : const Color(0xFF0A84FF),
+                                    bgColor: const Color(0xFF0A84FF).withValues(alpha: 0.12),
                                     size: 52.0,
                                     iconSize: 24.0,
                                     onTap: _handleHomeTap,
@@ -253,10 +252,9 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
                                   _buildPremiumCircleButton(
                                     icon: CupertinoIcons.briefcase_fill,
                                     iconColor: _workPlace != null
-                                        ? const Color(0xFF00E5FF)
-                                        : (isDark
-                                            ? Colors.white70
-                                            : Colors.black87),
+                                        ? const Color(0xFF0A84FF)
+                                        : const Color(0xFF0A84FF),
+                                    bgColor: const Color(0xFF0A84FF).withValues(alpha: 0.12),
                                     size: 52.0,
                                     iconSize: 24.0,
                                     onTap: _handleWorkTap,
@@ -277,7 +275,8 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
                                 final isAddingStop = context.watch<MapProvider>().isAddingStopMode;
                                 final thirdLabel = isAddingStop ? "Drop Pin" : "Add Place";
                                 final thirdIcon = isAddingStop ? Icons.location_on_rounded : CupertinoIcons.add;
-                                final thirdColor = isAddingStop ? Colors.amber.shade600 : (isDark ? Colors.white : Colors.black87);
+                                final thirdColor = isAddingStop ? Colors.amber.shade600 : const Color(0xFF0A84FF);
+                                final thirdBg = isAddingStop ? Colors.amber.shade600.withValues(alpha: 0.12) : const Color(0xFF0A84FF).withValues(alpha: 0.12);
 
                                 return Column(
                                   mainAxisSize: MainAxisSize.min,
@@ -285,6 +284,7 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
                                     _buildPremiumCircleButton(
                                       icon: thirdIcon,
                                       iconColor: thirdColor,
+                                      bgColor: thirdBg,
                                       size: 52.0,
                                       iconSize: 26.0,
                                       onTap: () {
@@ -442,6 +442,7 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
     required IconData icon,
     required VoidCallback onTap,
     Color iconColor = Colors.white,
+    Color? bgColor,
     double size = 44.0,
     double iconSize = 20.0,
   }) {
@@ -454,8 +455,9 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
         width: size,
         height: size,
         decoration: BoxDecoration(
+          color: bgColor,
           shape: BoxShape.circle,
-          gradient: LinearGradient(
+          gradient: bgColor == null ? LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
@@ -463,7 +465,7 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
               Colors.white.withValues(alpha: 0.10),
               Colors.white.withValues(alpha: 0.06),
             ],
-          ),
+          ) : null,
           border:
               Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
           boxShadow: [

@@ -1251,11 +1251,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                                   const EdgeInsets.symmetric(horizontal: 4),
                               child: Text(
                                 isTyping ? 'Done' : 'Cancel',
-                                style: TextStyle(
-                                  // 🚀 FIX: Qualified static reference
-                                  color: isDark
-                                      ? _MapSearchSheetState.neonCyan
-                                      : const Color(0xFF00B8D4),
+                                style: const TextStyle(
+                                  color: Color(0xFF0A84FF),
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,
                                 ),

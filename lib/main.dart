@@ -125,7 +125,7 @@ void main() {
     try {
       await Supabase.initialize(
         url: AppConfig.supabaseUrl,
-        anonKey: AppConfig.supabaseAnonKey,
+        publishableKey: AppConfig.supabaseAnonKey,
       );
 
       final supabaseClient = Supabase.instance.client;

@@ -18,7 +18,6 @@ import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/features/map/widgets/map_theme_selector.dart';
 import 'package:ridel/features/map/widgets/weather_floating_widget.dart';
 import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
-import 'package:ridel/core/utils/location_guard.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 class FullScreenMapPage extends StatefulWidget {
@@ -159,8 +158,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   mapProvider.setUserPanning(true);
                 }
               },
-              child: MapLibreMap(
-                key: _mapKey,
+              child: Selector<MapProvider, bool>(
+                selector: (_, provider) => provider.showNativeBlueDot,
+                builder: (context, showNativeBlueDot, child) {
+                  return MapLibreMap(
+                    key: _mapKey,
                 styleString: _resolvedStyleJson ??
                     '{"version": 8, "sources": {}, "layers": []}',
                 onMapCreated: (controller) {
@@ -273,7 +275,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                 tiltGesturesEnabled: true,
 
                 // 🚀 CRITICAL FIX 2: Restore native blue dot logic exactly like custom_map_screen
-                myLocationEnabled: true,
+                myLocationEnabled: showNativeBlueDot,
                 myLocationTrackingMode: Provider.of<MapProvider>(context, listen: false).isAutoTracking
                     ? (kIsWeb ? MyLocationTrackingMode.tracking : MyLocationTrackingMode.trackingCompass)
                     : MyLocationTrackingMode.none,
@@ -318,9 +320,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                     } catch (_) {}
                   }
                 },
-              ),
-            ),
+              );
+            },
           ),
+        ),
+      ),
 
           // 🚀 DROP PIN MODE CENTER OVERLAY
           Positioned.fill(
@@ -959,7 +963,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   Future<void> _handleLocateMeTapped(MapProvider mapProvider) async {
     debugPrint("🎯 [DEBUG] Locate Me button clicked!");
-    final localContext = ToastService.navigatorKey.currentContext ?? context;
 
     try {
       // 🚨 CRITICAL: Append .timeout to prevent infinite browser deadlock
@@ -978,6 +981,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
       // If granted, proceed:
       debugPrint("✅ [DEBUG] Permission granted. Fetching location...");
+      if (!mounted) return;
       final locService = Provider.of<GlobalLocationService>(context, listen: false);
       await locService.forceRefreshLocation(); // Will use IP fallback if GPS times out
 
@@ -996,6 +1000,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     } on TimeoutException catch (_) {
       // Catches the infinite hang caused by strict browser shields
       debugPrint("⏳ [DEBUG] Geolocator timed out (Browser silently blocked it).");
+      if (!mounted) return;
       final validContext = ToastService.navigatorKey.currentContext ?? context;
       if (validContext.mounted) {
         ToastService.showError(
@@ -1010,6 +1015,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
               
               Future.delayed(const Duration(milliseconds: 400), () {
                 debugPrint("🟢 [DEBUG] 400ms delay finished, firing Warning Toast...");
+                if (!safeContext.mounted) return;
                 try {
                   // 🚨 Changed to showWarning to bypass the isMapScreen invisibility filter
                   ToastService.showWarning(
@@ -1033,6 +1039,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     } catch (e) {
       // Catches standard denied exceptions
       debugPrint("📍 [DEBUG] Locate Me Error: $e");
+      if (!mounted) return;
       final validContext = ToastService.navigatorKey.currentContext ?? context;
       if (validContext.mounted) {
         ToastService.showError(
@@ -1047,6 +1054,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
               
               Future.delayed(const Duration(milliseconds: 400), () {
                 debugPrint("🟢 [DEBUG] 400ms delay finished, firing Warning Toast...");
+                if (!safeContext.mounted) return;
                 try {
                   // 🚨 Changed to showWarning to bypass the isMapScreen invisibility filter
                   ToastService.showWarning(

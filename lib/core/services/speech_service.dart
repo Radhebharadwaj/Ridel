@@ -43,17 +43,14 @@ class SpeechService {
           onDone();
         }
       },
-      listenFor: const Duration(seconds: 10),
-      pauseFor: const Duration(seconds: 2),
       onSoundLevelChange: onSoundLevel,
-
-      // 🚀 FIXED: Back to direct parameters but with IGNORE tags to keep Problems tab 0
-      // ignore: deprecated_member_use
-      partialResults: true,
-      // ignore: deprecated_member_use
-      cancelOnError: true,
-      // ignore: deprecated_member_use
-      listenMode: ListenMode.confirmation,
+      listenOptions: SpeechListenOptions(
+        listenFor: const Duration(seconds: 10),
+        pauseFor: const Duration(seconds: 2),
+        partialResults: true,
+        cancelOnError: true,
+        listenMode: ListenMode.confirmation,
+      ),
     );
   }
 

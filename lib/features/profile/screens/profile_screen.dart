@@ -324,16 +324,15 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
 
                               await Supabase.instance.client.auth.signOut();
 
-                              if (context.mounted) {
-                                Navigator.pop(context);
-                                ToastService.showSuccess(context,
-                                    "Account deletion scheduled. We're sorry to see you go! 💔");
+                              if (!context.mounted) return;
+                              Navigator.pop(context);
+                              ToastService.showSuccess(context,
+                                  "Account deletion scheduled. We're sorry to see you go! 💔");
 
-                                Navigator.pushReplacement(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) => const LoginScreen()));
-                              }
+                              Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => const LoginScreen()));
                             } catch (e) {
                               if (!context.mounted) return;
                               debugPrint("Deletion Error: $e");
@@ -771,7 +770,7 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
                         color: isLink ? Colors.cyan : subColor, fontSize: 14)),
                 if (isLink) Icon(Icons.chevron_right, color: subColor, size: 16)
               ]),
-              onTap: onTap != null ? () => Future.microtask(() => onTap(ctx)) : null));
+              onTap: onTap != null ? () => Future.microtask(() { if (ctx.mounted) onTap(ctx); }) : null));
   Widget _tile(IconData icon, String title, String sub, Color iconColor,
           Color textColor, Color subColor, VoidCallback onTap) =>
       ListTile(

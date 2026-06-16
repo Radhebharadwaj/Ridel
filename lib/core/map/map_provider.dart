@@ -140,16 +140,15 @@ class MapProvider extends ChangeNotifier {
   // 🚀 NAVIGATION PUCK LOGIC
   LatLng _lastPuckLocation = const LatLng(0, 0);
   double _lastPuckBearing = 0.0;
+  Timer? _puckTweenTimer;
 
   bool get showNativeBlueDot =>
       engine.mapUIState.value == MapUIState.idle ||
-      engine.mapUIState.value == MapUIState.placeSelected ||
-      engine.mapUIState.value == MapUIState.routeDrawn; // CRITICAL FIX: Keep native dot visible when route is drawn
+      engine.mapUIState.value == MapUIState.placeSelected;
 
   double get customPuckOpacity =>
       (engine.mapUIState.value == MapUIState.navigating || 
-       engine.mapUIState.value == MapUIState.routeDrawn ||
-       engine.mapUIState.value == MapUIState.placeSelected)
+       engine.mapUIState.value == MapUIState.routeDrawn)
           ? 1.0
           : 0.0;
 
@@ -189,15 +188,20 @@ class MapProvider extends ChangeNotifier {
     await _updatePuckGeoJson(location, bearing, customPuckOpacity);
   }
 
-  Future<void> updateNavigationPuck(LatLng location, double bearing) async {
+  Future<void> updateNavigationPuck(LatLng location, double newBearing) async {
     // Only update if in a state where the puck should be visible
     if (customPuckOpacity == 0.0) {
       await updatePuckVisibility(); // Ensure it hides gracefully
       return;
     }
 
-    // 1. ALWAYS update Puck Position & Rotation if visible (Route Overview & Navigating)
-    await _updatePuckGeoJson(location, bearing, customPuckOpacity);
+    _lastPuckLocation = location;
+
+    // 1. Calculate shortest rotation path
+    double diff = newBearing - _lastPuckBearing;
+    while (diff > 180) { diff -= 360; }
+    while (diff < -180) { diff += 360; }
+    double targetBearing = _lastPuckBearing + diff;
 
     // 2. Animate Camera to Follow User & Rotate Map ONLY if actively navigating
     if (engine.mapUIState.value == MapUIState.navigating &&
@@ -206,14 +210,38 @@ class MapProvider extends ChangeNotifier {
       controller!.animateCamera(
         CameraUpdate.newCameraPosition(CameraPosition(
           target: location,
-          bearing: bearing, // THIS ROTATES THE MAP WITH THE USER
+          bearing: targetBearing, // THIS ROTATES THE MAP WITH THE USER
           tilt: 50.0, // Keep the 3D perspective
           zoom: 18.0, // Zoomed in for navigation
         )),
-        duration: const Duration(
-            seconds: 1), // Smooth 1-second animation between GPS ticks
+        duration: const Duration(seconds: 1), // Smooth 1-second animation between GPS ticks
       );
     }
+
+    // 3. Update Puck Rotation (Tween on Web, Instant on Native)
+    _puckTweenTimer?.cancel();
+    if (!kIsWeb) {
+      _lastPuckBearing = targetBearing;
+      await _updatePuckGeoJson(location, _lastPuckBearing, customPuckOpacity);
+      return;
+    }
+
+    // Web Tween Logic (~300ms smooth rotation)
+    const int steps = 20;
+    int currentStep = 0;
+    final double stepSize = diff / steps;
+
+    _puckTweenTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
+      currentStep++;
+      _lastPuckBearing += stepSize;
+      _updatePuckGeoJson(_lastPuckLocation, _lastPuckBearing, customPuckOpacity);
+
+      if (currentStep >= steps) {
+        _lastPuckBearing = targetBearing;
+        _updatePuckGeoJson(_lastPuckLocation, _lastPuckBearing, customPuckOpacity);
+        timer.cancel();
+      }
+    });
   }
 
   Future<void> hideNavigationPuck() async {
@@ -1609,9 +1637,18 @@ class MapProvider extends ChangeNotifier {
   final ValueNotifier<bool> isSpeaking = ValueNotifier(false);
   Timer? _glowTimer;
   StreamSubscription<Position>? _liveLocationSub;
+  StreamSubscription<Position>? _locServiceSub;
 
   MapProvider() {
     engine.state.addListener(() {
+      if (engine.isFullyBooted && _locServiceSub == null && engine.locService != null) {
+        _locServiceSub = engine.locService!.engineLocationStream.listen((pos) {
+          if (engine.mapUIState.value == MapUIState.navigating ||
+              engine.mapUIState.value == MapUIState.routeDrawn) {
+            updateNavigationPuck(LatLng(pos.latitude, pos.longitude), pos.heading);
+          }
+        });
+      }
       notifyListeners();
     });
 
@@ -1658,6 +1695,8 @@ class MapProvider extends ChangeNotifier {
         // Show initial puck before the first native location update fires
         updateNavigationPuck(currentLocation!,
             engine.locService?.currentPosition?.heading ?? 0.0);
+      } else {
+        hideNavigationPuck();
       }
       notifyListeners();
     });

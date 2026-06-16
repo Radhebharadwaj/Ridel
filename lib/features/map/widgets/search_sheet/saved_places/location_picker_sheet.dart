@@ -10,6 +10,7 @@ import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/core/widgets/ridel_liquid_button.dart';
 import 'package:ridel/features/map/services/place_api_services.dart';
+import 'package:ridel/features/map/models/place_model.dart';
 
 import 'saved_place.dart';
 import 'places_repository.dart' as saved;
@@ -481,12 +482,42 @@ class SavedPlacesRow extends StatelessWidget {
                     glassTint: const Color(0xFF0A84FF).withValues(alpha: 0.2),
                     onTap: () async {
                       AppHaptics.mediumImpact();
-                      final success = await pickerController.confirmSelection();
-                      if (success && context.mounted) {
-                        ToastService.showSuccess(
-                          context,
-                          '$label location saved!',
+                      final provider = context.read<MapProvider>();
+                      final selectedLocation = provider.targetDestination;
+
+                      if (provider.isAddingStopMode && selectedLocation != null) {
+                        AppHaptics.success();
+
+                        // 1. Add the stop to the list
+                        provider.addIntermediateStop(
+                          PlaceModel(
+                            placeId: 'pinned_${DateTime.now().millisecondsSinceEpoch}',
+                            name: 'Dropped Pin',
+                            address: '${selectedLocation.latitude.toStringAsFixed(4)}, ${selectedLocation.longitude.toStringAsFixed(4)}',
+                            latitude: selectedLocation.latitude,
+                            longitude: selectedLocation.longitude,
+                            categories: ['unknown'],
+                          ),
                         );
+
+                        // 2. Reset the picking states
+                        provider.setDropPinMode(false);
+                        provider.setAddingStopMode(false);
+
+                        // 3. Trigger route recalculation seamlessly
+                        if (context.mounted) {
+                          provider.calculateAndDrawRoute(context);
+                        }
+
+                        pickerController.cancelSelection();
+                      } else {
+                        final success = await pickerController.confirmSelection();
+                        if (success && context.mounted) {
+                          ToastService.showSuccess(
+                            context,
+                            '$label location saved!',
+                          );
+                        }
                       }
                     },
                     child: Row(

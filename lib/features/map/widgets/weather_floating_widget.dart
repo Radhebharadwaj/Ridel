@@ -37,7 +37,7 @@ class WeatherFloatingWidget extends StatefulWidget {
 }
 
 class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
-  static const Color accentColor = Color(0xFF00E5FF);
+  static const Color accentColor = Color(0xFFDCEBFF);
 
   WeatherModel? _weather;
   WeatherState _currentState = WeatherState.compact;
