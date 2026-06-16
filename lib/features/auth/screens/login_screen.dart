@@ -3,8 +3,10 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_turnstile/flutter_turnstile.dart';
+import 'package:pinput/pinput.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/core/utils/validators.dart';
@@ -37,7 +39,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _mailSent = false;
 
   final Color neonColor = const Color(0xFF00E5FF);
-  final Color darkBg = const Color(0xFF0B0E17);
 
   @override
   void initState() {
@@ -78,16 +79,28 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  void _onContinuePressed() {
+  bool _validateEmailLocally() {
     final email = _emailController.text.trim();
-    if (email.isEmpty || AppValidators.validateEmail(email) != null) {
+    final emailRegex = RegExp(r'^[a-zA-Z0-9.]+@[a-zA-Z0-9]+\.[a-zA-Z]+');
+
+    if (email.isEmpty || email.length > 254 || !emailRegex.hasMatch(email)) {
       ToastService.showError(context, 'Please enter a valid email address');
-      AppHaptics.error();
+      HapticFeedback.heavyImpact();
+      return false;
+    }
+    return true;
+  }
+
+  void _onContinuePressed() {
+    if (_isLoading) return;
+    
+    if (!_validateEmailLocally()) {
       return;
     }
+    
     if (_resendTimer > 0) {
       ToastService.showError(
-          context, "Please wait for the timer. Your link is valid for 1 hour!");
+          context, "Please wait for the timer to resend the code.");
       return;
     }
     setState(() {
@@ -98,9 +111,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleEmailContinue({String? captchaToken}) async {
     try {
-      await _authService.sendSecureResetLink(
+      await _authService.sendOtp(
         _emailController.text.trim(),
-        captchaToken: captchaToken,
       );
       setState(() {
         _isLoading = false;
@@ -108,12 +120,52 @@ class _LoginScreenState extends State<LoginScreen> {
       });
       _startCountdown();
       if (mounted) {
-        ToastService.showSuccess(context, 'Login link sent! Valid for 1 hour.');
+        ToastService.showSuccess(context, 'OTP sent to your email!');
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _showTurnstile = false;
+      });
+      if (mounted) ToastService.showError(context, e.toString());
+      AppHaptics.error();
+    }
+  }
+
+  Future<void> _resendOtp() async {
+    if (_isLoading) return;
+
+    if (!_validateEmailLocally()) {
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      await _authService.sendOtp(_emailController.text.trim());
+      setState(() => _isLoading = false);
+      _startCountdown();
+      if (mounted) {
+        ToastService.showSuccess(context, 'OTP resent to your email!');
+        AppHaptics.mediumImpact();
       }
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) ToastService.showError(context, e.toString());
       AppHaptics.error();
+    }
+  }
+
+  Future<void> _verifyOtp(String otp) async {
+    setState(() => _isLoading = true);
+    final result = await _authService.verifyOtp(_emailController.text.trim(), otp);
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (result.isSuccess) {
+        _goToHome();
+      } else {
+        ToastService.showError(context, result.errorMessage ?? 'Invalid OTP');
+        AppHaptics.error();
+      }
     }
   }
 
@@ -171,18 +223,16 @@ class _LoginScreenState extends State<LoginScreen> {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: isLightMode ? Colors.white : const Color(0xFF000000),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
-              // Bouncing scroll physics ensures standard smooth iOS/Android scrolling
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight -
-                      40, // Account for vertical padding
+                  minHeight: constraints.maxHeight - 40,
                 ),
                 child: Center(
                   child: ConstrainedBox(
@@ -205,50 +255,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           isPaused: _isLoading,
                         ),
                         const SizedBox(height: 32),
-                        _buildEmailField(isLightMode),
-                        const SizedBox(height: 16),
-                        if (_showTurnstile)
-                          CloudFlareTurnstile(
-                            siteKey: '0x4AAAAAADP3RBwUMZczFXPO',
-                            onTokenReceived: (token) {
-                              setState(() => _showTurnstile = false);
-                              _handleEmailContinue(captchaToken: token);
-                            },
-                            onError: (err) {
-                              setState(() {
-                                _isLoading = false;
-                                _showTurnstile = false;
-                              });
-                              ToastService.showError(
-                                  context, 'Security check failed. Try again.');
-                            },
-                            options: TurnstileOptions(
-                                theme: isLightMode
-                                    ? TurnstileTheme.light
-                                    : TurnstileTheme.dark,
-                                mode: TurnstileMode.invisible),
-                          ),
-                        _buildContinueButton(isLightMode),
-                        if (_mailSent) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            "Magic link sent to ${_emailController.text}!",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                color: isLightMode
-                                    ? Colors.black54
-                                    : Colors.white.withValues(alpha: 0.5),
-                                fontSize: 13),
-                          ),
-                        ],
-                        const SizedBox(height: 32),
-                        Row(
-                          children: [
-                            Expanded(child: _buildGoogleButton(isLightMode)),
-                            const SizedBox(width: 16),
-                            Expanded(child: _buildAppleButton(isLightMode)),
-                          ],
+                        
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 400),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          child: _mailSent
+                              ? _buildOtpView(isLightMode)
+                              : _buildEmailForm(isLightMode),
                         ),
+
                         const SizedBox(height: 40),
                         TextButton(
                           onPressed: _isLoading ? null : _handleSkip,
@@ -401,6 +417,125 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Widget _buildEmailForm(bool isLightMode) {
+    return Column(
+      key: const ValueKey('email_form'),
+      children: [
+        _buildEmailField(isLightMode),
+        const SizedBox(height: 16),
+        if (_showTurnstile)
+          CloudFlareTurnstile(
+            siteKey: '0x4AAAAAADP3RBwUMZczFXPO',
+            onTokenReceived: (token) {
+              setState(() => _showTurnstile = false);
+              _handleEmailContinue(captchaToken: token);
+            },
+            onError: (err) {
+              setState(() {
+                _isLoading = false;
+                _showTurnstile = false;
+              });
+              ToastService.showError(
+                  context, 'Security check failed. Try again.');
+            },
+            options: TurnstileOptions(
+                theme: isLightMode
+                    ? TurnstileTheme.light
+                    : TurnstileTheme.dark,
+                mode: TurnstileMode.invisible),
+          ),
+        _buildContinueButton(isLightMode),
+        const SizedBox(height: 32),
+        Row(
+          children: [
+            Expanded(child: _buildGoogleButton(isLightMode)),
+            const SizedBox(width: 16),
+            Expanded(child: _buildAppleButton(isLightMode)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOtpView(bool isLightMode) {
+    final defaultPinTheme = PinTheme(
+      width: 50,
+      height: 50,
+      textStyle: TextStyle(
+        fontSize: 22,
+        color: isLightMode ? Colors.black87 : Colors.white,
+        fontWeight: FontWeight.w600,
+      ),
+      decoration: BoxDecoration(
+        color: isLightMode ? Colors.grey.shade200 : const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(12),
+      ),
+    );
+
+    final focusedPinTheme = defaultPinTheme.copyDecorationWith(
+      border: Border.all(color: const Color(0xFF00BFA5)),
+      borderRadius: BorderRadius.circular(12),
+    );
+
+    return Column(
+      key: const ValueKey('otp_form'),
+      children: [
+        Text(
+          'Enter the 6-digit code sent to\n${_emailController.text}',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: isLightMode ? Colors.black54 : Colors.white70,
+            fontSize: 15,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Pinput(
+          length: 6,
+          defaultPinTheme: defaultPinTheme,
+          focusedPinTheme: focusedPinTheme,
+          showCursor: true,
+          autofocus: true,
+          onCompleted: (pin) => _verifyOtp(pin),
+        ),
+        const SizedBox(height: 32),
+        if (_isLoading)
+          const CircularProgressIndicator(color: Color(0xFF00BFA5))
+        else
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _mailSent = false;
+                    _resendTimer = 0;
+                    _countdownTimer?.cancel();
+                  });
+                },
+                child: Text('Edit Email',
+                    style: TextStyle(
+                        color: isLightMode ? Colors.black54 : Colors.white54)),
+              ),
+              const SizedBox(width: 16),
+              TextButton(
+                onPressed: _resendTimer == 0 ? _resendOtp : null,
+                child: Text(
+                  _resendTimer == 0 ? 'Resend Code' : 'Resend in ${_resendTimer}s',
+                  style: TextStyle(
+                    color: _resendTimer == 0
+                        ? const Color(0xFF00BFA5)
+                        : (isLightMode ? Colors.grey : Colors.white38),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+
   Widget _buildEmailField(bool isLightMode) {
     if (isLightMode) {
       return Container(
@@ -436,10 +571,16 @@ class _LoginScreenState extends State<LoginScreen> {
     return TextField(
       controller: _emailController,
       focusNode: _emailFocusNode,
+      maxLength: 254,
+      keyboardType: TextInputType.emailAddress,
+      inputFormatters: [
+        FilteringTextInputFormatter.deny(RegExp(r'\s')),
+      ],
       style: TextStyle(
           color: isLightMode ? Colors.black87 : Colors.white, fontSize: 16),
       cursorColor: isLightMode ? Colors.black87 : neonColor,
       decoration: InputDecoration(
+        counterText: "",
         hintText: 'Enter your Email',
         hintStyle: TextStyle(
           color: isLightMode
@@ -502,11 +643,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: CircularProgressIndicator(
                         strokeWidth: 2.5, color: Colors.white),
                   )
-                : Text(
-                    _resendTimer == 0
-                        ? 'Continue'
-                        : 'Resend in ${_resendTimer}s',
-                    style: const TextStyle(
+                : const Text(
+                    'Continue',
+                    style: TextStyle(
                       color: Colors.white,
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
@@ -523,7 +662,7 @@ class _LoginScreenState extends State<LoginScreen> {
       height: MediaQuery.of(context).size.height * 0.07,
       enableStretch: true,
       glassTint: neonColor.withValues(alpha: 0.15),
-      onTap: _isLoading ? () {} : _onContinuePressed,
+      onTap: _isLoading ? null : _onContinuePressed,
       child: _isLoading
           ? const SizedBox(
               height: 24,
@@ -531,9 +670,9 @@ class _LoginScreenState extends State<LoginScreen> {
               child: CircularProgressIndicator(
                   strokeWidth: 2.5, color: Colors.white),
             )
-          : Text(
-              _resendTimer == 0 ? 'Continue' : 'Resend in ${_resendTimer}s',
-              style: const TextStyle(
+          : const Text(
+              'Continue',
+              style: TextStyle(
                 color: Colors.white,
                 fontSize: 17,
                 fontWeight: FontWeight.w800,
@@ -586,7 +725,7 @@ class _LoginScreenState extends State<LoginScreen> {
       height: MediaQuery.of(context).size.height * 0.07,
       enableStretch: true,
       glassTint: const Color(0x1AFFFFFF),
-      onTap: _isLoading ? () {} : _handleGoogleLogin,
+      onTap: _isLoading ? null : _handleGoogleLogin,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -649,7 +788,7 @@ class _LoginScreenState extends State<LoginScreen> {
       height: MediaQuery.of(context).size.height * 0.07,
       enableStretch: true,
       glassTint: const Color(0x1AFFFFFF),
-      onTap: _isLoading ? () {} : _handleAppleLogin,
+      onTap: _isLoading ? null : _handleAppleLogin,
       child: const Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [

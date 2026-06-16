@@ -892,44 +892,69 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                       ),
 
                       // 🟡 INTERMEDIATE STOPS
-                      ...provider.intermediateStops.asMap().entries.map((entry) {
-                        int idx = entry.key;
-                        var stop = entry.value;
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                      ReorderableListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: provider.intermediateStops.length,
+                        onReorder: (oldIndex, newIndex) {
+                          AppHaptics.lightImpact(); // Premium tactile feedback
+                          provider.reorderIntermediateStops(oldIndex, newIndex);
+                        },
+                        itemBuilder: (context, index) {
+                          final stop = provider.intermediateStops[index];
+                          return Container(
+                            key: ValueKey(stop.placeId ?? stop.name ?? index.toString()),
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.trip_origin, color: Colors.orangeAccent, size: 20),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text("Stop ${idx + 1}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                                      Text(
-                                        stop.name,
-                                        style: const TextStyle(color: Colors.white, fontSize: 14),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Padding(
+                                      padding: EdgeInsets.only(top: 14.0),
+                                      child: Icon(Icons.drag_handle_rounded, color: Colors.grey, size: 20),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Padding(
+                                      padding: EdgeInsets.only(top: 14.0),
+                                      child: Icon(Icons.trip_origin, color: Colors.orangeAccent, size: 20),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(top: 14.0),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text("Stop ${index + 1}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                            Text(
+                                              stop.name,
+                                              style: const TextStyle(color: Colors.white, fontSize: 14),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4.0),
+                                      child: IconButton(
+                                        icon: const Icon(Icons.close, color: Colors.white54, size: 20),
+                                        onPressed: () => provider.removeIntermediateStop(index),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.close, color: Colors.white54, size: 20),
-                                  onPressed: () => provider.removeIntermediateStop(idx),
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 37.0, top: 4, bottom: 4),
+                                  child: SizedBox(height: 12, child: VerticalDivider(color: Colors.grey, thickness: 1)),
                                 ),
                               ],
                             ),
-                            const Padding(
-                              padding: EdgeInsets.only(left: 9.0, top: 4, bottom: 4),
-                              child: SizedBox(height: 12, child: VerticalDivider(color: Colors.grey, thickness: 1)),
-                            ),
-                          ],
-                        );
-                      }),
+                          );
+                        },
+                      ),
 
                       // 🔴 DESTINATION
                       Row(

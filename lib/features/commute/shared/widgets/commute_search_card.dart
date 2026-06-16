@@ -491,6 +491,9 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
         Provider.of<GlobalLocationService>(context, listen: false);
 
     await locService.forceRefreshLocation();
+    
+    // 🚨 CRITICAL FIX: Recalculate the distances with the new fresh GPS coordinates!
+    await _calculateNearestLocationsInBackground();
 
     if (mounted) {
       if (_nearestLocationsCache.isNotEmpty) {

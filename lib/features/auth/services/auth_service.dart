@@ -57,11 +57,36 @@ class AuthService {
     }
   }
 
-  Future<void> sendLoginOTP(String email) async {
+  Future<void> sendOtp(String email) async {
     try {
-      await _supabase.auth.signInWithOtp(email: email);
+      await _supabase.auth.signInWithOtp(
+        email: email,
+        shouldCreateUser: false,
+      );
     } catch (e) {
       throw _translatePremiumError(e);
+    }
+  }
+
+  Future<AuthResult> verifyOtp(String email, String otp) async {
+    try {
+      final response = await _supabase.auth.verifyOTP(
+        email: email,
+        token: otp,
+        type: OtpType.magiclink,
+      );
+      bool isNew = false;
+      if (response.user != null) {
+        final createdAt = DateTime.parse(response.user!.createdAt);
+        final lastSignIn = response.user!.lastSignInAt != null
+            ? DateTime.parse(response.user!.lastSignInAt!)
+            : DateTime.now();
+        isNew = lastSignIn.difference(createdAt).inSeconds < 5;
+      }
+      return AuthResult(isSuccess: true, isNewUser: isNew);
+    } catch (e) {
+      return AuthResult(
+          isSuccess: false, errorMessage: _translatePremiumError(e));
     }
   }
 

@@ -46,6 +46,23 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
+  void reorderIntermediateStops(int oldIndex, int newIndex) {
+    if (oldIndex < newIndex) {
+      newIndex -= 1; // Standard Flutter reorder adjustment
+    }
+    final PlaceModel item = intermediateStops.removeAt(oldIndex);
+    intermediateStops.insert(newIndex, item);
+    notifyListeners();
+
+    // Auto-recalculate the full route with the new sequence
+    if (targetDestination != null) {
+      final context = ToastService.navigatorKey.currentContext;
+      if (context != null) {
+        calculateAndDrawNativeRoute(context, currentNavMode);
+      }
+    }
+  }
+
   static Future<Uint8List> loadAndResizeImage(String assetPath, int targetWidth) async {
     final ByteData data = await rootBundle.load(assetPath);
     final ui.Codec codec = await ui.instantiateImageCodec(

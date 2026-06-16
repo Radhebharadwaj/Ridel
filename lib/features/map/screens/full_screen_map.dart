@@ -190,6 +190,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                     debugPrint("Intermediate Pin Successfully Injected");
                   } catch (e) {
                     debugPrint("Failed to load intermediate_pin: $e");
+                    final Uint8List transparentPixel = Uint8List.fromList([
+                      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68,
+                      82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196,
+                      137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0,
+                      0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68,
+                      174, 66, 96, 130
+                    ]);
+                    await controller.addImage('intermediate_pin', transparentPixel);
                   }
 
                   try {
@@ -707,14 +715,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                             // Fire and forget - do not block the UI!
                                             Future.microtask(() async {
                                               if (!context.mounted) return;
-                                              bool hasLocation =
-                                                  await LocationGuard
-                                                      .checkAndRequestLocation(
-                                                          context);
-                                              if (!hasLocation ||
-                                                  !context.mounted) {
-                                                return;
-                                              }
 
                                               final mapProvider =
                                                   Provider.of<MapProvider>(
@@ -936,23 +936,26 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   }
 
   Future<void> _handleLocateMeTapped(MapProvider mapProvider) async {
-    // We already played haptics. Now we fetch silently in the background.
+    debugPrint("🎯 [DEBUG] Locate Me button clicked!");
     final localContext = ToastService.navigatorKey.currentContext ?? context;
+
     try {
-      LocationPermission permission = await Geolocator.checkPermission();
+      // 🚨 CRITICAL: Append .timeout to prevent infinite browser deadlock
+      LocationPermission permission = await Geolocator.checkPermission().timeout(const Duration(seconds: 2));
 
       if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
+        permission = await Geolocator.requestPermission().timeout(const Duration(seconds: 2));
         if (permission == LocationPermission.denied) {
           throw Exception("Permission denied by user.");
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        throw Exception("Permission denied forever.");
+        throw Exception("Permission permanently denied.");
       }
 
-      // If permission is granted, proceed with fetching location and moving camera
+      // If granted, proceed:
+      debugPrint("✅ [DEBUG] Permission granted. Fetching location...");
       final locService = Provider.of<GlobalLocationService>(context, listen: false);
       await locService.forceRefreshLocation(); // Will use IP fallback if GPS times out
 
@@ -968,10 +971,79 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         );
         mapProvider.setAutoTracking(true);
       }
+    } on TimeoutException catch (_) {
+      // Catches the infinite hang caused by strict browser shields
+      debugPrint("⏳ [DEBUG] Geolocator timed out (Browser silently blocked it).");
+      final validContext = ToastService.navigatorKey.currentContext ?? context;
+      if (validContext.mounted) {
+        ToastService.showError(
+          validContext, 
+          "Check site settings (🔒).", 
+          title: "Location Blocked",
+          onTap: () {
+            debugPrint("👆 [DEBUG] Error Toast Tapped!");
+            if (kIsWeb) {
+              // 🚨 Capture context immediately before the async gap
+              final safeContext = ToastService.navigatorKey.currentContext ?? context;
+              
+              Future.delayed(const Duration(milliseconds: 400), () {
+                debugPrint("🟢 [DEBUG] 400ms delay finished, firing Warning Toast...");
+                try {
+                  // 🚨 Changed to showWarning to bypass the isMapScreen invisibility filter
+                  ToastService.showWarning(
+                    safeContext, 
+                    "Click the lock icon (🔒) in your browser URL bar to allow location.", 
+                    title: "Browser Settings"
+                  );
+                } catch (e) {
+                  debugPrint("🔴 [DEBUG] Failed to launch Warning Toast: $e");
+                }
+              });
+            } else {
+              Geolocator.openAppSettings().catchError((e) {
+                debugPrint("⚠️ [DEBUG] Failed to open settings: $e");
+                return false;
+              });
+            }
+          },
+        );
+      }
     } catch (e) {
-      debugPrint("📍 Locate Me Error: $e");
-      if (localContext.mounted) {
-         ToastService.showError(localContext, "Location access denied. Please enable it in browser/device settings.");
+      // Catches standard denied exceptions
+      debugPrint("📍 [DEBUG] Locate Me Error: $e");
+      final validContext = ToastService.navigatorKey.currentContext ?? context;
+      if (validContext.mounted) {
+        ToastService.showError(
+          validContext, 
+          "Tap to grant access.", 
+          title: "Location Denied",
+          onTap: () {
+            debugPrint("👆 [DEBUG] Error Toast Tapped!");
+            if (kIsWeb) {
+              // 🚨 Capture context immediately before the async gap
+              final safeContext = ToastService.navigatorKey.currentContext ?? context;
+              
+              Future.delayed(const Duration(milliseconds: 400), () {
+                debugPrint("🟢 [DEBUG] 400ms delay finished, firing Warning Toast...");
+                try {
+                  // 🚨 Changed to showWarning to bypass the isMapScreen invisibility filter
+                  ToastService.showWarning(
+                    safeContext, 
+                    "Click the lock icon (🔒) in your browser URL bar to allow location.", 
+                    title: "Browser Settings"
+                  );
+                } catch (e) {
+                  debugPrint("🔴 [DEBUG] Failed to launch Warning Toast: $e");
+                }
+              });
+            } else {
+              Geolocator.openAppSettings().catchError((e) {
+                debugPrint("⚠️ [DEBUG] Failed to open settings: $e");
+                return false;
+              });
+            }
+          },
+        );
       }
     }
   }

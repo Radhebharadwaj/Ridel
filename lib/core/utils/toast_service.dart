@@ -18,6 +18,7 @@ class ToastService {
   static OverlayEntry? _overlayEntry;
   static final Queue<Map<String, dynamic>> _queue = Queue<Map<String, dynamic>>();
   static bool _isShowing = false;
+  static String? _currentShowingMessage;
 
   // 🌟 NAYA: Ab hum optional 'title' pass kar sakte hain
   static void showSuccess(BuildContext context, String message,
@@ -35,6 +36,15 @@ class ToastService {
     _showApplePill(context,
         type: ToastType.error,
         title: title ?? "Alert",
+        message: message,
+        onTap: onTap);
+  }
+
+  static void showWarning(BuildContext context, String message,
+      {String? title, VoidCallback? onTap}) {
+    _showApplePill(context,
+        type: ToastType.warning,
+        title: title ?? "Warning",
         message: message,
         onTap: onTap);
   }
@@ -90,6 +100,12 @@ class ToastService {
     bool isDynamicTransportToast = false,
     Function(String)? onTapUpdateOrigin,
   }) {
+    // 🚨 ANTI-SPAM FILTER: Do not queue if it's currently showing OR already in the queue
+    if ((_isShowing && _currentShowingMessage == message) || 
+        _queue.any((req) => req['message'] == message)) {
+      return; // Silently ignore duplicate spam
+    }
+
     _queue.add({
       'context': context,
       'type': type,
@@ -110,6 +126,7 @@ class ToastService {
     _isShowing = true;
 
     final request = _queue.removeFirst();
+    final requestContext = request['context'] as BuildContext; // 🚨 Extract context
     final type = request['type'] as ToastType;
     final title = request['title'] as String;
     final message = request['message'] as String;
@@ -120,9 +137,13 @@ class ToastService {
     final isDynamicTransportToast = request['isDynamicTransportToast'] as bool? ?? false;
     final onTapUpdateOrigin = request['onTapUpdateOrigin'] as Function(String)?;
 
-    final overlayState = navigatorKey.currentState?.overlay;
+    _currentShowingMessage = message;
+
+    // 🚨 CRITICAL FIX: Fallback to Overlay.of(requestContext) if navigatorKey fails
+    final overlayState = navigatorKey.currentState?.overlay ?? Overlay.of(requestContext);
 
     if (overlayState == null) {
+      debugPrint("⚠️ [ToastService] FATAL: Both NavigatorKey and Context Overlays are null!");
       _isShowing = false;
       _processQueue();
       return;
@@ -157,6 +178,7 @@ class ToastService {
           _overlayEntry?.remove();
           _overlayEntry = null;
           _isShowing = false;
+          _currentShowingMessage = null;
           _processQueue();
         },
       ),
@@ -277,6 +299,7 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
     
     final navProvider = context.watch<AppNavigationProvider>();
     final isMapScreen = navProvider.currentIndex == 1;
+    final bool shouldHide = isMapScreen && widget.type != ToastType.error && widget.type != ToastType.warning;
 
     double targetTop = MediaQuery.of(context).padding.top + 16;
 
@@ -294,16 +317,17 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
       right: 0,
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 300),
-        opacity: isMapScreen ? 0.0 : 1.0,
+        opacity: shouldHide ? 0.0 : 1.0, // 🚨 Ensure errors are always visible
         child: AnimatedScale(
-          scale: isMapScreen ? 0.8 : _scale,
+          scale: shouldHide ? 0.8 : _scale,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
           child: IgnorePointer(
-            ignoring: isMapScreen,
+            ignoring: shouldHide, // 🚨 Ensure errors are clickable
             child: Align(
               alignment: Alignment.topCenter,
               child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () {
                   if (widget.isDynamicTransportToast && widget.onTapUpdateOrigin != null) {
                     final transportMode = globalTransportMode.value;
@@ -358,20 +382,20 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
                   borderRadius: BorderRadius.circular(100),
                   clipBehavior: Clip.antiAlias,
                   child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                    filter: ImageFilter.blur(sigmaX: 30.0, sigmaY: 30.0), // Match sheet exactly
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
+                          horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(100),
                         color: isDark 
-                            ? Colors.black.withValues(alpha: 0.3)
-                            : Colors.white.withValues(alpha: 0.5),
+                            ? const Color(0xFF0B0E17).withValues(alpha: 0.80) // Exact bottom sheet match
+                            : Colors.white.withValues(alpha: 0.65), // Exact bottom sheet match
                         border: Border.all(
                           color: isDark 
-                              ? Colors.white.withValues(alpha: 0.12)
-                              : Colors.white.withValues(alpha: 0.5),
-                          width: 1.0,
+                              ? Colors.white.withValues(alpha: 0.08) // Hairline subtle border
+                              : Colors.black.withValues(alpha: 0.05),
+                          width: 0.5,
                         ),
                       ),
                       child: ValueListenableBuilder<int>(
@@ -452,7 +476,7 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
                                           color:
                                               isDark ? Colors.white : Colors.black87,
                                           fontSize: 14,
-                                          fontWeight: FontWeight.w700,
+                                          fontWeight: FontWeight.w600,
                                           letterSpacing: -0.3,
                                           height: 1.1,
                                         ),
@@ -470,7 +494,7 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
                                           fontWeight: FontWeight.w500,
                                           height: 1.2,
                                         ),
-                                        maxLines: 1,
+                                        maxLines: 2, // 🚨 CRITICAL: Changed from 1 to 2 to allow text wrapping
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ],

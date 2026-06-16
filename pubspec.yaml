@@ -82,6 +82,7 @@ dependencies:
   image: ^4.8.0
   flutter_turnstile: ^1.2.0
   cached_network_image: ^3.4.1
+  pinput: ^6.0.2
 
 dev_dependencies:
   flutter_test:
