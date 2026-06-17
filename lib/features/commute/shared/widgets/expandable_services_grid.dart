@@ -122,26 +122,26 @@ class _ExpandableServicesGridState extends State<ExpandableServicesGrid> {
 
     // 🌟 GRID VIEW (Expanded State) - UNIVERSAL & OVERFLOW FREE
     Widget verticalGridView = LayoutBuilder(builder: (context, constraints) {
-      // 🌟 THE LAYOUT FIX: Pure Wrap approach within SingleChildScrollView scope
-      return SingleChildScrollView(
-        physics:
-            const NeverScrollableScrollPhysics(), // Scroll will be handled by parent sheet
-        child: Padding(
-          padding: EdgeInsets.only(
-              left: 20.0,
-              right: 20.0,
-              bottom: widget.services.length > 2 ? 40 : 20),
-          child: SizedBox(
-            width: double.infinity,
-            child: Wrap(
-              alignment: WrapAlignment.start,
-              spacing: 15,
-              runSpacing: 15,
-              children: widget.services.map((service) {
-                return _buildServiceCard(service, textColor, hintColor);
-              }).toList(),
-            ),
+      return Padding(
+        padding: EdgeInsets.only(
+            left: 20.0,
+            right: 20.0,
+            bottom: widget.services.length > 2 ? 40 : 20),
+        child: GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 200,
+            crossAxisSpacing: 16.0,
+            mainAxisSpacing: 16.0,
+            childAspectRatio: 0.95,
           ),
+          itemCount: widget.services.length,
+          itemBuilder: (context, index) {
+            return _buildServiceCard(
+                widget.services[index], textColor, hintColor);
+          },
         ),
       );
     });
@@ -251,178 +251,163 @@ class _ServiceCardItemState extends State<_ServiceCardItem> {
   Widget build(BuildContext context) {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
 
-    return ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width - 40,
-        ),
-        child: GestureDetector(
-            onTapDown: (_) {
-              AppHaptics.lightImpact();
-              setState(() => isPressed = true);
-            },
-            onTapUp: (_) {
-              AppHaptics.buttonClick();
-              setState(() => isPressed = false);
-              Future.delayed(const Duration(milliseconds: 150), widget.onTap);
-            },
-            onTapCancel: () => setState(() => isPressed = false),
-            child: AnimatedScale(
-              scale: isPressed ? 0.94 : 1.0,
+    return GestureDetector(
+        onTapDown: (_) {
+          AppHaptics.lightImpact();
+          setState(() => isPressed = true);
+        },
+        onTapUp: (_) {
+          AppHaptics.buttonClick();
+          setState(() => isPressed = false);
+          Future.delayed(const Duration(milliseconds: 150), widget.onTap);
+        },
+        onTapCancel: () => setState(() => isPressed = false),
+        child: AnimatedScale(
+            scale: isPressed ? 0.94 : 1.0,
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOutQuart,
+            child: AnimatedOpacity(
+              opacity: isPressed ? 0.8 : 1.0,
               duration: const Duration(milliseconds: 150),
-              curve: Curves.easeOutQuart,
-              child: AnimatedOpacity(
-                opacity: isPressed ? 0.8 : 1.0,
-                duration: const Duration(milliseconds: 150),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Container(
-                    width: 160,
-                    height: 160,
-                    // 🌟 FIXED PREMIUM ASPECT RATIO & SHADOW: Floating effect
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(22), // More compacted
-                      boxShadow: isLightMode
-                          ? [
-                              BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.04),
-                                  blurRadius: 16,
-                                  spreadRadius: 0,
-                                  offset: const Offset(0, 6))
-                            ]
-                          : ServiceCardShadows
-                              .floating, // 🚀 NEW PREMIUM SHADOW
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(22),
-                      clipBehavior: Clip.antiAliasWithSaveLayer,
-                      child: BackdropFilter(
-                        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                        child: Stack(
-                          children: [
-                            if (!isLightMode)
-                              Positioned(
-                                top: 2,
-                                left: 16,
-                                right: 16,
-                                child: Container(
-                                  height: 15, // Refined Inner shine
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(100),
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        Colors.white.withValues(alpha: 0.08),
-                                        Colors.white.withValues(alpha: 0)
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            Container(
-                              // 🌟 COMPACT padding to prevent stretched bare look
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 12),
+              child: Container(
+                // 🌟 FIXED PREMIUM ASPECT RATIO & SHADOW: Floating effect
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22), // More compacted
+                  boxShadow: isLightMode
+                      ? [
+                          BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 16,
+                              spreadRadius: 0,
+                              offset: const Offset(0, 6))
+                        ]
+                      : ServiceCardShadows.floating, // 🚀 NEW PREMIUM SHADOW
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
+                  clipBehavior: Clip.antiAliasWithSaveLayer,
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                    child: Stack(
+                      children: [
+                        if (!isLightMode)
+                          Positioned(
+                            top: 2,
+                            left: 16,
+                            right: 16,
+                            child: Container(
+                              height: 15, // Refined Inner shine
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(22),
-                                color: isLightMode ? Colors.white : null,
-                                gradient: isLightMode
-                                    ? null
-                                    : LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: [
-                                          const Color(0xFF161A25)
-                                              .withValues(alpha: 0.7),
-                                          const Color(0xFF161A25)
-                                              .withValues(alpha: 0.5),
-                                        ],
-                                      ),
-                                border: Border.all(
-                                  color: isLightMode
-                                      ? Colors.black.withValues(alpha: 0.04)
-                                      : Colors.white.withValues(alpha: 0.04),
-                                  width: 1.0,
+                                borderRadius: BorderRadius.circular(100),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.white.withValues(alpha: 0.08),
+                                    Colors.white.withValues(alpha: 0)
+                                  ],
                                 ),
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                            ),
+                          ),
+                        Container(
+                          // 🌟 COMPACT padding to prevent stretched bare look
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(22),
+                            color: isLightMode ? Colors.white : null,
+                            gradient: isLightMode
+                                ? null
+                                : LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      const Color(0xFF161A25)
+                                          .withValues(alpha: 0.7),
+                                      const Color(0xFF161A25)
+                                          .withValues(alpha: 0.5),
+                                    ],
+                                  ),
+                            border: Border.all(
+                              color: isLightMode
+                                  ? Colors.black.withValues(alpha: 0.04)
+                                  : Colors.white.withValues(alpha: 0.04),
+                              width: 1.0,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(9),
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: isLightMode
-                                              ? Colors.black
-                                                  .withValues(alpha: 0.05)
-                                              : Colors.white
-                                                  .withValues(alpha: 0.02),
-                                        ),
-                                        child: Icon(widget.service['icon'],
-                                            color: const Color(0xFF00E5FF),
-                                            size: 19), // Refined Icon
-                                      ),
-                                      Icon(Icons.arrow_forward_ios_rounded,
-                                          color: isLightMode
-                                              ? Colors.black26
-                                              : widget.hintColor
-                                                  .withValues(alpha: 0.3),
-                                          size: 13),
-                                    ],
-                                  ),
-                                  // Compact Spacing
-                                  Expanded(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment
-                                          .center, // Center text vertically
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        const SizedBox(height: 10),
-                                        Text(
-                                          _toTitleCase(widget.service['name']),
-                                          style: GoogleFonts.inter(
-                                            fontWeight: FontWeight.w800,
-                                            fontSize:
-                                                13, // Premium compact size
-                                            color: isLightMode
-                                                ? Colors.black87
-                                                : widget.textColor,
-                                            letterSpacing: -0.3,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          widget.service['description'],
-                                          style: GoogleFonts.inter(
-                                            fontWeight: FontWeight.normal,
-                                            fontSize:
-                                                10.5, // Refined description size
-                                            color: isLightMode
-                                                ? Colors.black54
-                                                : Colors.grey.shade400,
-                                            letterSpacing: -0.1,
-                                          ),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ],
+                                  Container(
+                                    padding: const EdgeInsets.all(9),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: isLightMode
+                                          ? Colors.black.withValues(alpha: 0.05)
+                                          : Colors.white
+                                              .withValues(alpha: 0.02),
                                     ),
+                                    child: Icon(widget.service['icon'],
+                                        color: const Color(0xFF00E5FF),
+                                        size: 19), // Refined Icon
                                   ),
+                                  Icon(Icons.arrow_forward_ios_rounded,
+                                      color: isLightMode
+                                          ? Colors.black26
+                                          : widget.hintColor
+                                              .withValues(alpha: 0.3),
+                                      size: 13),
                                 ],
                               ),
-                            ),
-                          ],
+                              // Compact Spacing
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment
+                                      .center, // Center text vertically
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      _toTitleCase(widget.service['name']),
+                                      style: GoogleFonts.inter(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 13, // Premium compact size
+                                        color: isLightMode
+                                            ? Colors.black87
+                                            : widget.textColor,
+                                        letterSpacing: -0.3,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      widget.service['description'],
+                                      style: GoogleFonts.inter(
+                                        fontWeight: FontWeight.normal,
+                                        fontSize:
+                                            10.5, // Refined description size
+                                        color: isLightMode
+                                            ? Colors.black54
+                                            : Colors.grey.shade400,
+                                        letterSpacing: -0.1,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 ),

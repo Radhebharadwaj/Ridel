@@ -14,8 +14,10 @@ import 'package:provider/provider.dart';
 // Project imports
 import 'package:ridel/core/config/app_config.dart';
 import 'package:ridel/core/providers/app_navigation_provider.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:ridel/layout/main_layout.dart';
+import 'package:ridel/features/auth/screens/login_screen.dart';
 import 'package:ridel/core/utils/toast_service.dart';
-import 'package:ridel/features/auth/screens/splash_screen.dart';
 import 'package:ridel/core/widgets/app_gate_overlay.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -100,7 +102,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 // ----------------------------------------------------------------------
 void main() {
   runZonedGuarded(() async {
-    WidgetsFlutterBinding.ensureInitialized();
+    WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+    FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
     try {
       await dotenv.load(fileName: ".env");
@@ -121,6 +124,7 @@ void main() {
     ThemeService.init();
     await AppHaptics.init();
 
+    bool isLoggedIn = false;
     // 1. Core Backend Initialization
     try {
       await Supabase.initialize(
@@ -130,6 +134,7 @@ void main() {
 
       final supabaseClient = Supabase.instance.client;
       if (supabaseClient.auth.currentSession != null) {
+        isLoggedIn = true;
         DatabaseHelper.instance.initBackgroundSync();
         AuthService().setupAndSaveDeviceToken();
       }
@@ -183,7 +188,7 @@ void main() {
           ChangeNotifierProvider(
               create: (_) => NotificationProvider(), lazy: false),
         ],
-        child: const RidelApp(),
+        child: RidelApp(isLoggedIn: isLoggedIn),
       ),
     );
   }, (error, stack) {
@@ -195,7 +200,8 @@ void main() {
 // 📱 APP WIDGET
 // ----------------------------------------------------------------------
 class RidelApp extends StatefulWidget {
-  const RidelApp({super.key});
+  final bool isLoggedIn;
+  const RidelApp({super.key, required this.isLoggedIn});
   @override
   State<RidelApp> createState() => _RidelAppState();
 }
@@ -205,6 +211,7 @@ class _RidelAppState extends State<RidelApp> {
   void initState() {
     super.initState();
     _setupInteractedMessage();
+    FlutterNativeSplash.remove();
   }
 
   Future<void> _setupInteractedMessage() async {
@@ -286,7 +293,9 @@ class _RidelAppState extends State<RidelApp> {
           themeAnimationDuration: const Duration(milliseconds: 850),
           themeAnimationCurve: Curves.easeInOutQuart,
           scrollBehavior: const _AppScrollBehavior(),
-          home: const AppGateOverlay(child: SplashScreen()),
+          home: AppGateOverlay(
+            child: widget.isLoggedIn ? const MainLayout() : const LoginScreen(),
+          ),
         );
       },
     );

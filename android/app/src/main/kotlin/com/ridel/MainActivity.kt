@@ -12,13 +12,12 @@ class MainActivity: FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+            // ... (Tera Ola Navigation wala code waise hi rahega)
             if (call.method == "startOlaNavigation") {
                 val originLat = call.argument<Double>("originLat") ?: 0.0
                 val originLng = call.argument<Double>("originLng") ?: 0.0
                 val destLat = call.argument<Double>("destLat") ?: 0.0
                 val destLng = call.argument<Double>("destLng") ?: 0.0
-                
-                println("🚀 Android: Order Received! Navigating...")
                 
                 val intent = Intent(this@MainActivity, OlaNavigationActivity::class.java)
                 intent.putExtra("originLat", originLat)
