@@ -378,11 +378,11 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     final bool isDragging = _dragHeight != null;
     final glassColor = isLightMode 
         ? Colors.white.withValues(alpha: isDragging ? 0.95 : 0.65)
-        : const Color(0xFF0B0E17).withValues(alpha: isDragging ? 0.95 : 0.75);
+        : const Color(0xFF0B0E17).withValues(alpha: isDragging ? 0.95 : 0.65);
 
     final borderColor = isLightMode
         ? Colors.white.withValues(alpha: 0.9)
-        : Colors.white.withValues(alpha: 0.1);
+        : const Color(0xFF7CA1FF).withValues(alpha: 0.15);
 
     // 🚀 OPTIMIZATION: Dynamic max width instead of hardcoded 340 to fix overflow
     double maxWidth = MediaQuery.sizeOf(context).width - 32;
@@ -410,11 +410,20 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
             height: _compactHeight,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                isLightMode 
-                  ? BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 32, offset: const Offset(0, 12))
-                  : BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 24, offset: const Offset(0, 12)),
-              ],
+              boxShadow: isLightMode 
+                  ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 32, offset: const Offset(0, 12))]
+                  : [
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.04), 
+                        blurRadius: 16, 
+                        spreadRadius: 1,
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3), 
+                        blurRadius: 24, 
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
             ),
             child: RepaintBoundary(
               child: ClipRRect(
@@ -424,6 +433,7 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                   child: Container(
                     decoration: BoxDecoration(
                       color: glassColor,
+                      borderRadius: BorderRadius.circular(24),
                       border: Border.all(color: borderColor, width: 1.0),
                     ),
                     child: Center(
@@ -471,13 +481,20 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                 height: targetHeight,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(currentRadius),
-                  boxShadow: [
-                    isLightMode
-                      ? BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 32, offset: const Offset(0, 12))
-                      : BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 24, offset: const Offset(0, 12)),
-                    if (!isLightMode)
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 4)),
-                  ],
+                  boxShadow: isLightMode
+                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 32, offset: const Offset(0, 12))]
+                      : [
+                          BoxShadow(
+                            color: Colors.white.withValues(alpha: 0.04), 
+                            blurRadius: 16, 
+                            spreadRadius: 1,
+                          ),
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3), 
+                            blurRadius: 24, 
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
                 ),
                 child: RepaintBoundary(
                   child: ClipRRect(
@@ -487,6 +504,7 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                       child: Container(
                         decoration: BoxDecoration(
                           color: glassColor,
+                          borderRadius: BorderRadius.circular(currentRadius),
                           border: Border.all(color: borderColor, width: 1.0),
                         ),
                         child: OverflowBox(
