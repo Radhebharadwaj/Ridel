@@ -395,8 +395,12 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     // 🚀 NEW: Handled Error & Loading States smoothly
     if (showLoading || _hasError || activeWeather == null) {
       return PointerInterceptor(
-        child: GestureDetector(
-          onTap: () async {
+        child: AnimatedAlign(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topLeft,
+          child: GestureDetector(
+            onTap: () async {
             debugPrint("🟡 [WEATHER DEBUG] FALLBACK BUTTON TAPPED!");
             if (_hasError || activeWeather == null) {
               AppHaptics.lightImpact();
@@ -447,6 +451,7 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                                 Text("Weather", style: GoogleFonts.inter(color: isLightMode ? Colors.black38 : Colors.white38, fontSize: 11, fontWeight: FontWeight.w500)),
                               ],
                             )
+                      ),
                     ),
                   ),
                 ),
@@ -464,10 +469,14 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
         double currentRadius = _currentState == WeatherState.compact ? 24 : 35;
 
         return PointerInterceptor(
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
+          child: AnimatedAlign(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            alignment: _currentState != WeatherState.compact ? Alignment.topCenter : Alignment.topLeft,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
               onTap: () {
                 debugPrint("🟢 [WEATHER DEBUG] MAIN CARD TAPPED!");
                 _handleTap();
@@ -547,7 +556,8 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
               ),
             ),
           ),
-        );
+        ),
+      );
   }
 
   Widget _buildCompactView(bool isNight, bool isLightMode) {

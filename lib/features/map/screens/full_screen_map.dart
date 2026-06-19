@@ -109,8 +109,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
     try {
       final isDark = brightness == Brightness.dark;
-      String finalStyle =
-          await MapStyleHelper.getOlaStyle(isDark, themeType: _currentTheme);
+      
+      // Load local style.json instead of making an API request
+      String finalStyle = await rootBundle.loadString('assets/style.json');
 
       if (mounted) {
         setState(() {
@@ -426,8 +427,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           // 🚀 1. SMOOTH WEATHER WIDGET (Mobile = Left, Desktop = Right)
           Positioned(
             top: topMargin,
-            left: isDesktop ? null : sideMargin,
-            right: isDesktop ? sideMargin : null,
+            left: sideMargin,
+            right: sideMargin,
             child: Selector<MapProvider, bool>(
               selector: (context, provider) => !provider.isActiveNavigation,
               builder: (context, showWeather, child) {
@@ -677,7 +678,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                             ? Colors.white
                                                 .withValues(alpha: 0.75)
                                             : const Color(0xFF0B0E17)
-                                                .withValues(alpha: 0.75),
+                                                .withValues(alpha: 0.65),
                                         borderRadius: BorderRadius.circular(50),
                                         border: !isDark
                                             ? Border.all(
@@ -685,8 +686,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                                     .withValues(alpha: 0.9),
                                                 width: 1.0)
                                             : Border.all(
-                                                color: Colors.white
-                                                    .withValues(alpha: 0.08),
+                                                color: const Color(0xFF7CA1FF)
+                                                    .withValues(alpha: 0.15),
                                                 width: 1.0)),
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,

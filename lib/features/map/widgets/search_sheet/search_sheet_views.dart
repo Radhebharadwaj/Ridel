@@ -1134,21 +1134,28 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        RidelLiquidButton(
-          width: 52,
-          height: 52,
-          shapeType: LiquidShapeType.circle,
+        RidelBounceButton(
           onTap: onTap,
-          child: Center(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              transitionBuilder: (child, animation) =>
-                  ScaleTransition(scale: animation, child: child),
-              child: Icon(
-                icon,
-                key: ValueKey<bool>(isActive),
-                size: 24,
-                color: iconColor,
+          child: Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: isActive 
+                  ? (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05))
+                  : Colors.transparent,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                transitionBuilder: (child, animation) =>
+                    ScaleTransition(scale: animation, child: child),
+                child: Icon(
+                  icon,
+                  key: ValueKey<bool>(isActive),
+                  size: 24,
+                  color: iconColor,
+                ),
               ),
             ),
           ),

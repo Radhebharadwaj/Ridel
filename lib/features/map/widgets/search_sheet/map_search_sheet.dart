@@ -1365,7 +1365,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
                                   final Color sheetBgColor = isDark
                                       ? const Color(0xFF0B0E17)
-                                          .withValues(alpha: 0.80)
+                                          .withValues(alpha: 0.65)
                                       : Colors.white.withValues(alpha: 0.65);
                                   const double blurAmount = 30.0;
 
@@ -1405,45 +1405,20 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                       borderRadius:
                                                           BorderRadius.circular(
                                                               sheetRadius),
-                                                      boxShadow: progress < 0.2
-                                                          ? [
-                                                              BoxShadow(
-                                                                  color: Colors
-                                                                      .black
-                                                                      .withValues(
-                                                                          alpha:
-                                                                              0.3),
-                                                                  blurRadius:
-                                                                      20,
-                                                                  offset:
-                                                                      const Offset(
-                                                                          0,
-                                                                          8)),
-                                                              BoxShadow(
-                                                                  color: Colors
-                                                                      .black
-                                                                      .withValues(
-                                                                          alpha:
-                                                                              0.1),
-                                                                  blurRadius: 4,
-                                                                  offset:
-                                                                      const Offset(
-                                                                          0,
-                                                                          2)),
-                                                            ]
-                                                          : [
-                                                              BoxShadow(
-                                                                  color: Colors
-                                                                      .black
-                                                                      .withValues(
-                                                                          alpha:
-                                                                              0.15),
-                                                                  blurRadius: 8,
-                                                                  offset:
-                                                                      const Offset(
-                                                                          0,
-                                                                          -2)),
-                                                            ],
+                                                      border: Border.all(
+                                                        color: isDark 
+                                                            ? const Color(0xFF38383A) // Premium iOS greyish non-white border
+                                                            : const Color(0xFFE5E5EA),
+                                                        width: 0.5,
+                                                      ),
+                                                      boxShadow: [
+                                                        BoxShadow(
+                                                          color: Colors.black.withValues(alpha: 0.25), // Softer shadow
+                                                          blurRadius: 20,
+                                                          offset: const Offset(0, 8),
+                                                          spreadRadius: 0,
+                                                        ),
+                                                      ],
                                                     ),
                                                     child: ClipRRect(
                                                       borderRadius:
@@ -1460,14 +1435,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                           decoration:
                                                               BoxDecoration(
                                                             color: sheetBgColor,
-                                                            border: Border.all(
-                                                              color: Colors
-                                                                  .white
-                                                                  .withValues(
-                                                                      alpha:
-                                                                          0.12),
-                                                              width: 1.0,
-                                                            ),
+                                                            // Inner border removed to prevent thickness stacking with AnimatedContainer
                                                           ),
                                                           child: Stack(
                                                             children: [

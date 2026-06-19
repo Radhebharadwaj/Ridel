@@ -58,6 +58,7 @@ dependencies:
   local_auth: ^3.0.0
   device_info_plus: ^12.4.0
   package_info_plus: ^8.3.0
+  flutter_native_splash: any
   
   # --- 8. EXTRAS ---
   speech_to_text: ^7.3.0
@@ -130,6 +131,7 @@ flutter_native_splash:
 flutter:
   uses-material-design: true
   assets:
+    - assets/style.json
     - assets/icon/icon.png
     - assets/icon/logo.png
     - assets/images/whatsapp.png

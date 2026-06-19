@@ -154,8 +154,7 @@ class _ThemeOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color highlightColor =
-        isDark ? const Color(0xFF00E5FF) : const Color(0xFF0A84FF);
+    const Color highlightColor = Color(0xFF0A84FF);
     final Color textColor =
         isSelected ? highlightColor : (isDark ? Colors.white : Colors.black87);
     final Color iconColor = isSelected
