@@ -11,7 +11,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/core/map/map_provider.dart';
@@ -29,7 +28,7 @@ import 'package:ridel/core/services/place_service.dart';
 import 'package:ridel/features/map/services/place_api_services.dart';
 import 'package:ridel/features/map/services/route_visualizer.dart';
 import 'package:ridel/features/map/services/route_engine_service.dart';
-import 'package:ridel/core/widgets/ridel_liquid_button.dart';
+
 import 'package:ridel/features/map/widgets/quick_action_buttons.dart';
 import 'package:ridel/core/utils/route_utils.dart';
 
@@ -152,12 +151,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     if (!mounted) return 0.15;
     final screenSize = MediaQuery.sizeOf(context);
     final safeBottom = MediaQuery.paddingOf(context).bottom;
-    final requiredHeight = 86.0 + safeBottom;
+    final requiredHeight = 88.0 + safeBottom; 
     return (requiredHeight / screenSize.height).clamp(0.05, 0.40);
   }
 
-  double get _safeMidSize => 0.35;
-  double get _safeMaxSize => 0.55;
+  double get _safeMidSize => 0.45;
+  double get _safeMaxSize => 0.90;
 
   // Helper to allow extensions to call setState without violating protected member rules
   void rebuildState(VoidCallback fn) {
@@ -206,28 +205,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     if (widget.isMapTabActive) unawaited(_slideController.forward());
 
     _searchFocus.addListener(() {
-      /* 🚀 CANCELLED THE FOCUS ASSASSIN
-      _pokeDash();
       if (_searchFocus.hasFocus) {
-        if (!_showSearchList) setState(() => _showSearchList = true);
-
-        try {
-          _nearbyTileCtrl.expand();
-        } catch (_) {}
+        _safeAnimateSheet(_safeMaxSize);
       } else {
-
-        try {
-          _nearbyTileCtrl.collapse();
-        } catch (_) {}
-        
-        final provider = Provider.of<MapProvider>(context, listen: false);
-        // ONLY revert to idle if we aren't actively looking at a selected place
-        if (provider.engine.mapUIState.value != MapUIState.placeSelected) {
-          provider.engine.setUIState(MapUIState.idle);
-        }
+        _safeAnimateSheet(_safeMidSize);
       }
       setState(() {});
-      */
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -415,7 +398,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       if (safeProvider.isAddingStopMode) {
         safeProvider.addIntermediateStop(place);
         safeProvider.setAddingStopMode(false);
-        
+
         setState(() {
           _searchCtrl.clear();
         });
@@ -423,7 +406,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         if (_sheetController.isAttached) {
           _safeAnimateSheet(_safeMidSize);
         }
-        
+
         FocusManager.instance.primaryFocus?.unfocus();
         return;
       }
@@ -686,6 +669,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       }
     });
   }
+
   void _triggerAddStopFocus() {
     setState(() {
       _searchCtrl.clear();
@@ -988,74 +972,74 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           setState(() => _isSearchMode = false);
           WidgetsBinding.instance
               .addPostFrameCallback((_) => widget.onSearchModeChanged(false));
-              
+
           provider.clearSearchSession(context);
           Provider.of<AppNavigationProvider>(context, listen: false).setTab(0);
         }
         return;
       }
 
-    // 2. Backup the current state in case the user wants to UNDO
-    final backupCoords = provider.targetDestination!;
-    final bool wasRouteDrawn = provider.isRouteCalculated;
-    final bool wasNavigating = provider.isActiveNavigation;
+      // 2. Backup the current state in case the user wants to UNDO
+      final backupCoords = provider.targetDestination!;
+      final bool wasRouteDrawn = provider.isRouteCalculated;
+      final bool wasNavigating = provider.isActiveNavigation;
 
-    // BACKUP UI STATE
-    final backupPlace = _selectedPlace;
-    final backupDestPlace = _destPlace;
-    final backupOriginPlace = _originPlace;
-    final backupSearchText = _searchCtrl.text;
-    final backupActiveField = _activeRoutingField;
-    final backupRoute = _currentRoute;
-    final backupShowSearchList = _showSearchList;
-    final backupShowDirections = _showDirections;
-    final double backupSheetSize =
-        _sheetController.isAttached ? _sheetController.size : _safeMinSize;
+      // BACKUP UI STATE
+      final backupPlace = _selectedPlace;
+      final backupDestPlace = _destPlace;
+      final backupOriginPlace = _originPlace;
+      final backupSearchText = _searchCtrl.text;
+      final backupActiveField = _activeRoutingField;
+      final backupRoute = _currentRoute;
+      final backupShowSearchList = _showSearchList;
+      final backupShowDirections = _showDirections;
+      final double backupSheetSize =
+          _sheetController.isAttached ? _sheetController.size : _safeMinSize;
 
-    // 3. Clear the Map and internal state
-    provider.clearNativeRoute();
-    provider.clearNativeDestinationPin();
-    provider.setTargetDestination(null);
-    provider.setDestinationSelected(false);
-    FocusScope.of(context).unfocus();
+      // 3. Clear the Map and internal state
+      provider.clearNativeRoute();
+      provider.clearNativeDestinationPin();
+      provider.setTargetDestination(null);
+      provider.setDestinationSelected(false);
+      FocusScope.of(context).unfocus();
 
-    // 4. Show Premium Custom Toast with Undo Action
-    ToastService.showActionToast(
-      context,
-      message: 'Route cancelled',
-      actionLabel: 'UNDO',
-      onActionTap: () async {
-        // 5. RESTORE LOGIC
-        provider.setTargetDestination(backupCoords);
-        provider.setDestinationSelected(true);
+      // 4. Show Premium Custom Toast with Undo Action
+      ToastService.showActionToast(
+        context,
+        message: 'Route cancelled',
+        actionLabel: 'UNDO',
+        onActionTap: () async {
+          // 5. RESTORE LOGIC
+          provider.setTargetDestination(backupCoords);
+          provider.setDestinationSelected(true);
 
-        setState(() {
-          _selectedPlace = backupPlace;
-          _destPlace = backupDestPlace;
-          _originPlace = backupOriginPlace;
-          _searchCtrl.text = backupSearchText;
-          _activeRoutingField = backupActiveField;
-          _currentRoute = backupRoute;
-          _showSearchList = backupShowSearchList;
-          _showDirections = backupShowDirections;
-        });
+          setState(() {
+            _selectedPlace = backupPlace;
+            _destPlace = backupDestPlace;
+            _originPlace = backupOriginPlace;
+            _searchCtrl.text = backupSearchText;
+            _activeRoutingField = backupActiveField;
+            _currentRoute = backupRoute;
+            _showSearchList = backupShowSearchList;
+            _showDirections = backupShowDirections;
+          });
 
-        await provider.addNativeDestinationPin(backupCoords);
-        if (wasRouteDrawn || wasNavigating) {
-          if (mounted) {
-            await provider.calculateAndDrawNativeRoute(
-                context, provider.currentNavMode);
-            if (wasNavigating) {
-              await provider.start3DNavigation();
+          await provider.addNativeDestinationPin(backupCoords);
+          if (wasRouteDrawn || wasNavigating) {
+            if (mounted) {
+              await provider.calculateAndDrawNativeRoute(
+                  context, provider.currentNavMode);
+              if (wasNavigating) {
+                await provider.start3DNavigation();
+              }
             }
           }
-        }
 
-        if (mounted && _sheetController.isAttached) {
-          _safeAnimateSheet(backupSheetSize);
-        }
-      },
-    );
+          if (mounted && _sheetController.isAttached) {
+            _safeAnimateSheet(backupSheetSize);
+          }
+        },
+      );
     });
   }
 
@@ -1186,7 +1170,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
     final isNav = provider.isActiveNavigation;
     final navCollapsedHeight = 110.0 + MediaQuery.paddingOf(context).bottom;
-    final navExpandedHeight = screenSize.height * 0.55;
+    final navExpandedHeight = screenSize.height * 0.90;
 
     final navExpandedS =
         (navExpandedHeight / screenSize.height).clamp(0.0, 1.0);
@@ -1218,7 +1202,23 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     _lastScreenHeight = screenSize.height;
     _lastScreenWidth = screenSize.width;
 
-    var snaps = <double>[minS, midS, maxS];
+    final double currentMaxS = (isKeyboardOpen && !isNav)
+        ? 1.0
+        : (isNav
+            ? maxS
+            : ((_searchFocus.hasFocus ||
+                    (_sheetController.isAttached &&
+                        _sheetController.size > _safeMidSize + 0.02))
+                ? maxS
+                : _safeMidSize));
+
+    var snaps = isNav
+        ? <double>[minS, midS, maxS]
+        : ((_searchFocus.hasFocus ||
+                (_sheetController.isAttached &&
+                    _sheetController.size > _safeMidSize + 0.02))
+            ? <double>[minS, midS, maxS]
+            : <double>[minS, midS]);
     snaps.sort();
     snaps = snaps.toSet().toList();
 
@@ -1304,11 +1304,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                 }
                               }
 
-                              final progress = ((notification.extent -
-                                          notification.minExtent) /
-                                      (notification.maxExtent -
-                                          notification.minExtent))
-                                  .clamp(0.0, 1.0);
+                              final progress = notification.extent;
                               if (_sheetProgress.value != progress) {
                                 _sheetProgress.value = progress;
                                 if (widget.onProgressChanged != null) {
@@ -1339,8 +1335,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                             initialChildSize:
                                 (isKeyboardOpen && !isNav) ? 1.0 : midS,
                             minChildSize: minS,
-                            maxChildSize:
-                                (isKeyboardOpen && !isNav) ? 1.0 : maxS,
+                            maxChildSize: currentMaxS,
                             snap: true,
                             snapAnimationDuration:
                                 const Duration(milliseconds: 350),
@@ -1356,17 +1351,31 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                           : navCollapsedHeight)
                                       : (_showDirections
                                           ? 190.0
-                                          : (lerpDouble(62.0, 76.0, progress) ??
-                                              62.0));
-                                  const currentSideMargin = 16.0;
-                                  final currentBottomMargin =
-                                      24.0 - (14.0 * progress);
-                                  const sheetRadius = 50.0;
+                                          : (lerpDouble(60.0, 76.0, progress) ??
+                                              60.0));
+                                  // 1. Determine the morph factor: 0.0 at 45% (midS), 1.0 at 90% (maxS)
+                                  final double morphFactor =
+                                      (progress <= _safeMidSize)
+                                          ? 0.0
+                                          : ((progress - _safeMidSize) /
+                                                  (_safeMaxSize - _safeMidSize))
+                                              .clamp(0.0, 1.0);
+
+                                  // Lifted to 28.0 to perfectly match the Home Screen Navigation Bar height
+                                  final currentBottomMargin = lerpDouble(28.0, 0.0, progress) ?? 28.0;
+                                  final currentSideMargin = lerpDouble(16.0, 0.0, progress) ?? 16.0;
+                                  
+                                  // Fast transition to 32.0 radius so the half-open state looks like a normal sheet (not a circle).
+                                  final sheetRadius = progress < 0.2 
+                                      ? (lerpDouble(100.0, 32.0, progress * 5) ?? 100.0) 
+                                      : 32.0;
+                                  final double opacity =
+                                      lerpDouble(0.65, 1.0, morphFactor)!;
 
                                   final Color sheetBgColor = isDark
                                       ? const Color(0xFF0B0E17)
-                                          .withValues(alpha: 0.65)
-                                      : Colors.white.withValues(alpha: 0.65);
+                                          .withValues(alpha: opacity)
+                                      : Colors.white.withValues(alpha: opacity);
                                   const double blurAmount = 30.0;
 
                                   return PointerInterceptor(
@@ -1384,8 +1393,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                 // 🎨 PERFORMANCE FIX: RepaintBoundary around Blur
                                                 RepaintBoundary(
                                                   child: AnimatedContainer(
-                                                    duration: const Duration(
-                                                        milliseconds: 200),
+                                                    // 🚀 CRITICAL: Disable animation during drag to prevent jitter, but keep it for Navigation mode height changes
+                                                    duration: provider
+                                                            .isActiveNavigation
+                                                        ? const Duration(
+                                                            milliseconds: 200)
+                                                        : Duration.zero,
                                                     curve: Curves.easeOutCubic,
                                                     height: provider
                                                             .isActiveNavigation
@@ -1397,33 +1410,36 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                       left: currentSideMargin,
                                                       right: currentSideMargin,
                                                       bottom: currentBottomMargin +
-                                                          MediaQuery.paddingOf(
-                                                                  context)
-                                                              .bottom,
+                                                              MediaQuery.paddingOf(
+                                                                      context)
+                                                                  .bottom,
                                                     ),
                                                     decoration: BoxDecoration(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              sheetRadius),
+                                                      color: sheetBgColor,
+                                                      borderRadius: BorderRadius.circular(sheetRadius),
                                                       border: Border.all(
-                                                        color: isDark 
-                                                            ? const Color(0xFF38383A) // Premium iOS greyish non-white border
-                                                            : const Color(0xFFE5E5EA),
+                                                        color: isDark
+                                                            ? const Color(
+                                                                0xFF38383A) // Premium iOS greyish non-white border
+                                                            : const Color(
+                                                                0xFFE5E5EA),
                                                         width: 0.5,
                                                       ),
                                                       boxShadow: [
                                                         BoxShadow(
-                                                          color: Colors.black.withValues(alpha: 0.25), // Softer shadow
+                                                          color: Colors.black
+                                                              .withValues(
+                                                                  alpha:
+                                                                      0.25), // Softer shadow
                                                           blurRadius: 20,
-                                                          offset: const Offset(0, 8),
+                                                          offset: const Offset(
+                                                              0, 8),
                                                           spreadRadius: 0,
                                                         ),
                                                       ],
                                                     ),
                                                     child: ClipRRect(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              sheetRadius),
+                                                      borderRadius: BorderRadius.circular(sheetRadius),
                                                       child: BackdropFilter(
                                                         filter:
                                                             ImageFilter.blur(
@@ -1435,40 +1451,63 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                           decoration:
                                                               BoxDecoration(
                                                             color: sheetBgColor,
-                                                            // Inner border removed to prevent thickness stacking with AnimatedContainer
                                                           ),
                                                           child: Stack(
                                                             children: [
                                                               // Bottom Layer: Scrollable Content
                                                               Positioned.fill(
-                                                                child: ScrollConfiguration(
-                                                                  behavior: ScrollConfiguration.of(context).copyWith(
-                                                                    scrollbars: false,
-                                                                    dragDevices: { PointerDeviceKind.touch, PointerDeviceKind.mouse },
+                                                                child:
+                                                                    ScrollConfiguration(
+                                                                  behavior: ScrollConfiguration.of(
+                                                                          context)
+                                                                      .copyWith(
+                                                                    scrollbars:
+                                                                        false,
+                                                                    dragDevices: {
+                                                                      PointerDeviceKind
+                                                                          .touch,
+                                                                      PointerDeviceKind
+                                                                          .mouse
+                                                                    },
                                                                   ),
-                                                                  child: CustomScrollView(
-                                                                    controller: scrollController,
-                                                                    physics: const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                                                                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                                                                  child:
+                                                                      CustomScrollView(
+                                                                    controller:
+                                                                        scrollController,
+                                                                    physics: const ClampingScrollPhysics(
+                                                                        parent:
+                                                                            AlwaysScrollableScrollPhysics()),
+                                                                    keyboardDismissBehavior:
+                                                                        ScrollViewKeyboardDismissBehavior
+                                                                            .onDrag,
                                                                     slivers: [
                                                                       SliverPadding(
-                                                                        padding: EdgeInsets.only(top: dynamicHeaderHeight),
+                                                                        padding:
+                                                                            EdgeInsets.only(top: dynamicHeaderHeight),
                                                                       ),
                                                                       SliverToBoxAdapter(
-                                                                        child: AnimatedOpacity(
-                                                                          duration: const Duration(milliseconds: 150),
-                                                                          opacity: (!provider.isActiveNavigation && progress > 0.05) ? 1.0 : 0.0,
+                                                                        child:
+                                                                            AnimatedOpacity(
+                                                                          duration:
+                                                                              const Duration(milliseconds: 150),
+                                                                          opacity: (!provider.isActiveNavigation && progress > 0.05)
+                                                                              ? 1.0
+                                                                              : 0.0,
                                                                           child: (!provider.isActiveNavigation && progress > 0.05)
                                                                               ? _buildSheetContent(isDark, progress, isExpanded: isKeyboardOpen)
                                                                               : const SizedBox(),
                                                                         ),
                                                                       ),
                                                                       SliverPadding(
-                                                                        padding: EdgeInsets.only(bottom: keyboardHeight),
+                                                                        padding:
+                                                                            EdgeInsets.only(bottom: keyboardHeight),
                                                                       ),
                                                                       SliverFillRemaining(
-                                                                        hasScrollBody: false,
-                                                                        child: Container(color: Colors.transparent),
+                                                                        hasScrollBody:
+                                                                            false,
+                                                                        child: Container(
+                                                                            color:
+                                                                                Colors.transparent),
                                                                       ),
                                                                     ],
                                                                   ),
@@ -1479,33 +1518,58 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                 top: 0,
                                                                 left: 0,
                                                                 right: 0,
-                                                                child: Container(
-                                                                  decoration: BoxDecoration(
-                                                                    gradient: LinearGradient(
-                                                                      begin: Alignment.topCenter,
-                                                                      end: Alignment.bottomCenter,
+                                                                child:
+                                                                    Container(
+                                                                  decoration:
+                                                                      BoxDecoration(
+                                                                    gradient:
+                                                                        LinearGradient(
+                                                                      begin: Alignment
+                                                                          .topCenter,
+                                                                      end: Alignment
+                                                                          .bottomCenter,
                                                                       colors: [
                                                                         sheetBgColor, // Exact match to the sheet's base color and alpha
                                                                         sheetBgColor, // Maintain camouflage over the header content
-                                                                        sheetBgColor.withValues(alpha: 0.0), // Smoothly fade to transparent
+                                                                        sheetBgColor.withValues(
+                                                                            alpha:
+                                                                                0.0), // Smoothly fade to transparent
                                                                       ],
-                                                                      stops: const [0.0, 0.75, 1.0], // Fade occurs only at the bottom 25% edge
+                                                                      stops: const [
+                                                                        0.0,
+                                                                        0.75,
+                                                                        1.0
+                                                                      ], // Fade occurs only at the bottom 25% edge
                                                                     ),
                                                                   ),
-                                                                  height: dynamicHeaderHeight,
-                                                                  child: GestureDetector(
+                                                                  height:
+                                                                      dynamicHeaderHeight,
+                                                                  child:
+                                                                      GestureDetector(
                                                                     onTap: () {
-                                                                      if (progress < 0.1) {
+                                                                      if (progress <
+                                                                          0.1) {
                                                                         _expandToFull();
                                                                       }
                                                                     },
-                                                                    behavior: HitTestBehavior.translucent,
-                                                                    child: AnimatedSwitcher(
-                                                                      duration: const Duration(milliseconds: 500),
-                                                                      switchInCurve: Curves.easeInCubic,
-                                                                      switchOutCurve: Curves.easeOutCubic,
+                                                                    behavior:
+                                                                        HitTestBehavior
+                                                                            .translucent,
+                                                                    child:
+                                                                        AnimatedSwitcher(
+                                                                      duration: const Duration(
+                                                                          milliseconds:
+                                                                              500),
+                                                                      switchInCurve:
+                                                                          Curves
+                                                                              .easeInCubic,
+                                                                      switchOutCurve:
+                                                                          Curves
+                                                                              .easeOutCubic,
                                                                       child: (_showDirections
-                                                                          ? _buildDirectionsHeader(dynamicHeaderHeight, isDark)
+                                                                          ? _buildDirectionsHeader(
+                                                                              dynamicHeaderHeight,
+                                                                              isDark)
                                                                           : (_selectedPlace != null
                                                                               ? _buildSelectedPlaceHeader(dynamicHeaderHeight, progress, isDark)
                                                                               : _buildSearchHeader(dynamicHeaderHeight, progress, isDark))),
@@ -1515,9 +1579,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                               ),
                                                             ],
                                                           ),
-                                                ),
-                                              ),
-                                            ),
+                                                        ),
+                                                      ),
+                                                    ),
                                                   ),
                                                 ),
                                                 Positioned(

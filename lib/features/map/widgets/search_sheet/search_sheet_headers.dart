@@ -411,43 +411,54 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                           if (_isNavSheetExpanded)
                             Padding(
                               padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                              child: RidelBounceButton(
-                                scaleFactor: 0.95,
-                                onTap: () {
+                              child: CupertinoButton(
+                                padding: EdgeInsets.zero,
+                                onPressed: () {
                                   debugPrint('End Route: Start');
                                   AppHaptics.heavyImpact();
                                   rebuildState(
                                       () => _isNavSheetExpanded = false);
-                                  
+
                                   Future.microtask(() async {
                                     if (!mounted) return;
                                     final p = Provider.of<MapProvider>(context,
                                         listen: false);
-                                        
-                                    debugPrint('End Route: Calling cancelAndClearRoute');
+
+                                    debugPrint(
+                                        'End Route: Calling cancelAndClearRoute');
                                     try {
                                       await p.cancelAndClearRoute();
-                                      debugPrint('End Route: cancelAndClearRoute success');
+                                      debugPrint(
+                                          'End Route: cancelAndClearRoute success');
                                     } catch (e) {
-                                      debugPrint('End Route Cleanup Failed: $e');
+                                      debugPrint(
+                                          'End Route Cleanup Failed: $e');
                                     } finally {
-                                      debugPrint('End Route: Ensuring UI Dismissal');
+                                      debugPrint(
+                                          'End Route: Ensuring UI Dismissal');
                                       p.isActiveNavigation = false;
                                       p.clearError(); // Safely triggers notifyListeners()
 
                                       // Cinematic Flow 4: End Route Focus (Back to neutral 2D view)
-                                      if (p.controller != null && p.currentLocation != null) {
-                                        p.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+                                      if (p.controller != null &&
+                                          p.currentLocation != null) {
+                                        p.controller!
+                                            .updateMyLocationTrackingMode(
+                                                MyLocationTrackingMode
+                                                    .tracking);
                                         p.controller!.animateCamera(
                                           CameraUpdate.newCameraPosition(
                                             CameraPosition(
-                                              target: LatLng(p.currentLocation!.latitude, p.currentLocation!.longitude),
+                                              target: LatLng(
+                                                  p.currentLocation!.latitude,
+                                                  p.currentLocation!.longitude),
                                               zoom: 14.0,
                                               tilt: 0.0,
                                               bearing: 0.0,
                                             ),
                                           ),
-                                          duration: const Duration(milliseconds: 1000),
+                                          duration: const Duration(
+                                              milliseconds: 1000),
                                         );
                                       }
 
@@ -455,26 +466,31 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                                     }
                                   });
                                 },
-                                child: RidelLiquidButton(
+                                child: Container(
                                   width: double.infinity,
                                   height: 56,
-                                  enableStretch: true,
-                                  glassTint: const Color(0xFFFF3B30)
-                                      .withValues(alpha: 0.18),
-                                  child: Row(
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFF3B30).withValues(
+                                        alpha: 0.20), // Premium Apple Red tint
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                        color: const Color(0xFFFF3B30)
+                                            .withValues(alpha: 0.3)),
+                                  ),
+                                  child: const Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
                                         'End Route',
-                                        style: GoogleFonts.inter(
-                                          fontWeight: FontWeight.w800,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
                                           fontSize: 16,
                                           color: Colors.white,
                                           letterSpacing: -0.3,
                                         ),
                                       ),
-                                      const SizedBox(width: 8),
-                                      const Icon(
+                                      SizedBox(width: 8),
+                                      Icon(
                                         Icons.stop_circle_outlined,
                                         size: 20,
                                         color: Colors.white,
@@ -977,118 +993,112 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-              _buildPremiumCircleButton(
-                icon: CupertinoIcons.share,
-                iconColor: btnIconColor,
-                bgColor: mattePillBase,
-                onTap: () async {
-                  final shareLink =
-                      'https://maps.apple/p/~${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
+            _buildPremiumCircleButton(
+              icon: CupertinoIcons.share,
+              iconColor: btnIconColor,
+              bgColor: mattePillBase,
+              onTap: () async {
+                final shareLink =
+                    'https://maps.apple/p/~${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
 
-                  await Clipboard.setData(ClipboardData(text: shareLink));
+                await Clipboard.setData(ClipboardData(text: shareLink));
 
-                  // 🚀 FIX: Removed Ugly White Snackbar
-                  _showPremiumNotification(
-                    'Link copied successfully!',
-                  );
+                // 🚀 FIX: Removed Ugly White Snackbar
+                _showPremiumNotification(
+                  'Link copied successfully!',
+                );
+              },
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ShaderMask(
+                shaderCallback: (Rect bounds) {
+                  return const LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black,
+                      Colors.black,
+                      Colors.transparent
+                    ],
+                    stops: [0.0, 0.08, 0.92, 1.0],
+                  ).createShader(bounds);
                 },
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ShaderMask(
-                  shaderCallback: (Rect bounds) {
-                    return const LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black,
-                        Colors.black,
-                        Colors.transparent
-                      ],
-                      stops: [0.0, 0.08, 0.92, 1.0],
-                    ).createShader(bounds);
-                  },
-                  blendMode: BlendMode.dstIn,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text(
-                          _selectedPlace!.name,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.clip,
-                          style: TextStyle(
-                            color: textColor,
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                            height: 1.2,
-                          ),
+                blendMode: BlendMode.dstIn,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        _selectedPlace!.name,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.clip,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          height: 1.2,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          subtitleText,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.clip,
-                          style: TextStyle(
-                            color: subTextColor,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            height: 1.2,
-                          ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitleText,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.clip,
+                        style: TextStyle(
+                          color: subTextColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          height: 1.2,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-              _buildPremiumCircleButton(
-                icon: Icons.close_rounded,
-                iconColor: btnIconColor,
-                bgColor: mattePillBase,
-                onTap: () {
-                  final provider =
-                      Provider.of<MapProvider>(context, listen: false);
-                  _handleCancelRoute(context, provider);
-                },
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 12),
+            _buildPremiumCircleButton(
+              icon: Icons.close_rounded,
+              iconColor: btnIconColor,
+              bgColor: mattePillBase,
+              onTap: () {
+                final provider =
+                    Provider.of<MapProvider>(context, listen: false);
+                _handleCancelRoute(context, provider);
+              },
+            ),
+          ],
         ),
-      );
+      ),
+    );
   }
 
   Widget _buildSearchHeader(double headerHeight, double progress, bool isDark) {
     final isDesktop = MediaQuery.of(context).size.width > 600;
-    // 🚀 PREMIUM GLASS SEARCH PILL
     final pillBaseColor = isDark
         ? Colors.black.withValues(alpha: 0.4)
         : Colors.white.withValues(alpha: 0.9);
     final borderColor = Colors.white.withValues(alpha: 0.05);
 
-    // Original closed state was 8.0, new open is 24.0
     final horizontalPadding = lerpDouble(8.0, 24.0, progress) ?? 8.0;
-    // Original closed state was 46.0, new open is 54.0
-    final dynamicHeight = lerpDouble(46.0, 54.0, progress) ?? 46.0;
-    // Original closed state was 100.0, new open is 20.0
+    final dynamicHeight = lerpDouble(44.0, 54.0, progress) ?? 44.0;
     final dynamicRadius = lerpDouble(100.0, 20.0, progress) ?? 100.0;
 
-    // Original closed top padding was statically 6.0, new open pushes down to 18.0
-    final topPadding = lerpDouble(6.0, 18.0, progress) ?? 6.0;
-    // Bottom padding was always 10.0 in the original code
-    const bottomPadding = 10.0;
+    // Strictly equal vertical margins
+    final topPadding = lerpDouble(7.0, 18.0, progress) ?? 7.0;
+    final bottomPadding = lerpDouble(9.0, 8.0, progress) ?? 9.0;
 
     return SizedBox(
       key: const ValueKey('search_header'),
       height: headerHeight,
       child: Padding(
-        // Use the new dynamic top padding here
         padding: EdgeInsets.only(
             top: topPadding,
             bottom: bottomPadding,
@@ -1285,7 +1295,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(14.0),
         decoration: BoxDecoration(
           color: isActive
               ? _MapSearchSheetState.neonCyan.withValues(alpha: 0.15)

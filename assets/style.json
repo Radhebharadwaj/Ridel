@@ -17,24 +17,26 @@
   "sources": {
     "openmaptiles": {
       "type": "vector",
+      "maxzoom": 14,
       "tiles": [
         "https://api.olamaps.io/tiles/vector/v1/data/planet/{z}/{x}/{y}.pbf?api_key=LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs"
       ]
     },
     "vectordata": {
       "type": "vector",
+      "maxzoom": 14,
       "tiles": [
         "https://api.olamaps.io/tiles/vector/v1/data/vectordata/{z}/{x}/{y}.pbf?api_key=LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs"
       ]
     },
     "street": {
       "type": "vector",
+      "maxzoom": 14,
       "tiles": [
         "https://api.olamaps.io/tiles/vector/v1/data/street/{z}/{x}/{y}.pbf?api_key=LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs"
       ]
     }
   },
-  "sprite": "https://api.olamaps.io/tiles/vector/v1/styles/default-dark-standard/sprite?api_key=LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs",
   "glyphs": "https://api.olamaps.io/tiles/vector/v1/fonts/{fontstack}/{range}.pbf?api_key=LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs",
   "layers": [
     {
@@ -1679,18 +1681,6 @@
           8,
           0.8
         ],
-        "line-pattern": {
-          "stops": [
-            [
-              6,
-              ""
-            ],
-            [
-              10,
-              ""
-            ]
-          ]
-        },
         "line-gap-width": {
           "stops": [
             [
@@ -1876,7 +1866,6 @@
         "visibility": "visible"
       },
       "paint": {
-        "fill-pattern": "pedestrian_polygon",
         "fill-color": "rgba(48, 51, 62, 1)"
       }
     },
@@ -4199,12 +4188,20 @@
         "fill-extrusion-color": "#28282B",
         "fill-extrusion-opacity": 0.65,
         "fill-extrusion-height": [
-          "get",
-          "height"
+          "coalesce",
+          [
+            "get",
+            "height"
+          ],
+          0
         ],
         "fill-extrusion-base": [
-          "get",
-          "min_height"
+          "coalesce",
+          [
+            "get",
+            "min_height"
+          ],
+          0
         ]
       }
     },
@@ -4225,16 +4222,24 @@
         "visibility": "visible"
       },
       "paint": {
-        "fill-extrusion-color": "rgba(41, 46, 60, 1)",
-        "fill-extrusion-height": {
-          "property": "render_height",
-          "type": "identity"
-        },
-        "fill-extrusion-base": {
-          "property": "render_min_height",
-          "type": "identity"
-        },
-        "fill-extrusion-opacity": 1
+        "fill-extrusion-color": "#28282B",
+        "fill-extrusion-opacity": 0.65,
+        "fill-extrusion-height": [
+          "coalesce",
+          [
+            "get",
+            "height"
+          ],
+          0
+        ],
+        "fill-extrusion-base": [
+          "coalesce",
+          [
+            "get",
+            "min_height"
+          ],
+          0
+        ]
       }
     },
     {
@@ -4543,8 +4548,7 @@
         "symbol-placement": "line",
         "visibility": "visible",
         "text-pitch-alignment": "viewport",
-        "symbol-spacing": 500,
-        "icon-optional": true
+        "symbol-spacing": 500
       },
       "paint": {
         "text-color": "rgba(20, 107, 180, 1)",
@@ -4571,8 +4575,7 @@
         "text-max-width": 5,
         "text-size": 13,
         "visibility": "visible",
-        "text-transform": "none",
-        "icon-optional": true
+        "text-transform": "none"
       },
       "paint": {
         "text-color": "rgba(20, 107, 180, 1)",
@@ -4706,24 +4709,10 @@
         1
       ],
       "layout": {
-        "icon-image": "arrow",
         "symbol-placement": "line",
         "text-font": [],
         "visibility": "visible",
         "text-field": "",
-        "icon-size": {
-          "stops": [
-            [
-              16,
-              0.4
-            ],
-            [
-              18,
-              0.6
-            ]
-          ]
-        },
-        "icon-pitch-alignment": "viewport",
         "symbol-spacing": {
           "stops": [
             [
@@ -4739,14 +4728,11 @@
               800
             ]
           ]
-        },
-        "icon-optional": true
+        }
       },
       "paint": {
         "text-color": "rgba(0, 0, 0, 1)",
         "text-halo-color": "rgba(255, 255, 255, 1)",
-        "icon-opacity": 0.35,
-        "icon-translate-anchor": "map",
         "text-translate-anchor": "map"
       }
     },
@@ -4763,23 +4749,9 @@
       ],
       "layout": {
         "symbol-placement": "line",
-        "icon-rotate": 180,
         "text-font": [],
         "visibility": "visible",
         "text-field": "",
-        "icon-image": "Arrow",
-        "icon-size": {
-          "stops": [
-            [
-              16,
-              0.4
-            ],
-            [
-              18,
-              0.6
-            ]
-          ]
-        },
         "symbol-spacing": {
           "stops": [
             [
@@ -4795,15 +4767,9 @@
               800
             ]
           ]
-        },
-        "icon-pitch-alignment": "viewport",
-        "icon-optional": true
+        }
       },
-      "paint": {
-        "icon-color": "rgba(0, 0, 0, 1)",
-        "icon-halo-color": "rgba(255, 255, 255, 1)",
-        "icon-opacity": 0.35
-      }
+      "paint": {}
     },
     {
       "id": "road_label_link",
@@ -4882,8 +4848,7 @@
         },
         "text-pitch-alignment": "viewport",
         "text-letter-spacing": 0.02,
-        "text-transform": "uppercase",
-        "icon-optional": true
+        "text-transform": "uppercase"
       },
       "paint": {
         "text-color": "rgba(104, 104, 104, 1)",
@@ -4954,8 +4919,7 @@
         },
         "text-pitch-alignment": "viewport",
         "text-letter-spacing": 0.02,
-        "text-transform": "uppercase",
-        "icon-optional": true
+        "text-transform": "uppercase"
       },
       "paint": {
         "text-color": "rgba(104, 104, 104, 1)",
@@ -5026,8 +4990,7 @@
         },
         "text-pitch-alignment": "viewport",
         "text-letter-spacing": 0.02,
-        "text-transform": "uppercase",
-        "icon-optional": true
+        "text-transform": "uppercase"
       },
       "paint": {
         "text-color": "rgba(104, 104, 104, 1)",
@@ -5098,69 +5061,13 @@
         },
         "text-pitch-alignment": "viewport",
         "text-letter-spacing": 0.02,
-        "text-transform": "uppercase",
-        "icon-optional": true
+        "text-transform": "uppercase"
       },
       "paint": {
         "text-color": "rgba(104, 104, 104, 1)",
         "text-halo-color": "rgba(0, 0, 0, 1)",
         "text-halo-width": 1,
         "text-opacity": 1
-      }
-    },
-    {
-      "id": "road_crossing",
-      "type": "symbol",
-      "source": "openmaptiles",
-      "source-layer": "road_furniture",
-      "minzoom": 16.2,
-      "layout": {
-        "icon-image": "zebra_crossing",
-        "icon-size": {
-          "stops": [
-            [
-              16.2,
-              0.2
-            ],
-            [
-              18,
-              0.5
-            ],
-            [
-              19,
-              0.8
-            ],
-            [
-              20,
-              1.4
-            ]
-          ]
-        },
-        "visibility": "none",
-        "text-optional": false,
-        "icon-optional": true,
-        "text-font": [
-          "Gentona_Medium"
-        ],
-        "icon-anchor": "center",
-        "icon-rotate": [
-          "to-number",
-          [
-            "get",
-            "angle"
-          ]
-        ],
-        "icon-pitch-alignment": "map",
-        "text-pitch-alignment": "map",
-        "text-rotation-alignment": "map",
-        "icon-rotation-alignment": "map",
-        "symbol-z-order": "viewport-y",
-        "icon-allow-overlap": false,
-        "icon-ignore-placement": false
-      },
-      "paint": {
-        "text-translate-anchor": "map",
-        "icon-translate-anchor": "map"
       }
     },
     {
@@ -5213,7 +5120,6 @@
         },
         "text-size": 13,
         "text-padding": 2,
-        "icon-size": 0.72,
         "text-variable-anchor": [
           "top",
           "bottom",
@@ -5234,11 +5140,9 @@
           1.2
         ],
         "visibility": "visible",
-        "icon-image": "general",
         "text-font": [
           "Gentona_Medium"
-        ],
-        "icon-optional": true
+        ]
       },
       "paint": {
         "text-color": "rgba(100, 127, 168, 1)",
@@ -5272,7 +5176,6 @@
         },
         "text-size": 13,
         "text-padding": 2,
-        "icon-size": 0.72,
         "text-variable-anchor": [
           "top",
           "bottom",
@@ -5293,11 +5196,9 @@
           1.2
         ],
         "visibility": "visible",
-        "icon-image": "residential",
         "text-font": [
           "Gentona_Medium"
-        ],
-        "icon-optional": true
+        ]
       },
       "paint": {
         "text-color": "rgba(100, 127, 168, 1)",
@@ -5334,8 +5235,6 @@
           0.9,
           0.9
         ],
-        "icon-image": "bus",
-        "icon-size": 0.6,
         "text-line-height": [
           "step",
           [
@@ -5347,7 +5246,6 @@
         ],
         "visibility": "visible",
         "text-optional": false,
-        "icon-optional": true,
         "text-font": [
           "Gentona_Medium"
         ]
@@ -5399,8 +5297,6 @@
           0.9,
           0.9
         ],
-        "icon-image": "railway",
-        "icon-size": 0.6,
         "text-line-height": [
           "step",
           [
@@ -5412,7 +5308,6 @@
         ],
         "visibility": "visible",
         "text-optional": false,
-        "icon-optional": true,
         "text-font": [
           "Gentona_Medium"
         ]
@@ -5470,20 +5365,6 @@
           0.9,
           0.9
         ],
-        "icon-image": "metro_station",
-        "icon-size": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          10,
-          0.45,
-          11,
-          0.72
-        ],
         "text-line-height": [
           "step",
           [
@@ -5495,7 +5376,6 @@
         ],
         "visibility": "visible",
         "text-optional": false,
-        "icon-optional": true,
         "text-font": [
           "Gentona_Medium"
         ]
@@ -5549,24 +5429,9 @@
           1,
           1
         ],
-        "icon-image": "monorail",
-        "icon-size": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          10,
-          0.45,
-          11,
-          0.72
-        ],
         "text-line-height": 1,
         "visibility": "visible",
         "text-optional": false,
-        "icon-optional": true,
         "text-font": [
           "Gentona_Medium"
         ]
@@ -5627,8 +5492,6 @@
           0.9,
           1.2
         ],
-        "icon-image": "{class}",
-        "icon-size": 0.72,
         "text-line-height": [
           "step",
           [
@@ -5640,7 +5503,6 @@
         ],
         "visibility": "visible",
         "text-optional": false,
-        "icon-optional": true,
         "text-font": [
           "Gentona_Medium"
         ],
@@ -5739,19 +5601,6 @@
         "text-halo-color": "rgba(0, 0, 0, 1)",
         "text-halo-width": 1
       }
-    },
-    {
-      "id": "3d_model_data",
-      "type": "symbol",
-      "source": "vectordata",
-      "source-layer": "3d_model",
-      "minzoom": 16,
-      "layout": {
-        "icon-size": 0.72,
-        "icon-image": "model",
-        "icon-optional": true
-      },
-      "paint": {}
     },
     {
       "id": "poi_tbt",
@@ -5860,8 +5709,6 @@
           0.9,
           1.2
         ],
-        "icon-image": "{class}",
-        "icon-size": 0.72,
         "text-line-height": [
           "step",
           [
@@ -5873,7 +5720,6 @@
         ],
         "visibility": "none",
         "text-optional": false,
-        "icon-optional": true,
         "text-font": [
           "Gentona_Medium"
         ],
@@ -5960,7 +5806,6 @@
           0,
           0
         ],
-        "icon-text-fit": "none",
         "text-line-height": 1,
         "symbol-spacing": {
           "stops": [
@@ -5984,8 +5829,7 @@
         },
         "text-pitch-alignment": "viewport",
         "text-rotation-alignment": "auto",
-        "text-letter-spacing": 0.06,
-        "icon-optional": true
+        "text-letter-spacing": 0.06
       },
       "paint": {
         "text-color": "rgba(154, 154, 154, 1)",
@@ -6045,8 +5889,7 @@
           ]
         },
         "text-pitch-alignment": "viewport",
-        "text-letter-spacing": 0.06,
-        "icon-optional": true
+        "text-letter-spacing": 0.06
       },
       "paint": {
         "text-color": "rgba(154, 154, 154, 1)",
@@ -6106,8 +5949,7 @@
         },
         "text-pitch-alignment": "viewport",
         "text-letter-spacing": 0.06,
-        "text-transform": "uppercase",
-        "icon-optional": true
+        "text-transform": "uppercase"
       },
       "paint": {
         "text-color": "rgba(154, 154, 154, 1)",
@@ -6115,31 +5957,6 @@
         "text-halo-width": 1,
         "text-opacity": 1
       }
-    },
-    {
-      "id": "poi_traffic_signal",
-      "type": "symbol",
-      "source": "openmaptiles",
-      "source-layer": "road_furniture",
-      "minzoom": 16,
-      "filter": [
-        "==",
-        "class",
-        "traffic_signals"
-      ],
-      "layout": {
-        "icon-image": "traffic_signal",
-        "icon-size": 0.72,
-        "visibility": "visible",
-        "text-optional": false,
-        "icon-optional": true,
-        "text-font": [
-          "Gentona_Medium"
-        ],
-        "icon-anchor": "bottom",
-        "icon-pitch-alignment": "auto"
-      },
-      "paint": {}
     },
     {
       "id": "ola-pois",
@@ -6174,11 +5991,8 @@
           1.2
         ],
         "text-line-height": 1.2,
-        "icon-image": "{types}",
-        "icon-size": 0.72,
         "visibility": "visible",
         "text-optional": false,
-        "icon-optional": true,
         "text-font": [
           "Gentona_Medium"
         ]
@@ -6245,8 +6059,6 @@
         ]
       ],
       "layout": {
-        "icon-image": "national_highway",
-        "icon-rotation-alignment": "viewport",
         "symbol-placement": {
           "base": 1,
           "stops": [
@@ -6272,32 +6084,16 @@
         "text-rotation-alignment": "viewport",
         "text-size": 10,
         "text-line-height": 0.95,
-        "icon-size": 0.7,
-        "icon-text-fit": "both",
-        "icon-text-fit-padding": [
-          6.5,
-          14,
-          9,
-          14
-        ],
         "visibility": "visible",
         "text-pitch-alignment": "auto",
-        "icon-pitch-alignment": "auto",
-        "icon-padding": 2,
-        "icon-anchor": "center",
         "text-transform": "uppercase",
         "text-letter-spacing": 0.02,
         "text-padding": 2,
         "text-allow-overlap": false,
-        "text-keep-upright": true,
-        "icon-optional": true
+        "text-keep-upright": true
       },
       "paint": {
-        "text-color": "rgba(72, 49, 5, 1)",
-        "icon-opacity": 1,
-        "icon-color": "rgba(0, 0, 0, 0)",
-        "icon-halo-width": 0,
-        "icon-halo-color": "rgba(0, 0, 0, 0)"
+        "text-color": "rgba(72, 49, 5, 1)"
       }
     },
     {
@@ -6341,8 +6137,7 @@
           ]
         },
         "text-transform": "uppercase",
-        "visibility": "visible",
-        "icon-optional": true
+        "visibility": "visible"
       },
       "paint": {
         "text-color": "rgba(154, 154, 154, 1)",
@@ -6392,10 +6187,8 @@
         },
         "text-transform": "uppercase",
         "visibility": "visible",
-        "icon-text-fit": "none",
         "text-padding": 50,
-        "text-line-height": 1.2,
-        "icon-optional": true
+        "text-line-height": 1.2
       },
       "paint": {
         "text-color": "rgba(154, 154, 154, 1)",
@@ -6441,8 +6234,7 @@
             ]
           ]
         },
-        "visibility": "visible",
-        "icon-optional": true
+        "visibility": "visible"
       },
       "paint": {
         "text-color": "rgba(154, 154, 154, 1)",
@@ -6484,8 +6276,7 @@
             ]
           ]
         },
-        "visibility": "visible",
-        "icon-optional": true
+        "visibility": "visible"
       },
       "paint": {
         "text-color": "rgba(154, 154, 154, 1)",
@@ -6519,7 +6310,6 @@
         ]
       ],
       "layout": {
-        "icon-image": "",
         "text-anchor": "bottom",
         "text-field": "{name}",
         "text-font": [
@@ -6545,8 +6335,7 @@
         },
         "visibility": "visible",
         "text-transform": "uppercase",
-        "text-letter-spacing": 0,
-        "icon-optional": true
+        "text-letter-spacing": 0
       },
       "paint": {
         "text-color": "rgba(154, 154, 154, 1)",
@@ -6567,8 +6356,6 @@
         "iata"
       ],
       "layout": {
-        "icon-image": "airport",
-        "icon-size": 0.72,
         "text-radial-offset": 1,
         "text-justify": "auto",
         "text-variable-anchor": [
@@ -6583,7 +6370,6 @@
         ],
         "text-max-width": 9,
         "text-optional": false,
-        "icon-optional": true,
         "text-padding": 4,
         "text-size": 13,
         "visibility": "visible",
@@ -6639,13 +6425,9 @@
             ]
           ]
         },
-        "icon-allow-overlap": true,
-        "icon-optional": true,
-        "icon-anchor": "bottom",
         "visibility": "visible",
         "text-justify": "center",
         "symbol-z-order": "auto",
-        "icon-size": 0.65,
         "text-offset": [
           0.5,
           0.5
@@ -6699,13 +6481,9 @@
             ]
           ]
         },
-        "icon-allow-overlap": true,
-        "icon-optional": true,
-        "icon-anchor": "bottom",
         "visibility": "visible",
         "text-justify": "center",
         "symbol-z-order": "auto",
-        "icon-size": 0.65,
         "text-offset": [
           0.5,
           0.5
@@ -6759,13 +6537,9 @@
             ]
           ]
         },
-        "icon-allow-overlap": true,
-        "icon-optional": true,
-        "icon-anchor": "bottom",
         "visibility": "visible",
         "text-justify": "center",
         "symbol-z-order": "auto",
-        "icon-size": 0.65,
         "text-offset": [
           0.5,
           0.5
@@ -6819,13 +6593,9 @@
             ]
           ]
         },
-        "icon-allow-overlap": true,
-        "icon-optional": true,
-        "icon-anchor": "bottom",
         "visibility": "visible",
         "text-justify": "center",
         "symbol-z-order": "auto",
-        "icon-size": 0.65,
         "text-offset": [
           0.5,
           0.5
@@ -6860,7 +6630,6 @@
         ]
       ],
       "layout": {
-        "icon-size": 0.65,
         "text-anchor": "center",
         "text-field": "{name}",
         "text-font": [
@@ -6880,9 +6649,6 @@
             ]
           ]
         },
-        "icon-allow-overlap": true,
-        "icon-optional": true,
-        "icon-anchor": "bottom",
         "visibility": "visible",
         "text-justify": "center",
         "symbol-z-order": "auto",
@@ -6932,8 +6698,7 @@
           ]
         },
         "text-transform": "uppercase",
-        "visibility": "visible",
-        "icon-optional": true
+        "visibility": "visible"
       },
       "paint": {
         "text-color": "rgba(154, 154, 154, 1)",
@@ -6977,8 +6742,7 @@
         },
         "text-transform": "none",
         "visibility": "visible",
-        "text-line-height": 1.1,
-        "icon-optional": true
+        "text-line-height": 1.1
       },
       "paint": {
         "text-color": "rgba(154, 154, 154, 1)",
@@ -7023,8 +6787,7 @@
         "visibility": "visible",
         "text-line-height": 1.1,
         "text-max-width": 6,
-        "text-letter-spacing": 0.05,
-        "icon-optional": true
+        "text-letter-spacing": 0.05
       },
       "paint": {
         "text-color": "rgba(154, 154, 154, 1)",
@@ -7065,8 +6828,7 @@
         },
         "text-transform": "none",
         "visibility": "visible",
-        "text-line-height": 1.1,
-        "icon-optional": true
+        "text-line-height": 1.1
       },
       "paint": {
         "text-color": "rgba(154, 154, 154, 1)",

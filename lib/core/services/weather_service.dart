@@ -147,6 +147,8 @@ class WeatherService {
     );
   }
 
+  static final Map<String, Future<WeatherModel?>> _activeRequests = {};
+
   static Future<WeatherModel?> getWeather(double lat, double lon) async {
     String query = "$lat,$lon";
     if (currentWeather.value != null && lastFetchTime != null && lastFetchQuery == query) {
@@ -155,7 +157,22 @@ class WeatherService {
       }
     }
 
+    if (_activeRequests.containsKey(query)) {
+      debugPrint('🛡️ Weather Fetch Deduplicated (Already active) for: $query');
+      return await _activeRequests[query];
+    }
 
+    final future = _fetchWeatherInternal(lat, lon, query);
+    _activeRequests[query] = future;
+
+    try {
+      return await future;
+    } finally {
+      _activeRequests.remove(query);
+    }
+  }
+
+  static Future<WeatherModel?> _fetchWeatherInternal(double lat, double lon, String query) async {
     try {
       final url = Uri.parse(
           'https://ridel.ridel.workers.dev/api/weather?lat=$lat&lng=$lon');
@@ -171,17 +188,22 @@ class WeatherService {
       ).timeout(_apiTimeout);
 
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
+        try {
+          final json = jsonDecode(response.body);
 
-        if (json['success'] == true) {
-          final data = json['results'] ?? json['data'];
-          final freshWeather = _parseWeatherData(data);
-          currentWeather.value = freshWeather;
-          lastFetchTime = DateTime.now();
-          lastFetchQuery = query;
-          return freshWeather;
-        } else {
-          throw Exception(json['error'] ?? 'Unknown API Error');
+          if (json['success'] == true) {
+            final data = json['results'] ?? json['data'];
+            final freshWeather = _parseWeatherData(data);
+            currentWeather.value = freshWeather;
+            lastFetchTime = DateTime.now();
+            lastFetchQuery = query;
+            return freshWeather;
+          } else {
+            throw Exception(json['error'] ?? 'Unknown API Error');
+          }
+        } catch (e) {
+          debugPrint('Weather JSON Parse Error: $e');
+          return null;
         }
       } else {
         debugPrint('❌ HTTP ERROR: ${response.statusCode} | ${response.body}');
@@ -190,7 +212,6 @@ class WeatherService {
     } catch (e) {
       debugPrint('❌ WEATHER FETCH EXCEPTION: $e');
       return null;
-    } finally {
     }
   }
 
@@ -206,7 +227,22 @@ class WeatherService {
       }
     }
 
+    if (_activeRequests.containsKey(city)) {
+      debugPrint('🛡️ Weather Fetch Deduplicated (Already active) for: $city');
+      return await _activeRequests[city];
+    }
 
+    final future = _fetchWeatherByCityInternal(city, lat, lng);
+    _activeRequests[city] = future;
+
+    try {
+      return await future;
+    } finally {
+      _activeRequests.remove(city);
+    }
+  }
+
+  static Future<WeatherModel?> _fetchWeatherByCityInternal(String city, double? lat, double? lng) async {
     try {
       // 🚀 FIX: ALWAYS append lat and lng to the URL
       final double finalLat = lat ?? 28.6139;
@@ -226,17 +262,22 @@ class WeatherService {
       ).timeout(_apiTimeout);
 
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
+        try {
+          final json = jsonDecode(response.body);
 
-        if (json['success'] == true) {
-          final data = json['results'] ?? json['data'];
-          final freshWeather = _parseWeatherData(data);
-          currentWeather.value = freshWeather;
-          lastFetchTime = DateTime.now();
-          lastFetchQuery = city;
-          return freshWeather;
-        } else {
-          throw Exception(json['error'] ?? 'Unknown API Error');
+          if (json['success'] == true) {
+            final data = json['results'] ?? json['data'];
+            final freshWeather = _parseWeatherData(data);
+            currentWeather.value = freshWeather;
+            lastFetchTime = DateTime.now();
+            lastFetchQuery = city;
+            return freshWeather;
+          } else {
+            throw Exception(json['error'] ?? 'Unknown API Error');
+          }
+        } catch (e) {
+          debugPrint('Weather JSON Parse Error: $e');
+          return null;
         }
       } else {
         debugPrint('❌ HTTP ERROR: ${response.statusCode} | ${response.body}');
@@ -245,7 +286,6 @@ class WeatherService {
     } catch (e) {
       debugPrint('❌ WEATHER FETCH EXCEPTION: $e');
       return null;
-    } finally {
     }
   }
 

@@ -20,6 +20,8 @@ import 'package:ridel/features/map/widgets/weather_floating_widget.dart';
 import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:ridel/core/utils/toast_service.dart';
+import 'package:ridel/main.dart';
+
 class FullScreenMapPage extends StatefulWidget {
   final ValueNotifier<double> searchSheetProgressNotifier;
   final bool isMapTabActive;
@@ -36,17 +38,93 @@ class FullScreenMapPage extends StatefulWidget {
 
 class _FullScreenMapPageState extends State<FullScreenMapPage>
     with TickerProviderStateMixin {
-  final GlobalKey _mapKey = GlobalKey();
   late AnimationController _fadeScaleController;
-  late Animation<double> _fadeScaleAnimation;
 
-  String? _resolvedStyleJson;
+  String? _loadedMapStyle;
   bool _isLoadingStyle = true;
-  Brightness? _lastBrightness;
   MapLibreMapController? _tempController;
-
   MapThemeType? _currentTheme;
-  bool _userOverrodeMapTheme = false;
+  bool _isTilted = false;
+
+  bool _showScaleBar = false;
+  Timer? _scaleBarTimer;
+  double _lastZoom = -1.0;
+  String _scaleText = '0 m';
+  double _scaleWidth = 60.0;
+
+  bool _showPOIs = true;
+  final bool _show3D = false;
+  Symbol? _heroSymbol;
+
+  void _onCameraMove() {
+    final mapProvider = Provider.of<MapProvider>(context, listen: false);
+    final ctrl = mapProvider.controller ?? _tempController;
+
+    if (ctrl != null && ctrl.cameraPosition != null) {
+      final cam = ctrl.cameraPosition!;
+      final currentZoom = cam.zoom;
+      final lat = cam.target.latitude;
+
+      double metersPerPixel =
+          156543.03392 * cos(lat * pi / 180.0) / pow(2, currentZoom);
+      double maxPixelWidth = 80.0;
+      double maxMeters = metersPerPixel * maxPixelWidth;
+
+      const scaleValues = [
+        10,
+        20,
+        50,
+        100,
+        200,
+        500,
+        1000,
+        2000,
+        5000,
+        10000,
+        20000,
+        50000,
+        100000,
+        200000,
+        500000,
+        1000000
+      ];
+
+      int chosenMeters = 10;
+      for (int v in scaleValues) {
+        if (v <= maxMeters) {
+          chosenMeters = v;
+        } else {
+          break;
+        }
+      }
+
+      double newWidth = chosenMeters / metersPerPixel;
+      String newText = chosenMeters >= 1000
+          ? '${chosenMeters ~/ 1000} km'
+          : '$chosenMeters m';
+
+      // TRIGGER ONLY ON ZOOM CHANGE — PANNING MUST NOT TRIGGER IT
+      if (_lastZoom != -1.0 && (_lastZoom - currentZoom).abs() > 0.005) {
+        // Update scale values ONLY during active zoom
+        setState(() {
+          _showScaleBar = true;
+          _scaleText = newText;
+          _scaleWidth = newWidth.clamp(20.0, 150.0);
+        });
+
+        _scaleBarTimer?.cancel();
+        _scaleBarTimer = Timer(const Duration(milliseconds: 1500), () {
+          if (mounted) setState(() => _showScaleBar = false);
+        });
+      }
+
+      _lastZoom = currentZoom;
+    }
+  }
+
+  void _onCameraIdleScaleBar() {
+    // Timer is already handled in _onCameraMove
+  }
 
   @override
   void initState() {
@@ -55,11 +133,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       vsync: this,
       duration: const Duration(milliseconds: 250),
     );
-    _fadeScaleAnimation = CurvedAnimation(
-      parent: _fadeScaleController,
-      curve: Curves.easeOutCubic,
-    );
+
     widget.searchSheetProgressNotifier.addListener(_onProgressChanged);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initMapStyle();
+    });
   }
 
   void _onProgressChanged() {
@@ -79,45 +158,30 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   void dispose() {
     widget.searchSheetProgressNotifier.removeListener(_onProgressChanged);
     _fadeScaleController.dispose();
+    _scaleBarTimer?.cancel();
     super.dispose();
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final currentBrightness = Theme.of(context).brightness;
-    // 🚀 CRITICAL FIX: Prevent reload glitch on keyboard open or screen resize
-    if (_lastBrightness != currentBrightness || _resolvedStyleJson == null) {
-      _lastBrightness = currentBrightness;
-
-      // 🚀 FIX: Auto-sync map theme to system brightness (unless user overrode)
-      if (!_userOverrodeMapTheme) {
-        _currentTheme = currentBrightness == Brightness.dark
-            ? MapThemeType.dark
-            : MapThemeType.light;
-      }
-
-      _fetchAndFixOlaStyle(currentBrightness);
-    }
-  }
-
-  Future<void> _fetchAndFixOlaStyle(Brightness brightness) async {
+  Future<void> _initMapStyle({bool updateExisting = false}) async {
     if (!mounted) return;
-    setState(() {
-      _isLoadingStyle = true;
-    });
+    if (!updateExisting) {
+      setState(() {
+        _isLoadingStyle = true;
+      });
+    }
 
     try {
-      final isDark = brightness == Brightness.dark;
-      
-      // Load local style.json instead of making an API request
-      String finalStyle = await rootBundle.loadString('assets/style.json');
+      final isSystemDark = Theme.of(context).brightness == Brightness.dark;
+      final isDark = _currentTheme != null
+          ? (_currentTheme == MapThemeType.dark)
+          : isSystemDark;
+      final style = await MapStyleHelper.getOlaStyle(isDark,
+          themeType: _currentTheme, showPOIs: _showPOIs, show3D: _show3D);
 
       if (mounted) {
         setState(() {
-          _resolvedStyleJson = finalStyle;
+          _loadedMapStyle = style;
           _isLoadingStyle = false;
-          _lastBrightness = brightness;
         });
 
         final themeToSet =
@@ -126,13 +190,102 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       }
     } catch (e) {
       debugPrint("❌ Error fixing Ola Style: $e");
-      // 🚀 CRITICAL FIX: Unlock the UI even if the style fetch fails
       if (mounted) {
         setState(() {
           _isLoadingStyle = false;
         });
       }
     }
+  }
+
+  void _showHeroBottomSheet(String name, LatLng coordinates) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ctrl = Provider.of<MapProvider>(context, listen: false).controller ??
+        _tempController;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.2),
+      isScrollControlled: true,
+      builder: (context) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            padding: const EdgeInsets.all(24.0),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.6)
+                  : Colors.white.withValues(alpha: 0.6),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(24.0)),
+              border: Border(
+                  top: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.2), width: 1.0)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white30 : Colors.black26,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : Colors.black87,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Coordinates: ${coordinates.latitude.toStringAsFixed(4)}, ${coordinates.longitude.toStringAsFixed(4)}",
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? Colors.white54 : Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isDark ? Colors.white : Colors.black,
+                      foregroundColor: isDark ? Colors.black : Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text(
+                      'Search / Go',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+              ],
+            ),
+          ),
+        );
+      },
+    ).whenComplete(() {
+      if (ctrl != null && _heroSymbol != null) {
+        ctrl.removeSymbol(_heroSymbol!);
+        _heroSymbol = null;
+      }
+    });
   }
 
   @override
@@ -162,183 +315,470 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
               child: Selector<MapProvider, bool>(
                 selector: (_, provider) => provider.showNativeBlueDot,
                 builder: (context, showNativeBlueDot, child) {
-                  return MapLibreMap(
-                    key: _mapKey,
-                styleString: _resolvedStyleJson ??
-                    '{"version": 8, "sources": {}, "layers": []}',
-                onMapCreated: (controller) {
-                  if (_tempController != null) return;
-                  _tempController = controller;
+                  return _loadedMapStyle == null
+                      ? const Center(child: CircularProgressIndicator())
+                      : MapLibreMap(
+                          key: const ValueKey('ridel_main_map'),
+                          styleString: _loadedMapStyle!,
+                          minMaxZoomPreference:
+                              const MinMaxZoomPreference(4.0, 20.0),
+                          cameraTargetBounds: CameraTargetBounds(
+                            LatLngBounds(
+                              southwest: const LatLng(6.5,
+                                  68.0), // Bottom-Left (Arabian Sea / Indian Ocean)
+                              northeast: const LatLng(37.5,
+                                  97.5), // Top-Right (Himalayas / North East)
+                            ),
+                          ),
+                          onMapCreated: (controller) {
+                            if (_tempController != null) return;
+                            _tempController = controller;
 
-                  // 🚀 CRITICAL FIX 1: Engine ko controller pass karna zaroori hai!
-                  final mapProvider =
-                      Provider.of<MapProvider>(context, listen: false);
-                  mapProvider.engine.mapController = controller;
+                            // 🚀 CRITICAL FIX 1: Engine ko controller pass karna zaroori hai!
+                            final mapProvider = Provider.of<MapProvider>(
+                                context,
+                                listen: false);
+                            mapProvider.engine.mapController = controller;
+                          },
+                          onStyleLoadedCallback: () async {
+                            final controller = _tempController;
+                            if (controller == null) return;
+
+                            try {
+                              final Uint8List bytes =
+                                  await MapProvider.loadAndResizeImage(
+                                      'assets/images/custom_pin.png', 36);
+                              await controller.addImage('custom_pin', bytes);
+                            } catch (_) {}
+
+                            try {
+                              final Uint8List yellowPinBytes =
+                                  await MapProvider.loadAndResizeImage(
+                                      'assets/images/add_places.png', 32);
+                              await controller.addImage(
+                                  'intermediate_pin', yellowPinBytes);
+                            } catch (_) {}
+                            try {
+                              final Uint8List transparentPixel =
+                                  Uint8List.fromList([
+                                137,
+                                80,
+                                78,
+                                71,
+                                13,
+                                10,
+                                26,
+                                10,
+                                0,
+                                0,
+                                0,
+                                13,
+                                73,
+                                72,
+                                68,
+                                82,
+                                0,
+                                0,
+                                0,
+                                1,
+                                0,
+                                0,
+                                0,
+                                1,
+                                8,
+                                6,
+                                0,
+                                0,
+                                0,
+                                31,
+                                21,
+                                196,
+                                137,
+                                0,
+                                0,
+                                0,
+                                11,
+                                73,
+                                68,
+                                65,
+                                84,
+                                8,
+                                215,
+                                99,
+                                96,
+                                0,
+                                2,
+                                0,
+                                0,
+                                5,
+                                0,
+                                1,
+                                226,
+                                38,
+                                5,
+                                155,
+                                0,
+                                0,
+                                0,
+                                0,
+                                73,
+                                69,
+                                78,
+                                68,
+                                174,
+                                66,
+                                96,
+                                130
+                              ]);
+                              await controller.addImage(
+                                  'Arrow', transparentPixel);
+                            } catch (_) {}
+
+                            try {
+                              final Uint8List transparentPixel =
+                                  Uint8List.fromList([
+                                137,
+                                80,
+                                78,
+                                71,
+                                13,
+                                10,
+                                26,
+                                10,
+                                0,
+                                0,
+                                0,
+                                13,
+                                73,
+                                72,
+                                68,
+                                82,
+                                0,
+                                0,
+                                0,
+                                1,
+                                0,
+                                0,
+                                0,
+                                1,
+                                8,
+                                6,
+                                0,
+                                0,
+                                0,
+                                31,
+                                21,
+                                196,
+                                137,
+                                0,
+                                0,
+                                0,
+                                11,
+                                73,
+                                68,
+                                65,
+                                84,
+                                8,
+                                215,
+                                99,
+                                96,
+                                0,
+                                2,
+                                0,
+                                0,
+                                5,
+                                0,
+                                1,
+                                226,
+                                38,
+                                5,
+                                155,
+                                0,
+                                0,
+                                0,
+                                0,
+                                73,
+                                69,
+                                78,
+                                68,
+                                174,
+                                66,
+                                96,
+                                130
+                              ]);
+                              await controller.addImage(
+                                  'arrow', transparentPixel);
+                            } catch (_) {}
+
+                            try {
+                              final Uint8List transparentPixel =
+                                  Uint8List.fromList([
+                                137,
+                                80,
+                                78,
+                                71,
+                                13,
+                                10,
+                                26,
+                                10,
+                                0,
+                                0,
+                                0,
+                                13,
+                                73,
+                                72,
+                                68,
+                                82,
+                                0,
+                                0,
+                                0,
+                                1,
+                                0,
+                                0,
+                                0,
+                                1,
+                                8,
+                                6,
+                                0,
+                                0,
+                                0,
+                                31,
+                                21,
+                                196,
+                                137,
+                                0,
+                                0,
+                                0,
+                                11,
+                                73,
+                                68,
+                                65,
+                                84,
+                                8,
+                                215,
+                                99,
+                                96,
+                                0,
+                                2,
+                                0,
+                                0,
+                                5,
+                                0,
+                                1,
+                                226,
+                                38,
+                                5,
+                                155,
+                                0,
+                                0,
+                                0,
+                                0,
+                                73,
+                                69,
+                                78,
+                                68,
+                                174,
+                                66,
+                                96,
+                                130
+                              ]);
+                              await controller.addImage(
+                                  'custom-marker', transparentPixel);
+                            } catch (_) {}
+
+                            if (!context.mounted) return;
+                            final mapProvider = Provider.of<MapProvider>(
+                                context,
+                                listen: false);
+                            mapProvider.engine.onMapCreated(
+                                controller,
+                                isDark,
+                                Provider.of<GlobalLocationService>(context,
+                                    listen: false),
+                                this);
+                          },
+                          onMapClick: (point, latLng) async {
+                            FocusScope.of(context).unfocus();
+                            final mapProvider = Provider.of<MapProvider>(
+                                context,
+                                listen: false);
+
+                            if (mapProvider.mapSelectionPlaceType != null) {
+                              mapProvider.setTargetDestination(latLng);
+                              mapProvider.addNativeDestinationPin(latLng);
+                              // If you have _showConfirmationDialog in this file, keep it, otherwise ignore
+                              return;
+                            }
+
+                            if (mapProvider.isFlying) {
+                              mapProvider.stopCameraFlight();
+                              return;
+                            }
+
+                            bool handled = await mapProvider.handleRouteClick(
+                                point, latLng);
+                            if (!handled) {
+                              mapProvider.clearTargetLocation();
+                            }
+                          },
+                          onMapLongClick:
+                              (Point<double> point, LatLng coordinates) async {
+                            final mapProvider = Provider.of<MapProvider>(
+                                context,
+                                listen: false);
+
+                            // 🚀 Free the camera from blue dot
+                            mapProvider.setAutoTracking(false);
+                            mapProvider.setUserPanning(true);
+                            mapProvider.handleMapLongPress(coordinates);
+
+                            // 🚀 HERO POI INTERACTION
+                            final controller =
+                                mapProvider.controller ?? _tempController;
+                            if (controller != null && _showPOIs) {
+                              try {
+                                final features = await controller
+                                    .queryRenderedFeatures(point, [], null);
+                                Map? poi;
+                                for (var f in features) {
+                                  if (f is Map && f['properties'] != null) {
+                                    print('DEBUG TAPPED FEATURE PROPERTIES: ${f['properties']}');
+                                    if (f['properties']['name'] != null && f['geometry'] != null) {
+                                      poi ??= f; // Store the first named feature but keep looping to print all
+                                    }
+                                  }
+                                }
+
+                                if (poi != null) {
+                                  final name =
+                                      poi['properties']['name'].toString();
+
+                                  AppHaptics.selectionClick();
+
+                                  // Remove old hero symbol if exists
+                                  if (_heroSymbol != null) {
+                                    await controller.removeSymbol(_heroSymbol!);
+                                  }
+
+                                  // Add enlarged Hero pin
+                                  _heroSymbol = await controller.addSymbol(
+                                    SymbolOptions(
+                                      geometry: coordinates,
+                                      iconImage: 'custom_pin',
+                                      iconSize: 1.5,
+                                      iconAnchor: 'bottom',
+                                    ),
+                                  );
+
+                                  // Smoothly offset camera so sheet doesn't cover marker and zoom in
+                                  controller.animateCamera(
+                                    CameraUpdate.newLatLngZoom(
+                                      LatLng(coordinates.latitude - 0.0025,
+                                          coordinates.longitude),
+                                      16.5, // Slightly zoom in to focus on the tapped POI
+                                    ),
+                                    duration: const Duration(
+                                        milliseconds:
+                                            850), // Cinematic duration
+                                  );
+
+                                  if (!mounted) return;
+                                  _showHeroBottomSheet(name, coordinates);
+                                }
+                              } catch (e) {
+                                debugPrint("POI Query error: $e");
+                              }
+                            }
+                          },
+                          initialCameraPosition: const CameraPosition(
+                              target: LatLng(28.6139, 77.2090),
+                              zoom:
+                                  14.5, // 🚀 Fixed zoom to match custom_map_screen
+                              tilt: 0.0,
+                              bearing: 0),
+
+                          compassEnabled: false,
+                          doubleClickZoomEnabled: true,
+                          scrollGesturesEnabled: true,
+                          zoomGesturesEnabled: true,
+                          tiltGesturesEnabled: true,
+
+                          // 🚀 CRITICAL FIX 2: Restore native blue dot logic exactly like custom_map_screen
+                          myLocationEnabled: showNativeBlueDot,
+                          myLocationTrackingMode:
+                              Provider.of<MapProvider>(context, listen: false)
+                                      .isAutoTracking
+                                  ? (kIsWeb
+                                      ? MyLocationTrackingMode.tracking
+                                      : MyLocationTrackingMode.trackingCompass)
+                                  : MyLocationTrackingMode.none,
+                          myLocationRenderMode: MyLocationRenderMode.normal,
+                          trackCameraPosition: true,
+
+                          logoViewMargins: const Point(-5000, -5000),
+                          attributionButtonMargins: const Point(-5000, -5000),
+                          onCameraTrackingDismissed: () {
+                            final mapProvider = Provider.of<MapProvider>(
+                                context,
+                                listen: false);
+                            if (mapProvider.isActiveNavigation) {
+                              mapProvider.setAutoTracking(false);
+                              mapProvider.setUserPanning(true);
+                            }
+                            mapProvider.engine.onUserPannedMap();
+                          },
+                          onUserLocationUpdated: (location) {
+                            final mapProvider = Provider.of<MapProvider>(
+                                context,
+                                listen: false);
+                            final pos = location.position;
+                            mapProvider.updateCurrentLocation(pos);
+                          },
+                          onCameraMove: (_) => _onCameraMove(),
+                          onCameraIdle: () async {
+                            _onCameraIdleScaleBar();
+                            final mapProvider = Provider.of<MapProvider>(
+                                context,
+                                listen: false);
+                            final ctrl =
+                                mapProvider.controller ?? _tempController;
+                            if (ctrl != null) {
+                              try {
+                                final bounds = await ctrl.getVisibleRegion();
+                                LatLng? userLoc = mapProvider.currentLocation;
+                                if (userLoc != null) {
+                                  bool isVisible = bounds.contains(userLoc);
+                                  mapProvider.setUserVisibility(isVisible);
+                                }
+
+                                // Notify engine about zoom updates for UI scaling
+                                final cam = ctrl.cameraPosition;
+                                if (cam != null) {
+                                  mapProvider.updateMapCenter(
+                                      cam.target, cam.zoom);
+                                }
+                              } catch (_) {}
+                            }
+                          },
+                        );
                 },
-                onStyleLoadedCallback: () async {
-                  final controller = _tempController;
-                  if (controller == null) return;
-
-                  try {
-                    final Uint8List bytes = await MapProvider.loadAndResizeImage('assets/images/custom_pin.png', 36);
-                    await controller.addImage('custom_pin', bytes);
-                    debugPrint("Custom Pin Successfully Injected");
-                  } catch (e) {
-                    debugPrint("Failed to load custom_pin: $e");
-                  }
-
-                  try {
-                    final Uint8List yellowPinBytes = await MapProvider.loadAndResizeImage('assets/images/add_places.png', 32);
-                    await controller.addImage('intermediate_pin', yellowPinBytes);
-                    debugPrint("Intermediate Pin Successfully Injected");
-                  } catch (e) {
-                    debugPrint("Failed to load intermediate_pin: $e");
-                    final Uint8List transparentPixel = Uint8List.fromList([
-                      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68,
-                      82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196,
-                      137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0,
-                      0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68,
-                      174, 66, 96, 130
-                    ]);
-                    await controller.addImage('intermediate_pin', transparentPixel);
-                  }
-
-                  try {
-                    // Failsafe for missing required images that crash WebGL
-                    final Uint8List transparentPixel = Uint8List.fromList([
-                      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68,
-                      82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196,
-                      137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0,
-                      0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68,
-                      174, 66, 96, 130
-                    ]);
-                    await controller.addImage('Arrow', transparentPixel);
-                    await controller.addImage('arrow', transparentPixel);
-                    await controller.addImage('custom-marker', transparentPixel);
-                  } catch (e) {
-                    debugPrint("Asset Load Error: $e");
-                  }
-
-                  if (!context.mounted) return;
-                  final mapProvider = Provider.of<MapProvider>(context, listen: false);
-                  mapProvider
-                      .engine
-                      .onMapCreated(
-                          controller,
-                          isDark,
-                          Provider.of<GlobalLocationService>(context,
-                              listen: false),
-                          this);
-                },
-                onMapClick: (point, latLng) async {
-                  FocusScope.of(context).unfocus();
-                  final mapProvider =
-                      Provider.of<MapProvider>(context, listen: false);
-
-                  if (mapProvider.mapSelectionPlaceType != null) {
-                    mapProvider.setTargetDestination(latLng);
-                    mapProvider.addNativeDestinationPin(latLng);
-                    // If you have _showConfirmationDialog in this file, keep it, otherwise ignore
-                    return;
-                  }
-
-                  if (mapProvider.isFlying) {
-                    mapProvider.stopCameraFlight();
-                    return;
-                  }
-
-                  bool handled =
-                      await mapProvider.handleRouteClick(point, latLng);
-                  if (!handled) {
-                    mapProvider.clearTargetLocation();
-                  }
-                },
-                onMapLongClick: (Point<double> point, LatLng coordinates) {
-                  final mapProvider =
-                      Provider.of<MapProvider>(context, listen: false);
-
-                  // 🚀 Free the camera from blue dot
-                  mapProvider.setAutoTracking(false);
-                  mapProvider.setUserPanning(true);
-
-                  mapProvider.handleMapLongPress(coordinates);
-                },
-                initialCameraPosition: const CameraPosition(
-                    target: LatLng(28.6139, 77.2090),
-                    zoom: 14.5, // 🚀 Fixed zoom to match custom_map_screen
-                    tilt: 0.0,
-                    bearing: 0),
-                minMaxZoomPreference: const MinMaxZoomPreference(4.5, 20.0),
-                compassEnabled: false,
-                doubleClickZoomEnabled: true,
-                scrollGesturesEnabled: true,
-                zoomGesturesEnabled: true,
-                tiltGesturesEnabled: true,
-
-                // 🚀 CRITICAL FIX 2: Restore native blue dot logic exactly like custom_map_screen
-                myLocationEnabled: showNativeBlueDot,
-                myLocationTrackingMode: Provider.of<MapProvider>(context, listen: false).isAutoTracking
-                    ? (kIsWeb ? MyLocationTrackingMode.tracking : MyLocationTrackingMode.trackingCompass)
-                    : MyLocationTrackingMode.none,
-                myLocationRenderMode: MyLocationRenderMode.normal,
-                trackCameraPosition: true,
-
-                logoViewMargins: const Point(-5000, -5000),
-                attributionButtonMargins: const Point(-5000, -5000),
-                onCameraTrackingDismissed: () {
-                  final mapProvider =
-                      Provider.of<MapProvider>(context, listen: false);
-                  if (mapProvider.isActiveNavigation) {
-                    mapProvider.setAutoTracking(false);
-                    mapProvider.setUserPanning(true);
-                  }
-                  mapProvider.engine.onUserPannedMap();
-                },
-                onUserLocationUpdated: (location) {
-                  final mapProvider =
-                      Provider.of<MapProvider>(context, listen: false);
-                  final pos = location.position;
-                  mapProvider.updateCurrentLocation(pos);
-                },
-                onCameraIdle: () async {
-                  final mapProvider =
-                      Provider.of<MapProvider>(context, listen: false);
-                  final ctrl = mapProvider.controller ?? _tempController;
-                  if (ctrl != null) {
-                    try {
-                      final bounds = await ctrl.getVisibleRegion();
-                      LatLng? userLoc = mapProvider.currentLocation;
-                      if (userLoc != null) {
-                        bool isVisible = bounds.contains(userLoc);
-                        mapProvider.setUserVisibility(isVisible);
-                      }
-
-                      // Notify engine about zoom updates for UI scaling
-                      final cam = ctrl.cameraPosition;
-                      if (cam != null) {
-                        mapProvider.updateMapCenter(cam.target, cam.zoom);
-                      }
-                    } catch (_) {}
-                  }
-                },
-              );
-            },
+              ),
+            ),
           ),
-        ),
-      ),
 
           // 🚀 DROP PIN MODE CENTER OVERLAY
           Positioned.fill(
             child: Selector<MapProvider, bool>(
-              selector: (context, provider) => provider.isDropPinMode || provider.isAddingStopMode,
+              selector: (context, provider) =>
+                  provider.isDropPinMode || provider.isAddingStopMode,
               builder: (context, showPin, child) {
                 if (!showPin) return const SizedBox.shrink();
-                
+
                 return IgnorePointer(
                   child: Center(
                     child: FractionalTranslation(
                       // Shift it up by half its height so the bottom tip points to the exact center
-                      translation: const Offset(0.0, -0.5), 
+                      translation: const Offset(0.0, -0.5),
                       child: Image.asset(
                         'assets/images/add_places.png',
                         height: 48,
@@ -408,6 +848,66 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             ),
           ),
 
+          // 🚀 PREMIUM APPLE-STYLE SCALE RULER (Zoom-Only, Cinematic Fade)
+          // Top edge aligned with Weather Widget, right-anchored at 16px
+          Positioned(
+            top: topMargin, // Matches weather widget top position exactly
+            right: 16.0, // Clean right alignment
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: _showScaleBar ? 1.0 : 0.0,
+                duration:
+                    const Duration(milliseconds: 400), // Buttery smooth fade
+                curve: Curves.easeInOutCubic, // Premium cinematic curve
+                child: Container(
+                  padding: const EdgeInsets.only(
+                      top: 4, bottom: 4, left: 8, right: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black
+                        .withValues(alpha: 0.3), // Very subtle dark glass
+                    borderRadius: BorderRadius.circular(6.0),
+                    border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        width: 0.5),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        _scaleText,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Container(
+                        height: 4,
+                        width: _scaleWidth,
+                        decoration: BoxDecoration(
+                          border: Border(
+                            left: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                width: 1.2),
+                            right: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                width: 1.2),
+                            bottom: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                width: 1.2),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
           Positioned.fill(
             child: MapSearchSheet(
               key: const ValueKey('map_search_sheet'),
@@ -425,27 +925,45 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           ),
 
           // 🚀 1. SMOOTH WEATHER WIDGET (Mobile = Left, Desktop = Right)
-          Positioned(
-            top: topMargin,
-            left: sideMargin,
-            right: sideMargin,
-            child: Selector<MapProvider, bool>(
-              selector: (context, provider) => !provider.isActiveNavigation,
-              builder: (context, showWeather, child) {
-                return IgnorePointer(
-                  ignoring: !showWeather,
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 300),
-                    opacity: showWeather ? 1.0 : 0.0,
-                    child: child,
-                  ),
-                );
-              },
-              // 🚀 FIX: Removed AnimatedAlign and _buildPointerSafeWrapper to destroy the full-screen invisible shield
-              child: WeatherFloatingWidget(onMapThemeChanged: (isDark) {}),
-            ),
-          ),
+          ValueListenableBuilder<bool>(
+            valueListenable: globalSidebarOpen,
+            builder: (context, isSidebarExpanded, _) {
+              return AnimatedPositioned(
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.easeOutCubic,
+                  top: topMargin,
+                  left: isDesktop
+                      ? ((isSidebarExpanded ? 220.0 : 80.0) + 16.0)
+                      : sideMargin,
+                  right: sideMargin,
+                  child: ValueListenableBuilder<double>(
+                    valueListenable: widget.searchSheetProgressNotifier,
+                    builder: (context, progress, _) {
+                      double opacity = (progress <= 0.45)
+                          ? 1.0
+                          : (1.0 - ((progress - 0.45) / (0.90 - 0.45)))
+                              .clamp(0.0, 1.0);
 
+                      return Selector<MapProvider, bool>(
+                        selector: (context, provider) =>
+                            !provider.isActiveNavigation,
+                        builder: (context, showWeather, child) {
+                          final finalOpacity = showWeather ? opacity : 0.0;
+                          return IgnorePointer(
+                            ignoring: finalOpacity == 0.0,
+                            child: Opacity(
+                              opacity: finalOpacity,
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: WeatherFloatingWidget(
+                            onMapThemeChanged: (isDark) {}),
+                      );
+                    },
+                  ));
+            },
+          ),
 
           // 🚀 3. TURN-BY-TURN BANNER
           Positioned(
@@ -570,33 +1088,20 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   return pillChild!;
                 }
                 final screenSize = MediaQuery.sizeOf(context);
-                final safeBottom = MediaQuery.paddingOf(context).bottom;
-                final minS =
-                    ((86.0 + safeBottom) / screenSize.height).clamp(0.05, 0.40);
-                const maxS = 0.55;
+                final sheetHeight = progress * screenSize.height;
+                final bottomOffset = sheetHeight + 32.0;
 
-                final sheetSize = minS + progress * (maxS - minS);
-                final sheetHeight = sheetSize * screenSize.height;
-                final bottomOffset = sheetHeight + 20.0;
+                final opacity = (progress <= 0.45)
+                    ? 1.0
+                    : (1.0 - ((progress - 0.45) / (0.90 - 0.45)))
+                        .clamp(0.0, 1.0);
 
-                return AnimatedBuilder(
-                  animation: _fadeScaleAnimation,
-                  builder: (context, animChild) {
-                    final animValue =
-                        (1.0 - _fadeScaleAnimation.value).clamp(0.0, 1.0);
-                    return Transform.translate(
-                      offset: Offset(0, -bottomOffset),
-                      child: Transform.scale(
-                        scale: animValue,
-                        alignment: Alignment.bottomCenter,
-                        child: Opacity(
-                          opacity: animValue,
-                          child: animChild,
-                        ),
-                      ),
-                    );
-                  },
-                  child: pillChild,
+                return Transform.translate(
+                  offset: Offset(0, -bottomOffset),
+                  child: Opacity(
+                    opacity: opacity,
+                    child: pillChild,
+                  ),
                 );
               },
               child: Listener(
@@ -643,26 +1148,20 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           final content = Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(50),
-                              boxShadow: !isDark
-                                  ? [
-                                      BoxShadow(
-                                          color: Colors.black
-                                              .withValues(alpha: 0.08),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 4))
-                                    ]
-                                  : [
-                                      BoxShadow(
-                                          color: Colors.black
-                                              .withValues(alpha: 0.4),
-                                          blurRadius: 24,
-                                          offset: const Offset(0, 12)),
-                                      BoxShadow(
-                                          color: Colors.black
-                                              .withValues(alpha: 0.2),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 4)),
-                                    ],
+                              border: Border.all(
+                                color: isDark
+                                    ? const Color(0xFF38383A)
+                                    : const Color(0xFFE5E5EA),
+                                width: 0.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.25),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8),
+                                  spreadRadius: 0,
+                                ),
+                              ],
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(50),
@@ -674,21 +1173,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                   child: Container(
                                     width: 48,
                                     decoration: BoxDecoration(
-                                        color: !isDark
-                                            ? Colors.white
-                                                .withValues(alpha: 0.75)
-                                            : const Color(0xFF0B0E17)
+                                        color: isDark
+                                            ? const Color(0xFF0B0E17)
+                                                .withValues(alpha: 0.80)
+                                            : Colors.white
                                                 .withValues(alpha: 0.65),
-                                        borderRadius: BorderRadius.circular(50),
-                                        border: !isDark
-                                            ? Border.all(
-                                                color: Colors.white
-                                                    .withValues(alpha: 0.9),
-                                                width: 1.0)
-                                            : Border.all(
-                                                color: const Color(0xFF7CA1FF)
-                                                    .withValues(alpha: 0.15),
-                                                width: 1.0)),
+                                        borderRadius:
+                                            BorderRadius.circular(50)),
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -703,19 +1194,23 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                                       (isDark
                                                           ? MapThemeType.dark
                                                           : MapThemeType.light),
-                                                  onThemeSelected:
+                                                  showPOIs: _showPOIs,
+                                                  onPOIsToggled: (val) {
+                                                setState(() {
+                                                  _showPOIs = val;
+                                                  _initMapStyle(
+                                                      updateExisting: true);
+                                                });
+                                              }, onThemeSelected:
                                                       (selectedTheme) {
                                                 setState(() {
                                                   _currentTheme = selectedTheme;
-                                                  _userOverrodeMapTheme = true;
-                                                  _fetchAndFixOlaStyle(
-                                                      Theme.of(context)
-                                                          .brightness);
+                                                  _initMapStyle();
                                                 });
                                               });
                                             },
                                             child: SizedBox(
-                                              height: 52,
+                                              height: 44,
                                               width: 48,
                                               child: Center(
                                                   child: Icon(Icons.map,
@@ -726,18 +1221,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                             ),
                                           );
                                         }),
-                                        Container(
-                                            height: 1,
-                                            width: 48,
-                                            color: isDark
-                                                ? Colors.white
-                                                    .withValues(alpha: 0.10)
-                                                : Colors.black
-                                                    .withValues(alpha: 0.10)),
+                                        // Divider removed
                                         GestureDetector(
                                           behavior: HitTestBehavior.opaque,
                                           onTap: () {
-                                            AppHaptics.selectionClick(); // Instant feedback
+                                            AppHaptics
+                                                .selectionClick(); // Instant feedback
 
                                             // Fire and forget - do not block the UI!
                                             Future.microtask(() async {
@@ -748,21 +1237,26 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                                       context,
                                                       listen: false);
 
-                                              if (mapProvider.isActiveNavigation &&
+                                              if (mapProvider
+                                                      .isActiveNavigation &&
                                                   !mapProvider.isAutoTracking) {
                                                 // STATE 4: RE-CENTER
                                                 debugPrint(
                                                     "📍 Re-Center Tapped!");
                                                 await mapProvider
                                                     .recenter3DNavigation();
-                                              } else if (mapProvider.isRouteCalculated &&
-                                                  !mapProvider.isActiveNavigation) {
+                                              } else if (mapProvider
+                                                      .isRouteCalculated &&
+                                                  !mapProvider
+                                                      .isActiveNavigation) {
                                                 // STATE 3: START NAVIGATION
                                                 debugPrint(
                                                     "🚀 Start Navigation Tapped! Entering 3D Mode...");
                                                 await mapProvider
                                                     .start3DNavigation();
-                                              } else if (mapProvider.targetDestination != null) {
+                                              } else if (mapProvider
+                                                      .targetDestination !=
+                                                  null) {
                                                 // STATE 2: GET DIRECTIONS
                                                 debugPrint(
                                                     "🛣️ Fetching Route...");
@@ -771,7 +1265,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                                         GlobalLocationService>(
                                                     context,
                                                     listen: false);
-                                                if (locService.currentPosition ==
+                                                if (locService
+                                                        .currentPosition ==
                                                     null) {
                                                   await locService
                                                       .forceRefreshLocation();
@@ -791,7 +1286,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                             });
                                           },
                                           child: SizedBox(
-                                            height: 52,
+                                            height: 44,
                                             width: 48,
                                             child: Center(
                                               child: Selector<
@@ -885,20 +1380,21 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                   child: Container(
                                     width: 48,
                                     decoration: BoxDecoration(
-                                        color: !isDark
+                                      color: isDark
+                                          ? const Color(0xFF1E2129)
+                                              .withValues(alpha: 0.85)
+                                          : Colors.white
+                                              .withValues(alpha: 0.85),
+                                      borderRadius: BorderRadius.circular(100),
+                                      border: Border.all(
+                                        color: isDark
                                             ? Colors.white
-                                            : const Color(0xFF0B0E17)
-                                                .withValues(alpha: 0.75),
-                                        borderRadius: BorderRadius.circular(24),
-                                        border: !isDark
-                                            ? Border.all(
-                                                color: Colors.black
-                                                    .withValues(alpha: 0.04),
-                                                width: 1.0)
-                                            : Border.all(
-                                                color: Colors.white
-                                                    .withValues(alpha: 0.08),
-                                                width: 1.0)),
+                                                .withValues(alpha: 0.12)
+                                            : Colors.black
+                                                .withValues(alpha: 0.05),
+                                        width: 1.0,
+                                      ),
+                                    ),
                                     child: Column(
                                       children: [
                                         _ContinuousZoomButton(
@@ -965,12 +1461,37 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   Future<void> _handleLocateMeTapped(MapProvider mapProvider) async {
     debugPrint("🎯 [DEBUG] Locate Me button clicked!");
 
+    bool isAlreadyFocused = mapProvider.isUserVisibleOnScreen;
+
+    if (isAlreadyFocused && mapProvider.controller != null) {
+      _isTilted = !_isTilted;
+      final currentCamera = mapProvider.controller!.cameraPosition;
+      if (currentCamera != null) {
+        await mapProvider.controller!.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: currentCamera.target,
+              zoom: currentCamera.zoom,
+              bearing: currentCamera.bearing,
+              tilt: _isTilted ? 60.0 : 0.0,
+            ),
+          ),
+          duration: const Duration(milliseconds: 1200),
+        );
+      }
+      return;
+    }
+
+    _isTilted = false;
+
     try {
       // 🚨 CRITICAL: Append .timeout to prevent infinite browser deadlock
-      LocationPermission permission = await Geolocator.checkPermission().timeout(const Duration(seconds: 2));
+      LocationPermission permission = await Geolocator.checkPermission()
+          .timeout(const Duration(seconds: 2));
 
       if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission().timeout(const Duration(seconds: 2));
+        permission = await Geolocator.requestPermission()
+            .timeout(const Duration(seconds: 2));
         if (permission == LocationPermission.denied) {
           throw Exception("Permission denied by user.");
         }
@@ -983,16 +1504,23 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       // If granted, proceed:
       debugPrint("✅ [DEBUG] Permission granted. Fetching location...");
       if (!mounted) return;
-      final locService = Provider.of<GlobalLocationService>(context, listen: false);
-      await locService.forceRefreshLocation(); // Will use IP fallback if GPS times out
+      final locService =
+          Provider.of<GlobalLocationService>(context, listen: false);
+      await locService
+          .forceRefreshLocation(); // Will use IP fallback if GPS times out
 
       final pos = locService.currentPosition;
       if (pos != null && mapProvider.controller != null) {
-        await mapProvider.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+        await mapProvider.controller!
+            .updateMyLocationTrackingMode(MyLocationTrackingMode.none);
 
         await mapProvider.controller!.animateCamera(
           CameraUpdate.newCameraPosition(
-            CameraPosition(target: LatLng(pos.latitude, pos.longitude), zoom: 16.5, tilt: 0.0, bearing: 0.0),
+            CameraPosition(
+                target: LatLng(pos.latitude, pos.longitude),
+                zoom: 16.5,
+                tilt: 0.0,
+                bearing: 0.0),
           ),
           duration: const Duration(milliseconds: 1000),
         );
@@ -1000,30 +1528,31 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       }
     } on TimeoutException catch (_) {
       // Catches the infinite hang caused by strict browser shields
-      debugPrint("⏳ [DEBUG] Geolocator timed out (Browser silently blocked it).");
+      debugPrint(
+          "⏳ [DEBUG] Geolocator timed out (Browser silently blocked it).");
       if (!mounted) return;
       final validContext = ToastService.navigatorKey.currentContext ?? context;
       if (validContext.mounted) {
         ToastService.showError(
-          validContext, 
-          "Check site settings (🔒).", 
+          validContext,
+          "Check site settings (🔒).",
           title: "Location Blocked",
           onTap: () {
             debugPrint("👆 [DEBUG] Error Toast Tapped!");
             if (kIsWeb) {
               // 🚨 Capture context immediately before the async gap
-              final safeContext = ToastService.navigatorKey.currentContext ?? context;
-              
+              final safeContext =
+                  ToastService.navigatorKey.currentContext ?? context;
+
               Future.delayed(const Duration(milliseconds: 400), () {
-                debugPrint("🟢 [DEBUG] 400ms delay finished, firing Warning Toast...");
+                debugPrint(
+                    "🟢 [DEBUG] 400ms delay finished, firing Warning Toast...");
                 if (!safeContext.mounted) return;
                 try {
                   // 🚨 Changed to showWarning to bypass the isMapScreen invisibility filter
-                  ToastService.showWarning(
-                    safeContext, 
-                    "Click the lock icon (🔒) in your browser URL bar to allow location.", 
-                    title: "Browser Settings"
-                  );
+                  ToastService.showWarning(safeContext,
+                      "Click the lock icon (🔒) in your browser URL bar to allow location.",
+                      title: "Browser Settings");
                 } catch (e) {
                   debugPrint("🔴 [DEBUG] Failed to launch Warning Toast: $e");
                 }
@@ -1044,25 +1573,25 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       final validContext = ToastService.navigatorKey.currentContext ?? context;
       if (validContext.mounted) {
         ToastService.showError(
-          validContext, 
-          "Tap to grant access.", 
+          validContext,
+          "Tap to grant access.",
           title: "Location Denied",
           onTap: () {
             debugPrint("👆 [DEBUG] Error Toast Tapped!");
             if (kIsWeb) {
               // 🚨 Capture context immediately before the async gap
-              final safeContext = ToastService.navigatorKey.currentContext ?? context;
-              
+              final safeContext =
+                  ToastService.navigatorKey.currentContext ?? context;
+
               Future.delayed(const Duration(milliseconds: 400), () {
-                debugPrint("🟢 [DEBUG] 400ms delay finished, firing Warning Toast...");
+                debugPrint(
+                    "🟢 [DEBUG] 400ms delay finished, firing Warning Toast...");
                 if (!safeContext.mounted) return;
                 try {
                   // 🚨 Changed to showWarning to bypass the isMapScreen invisibility filter
-                  ToastService.showWarning(
-                    safeContext, 
-                    "Click the lock icon (🔒) in your browser URL bar to allow location.", 
-                    title: "Browser Settings"
-                  );
+                  ToastService.showWarning(safeContext,
+                      "Click the lock icon (🔒) in your browser URL bar to allow location.",
+                      title: "Browser Settings");
                 } catch (e) {
                   debugPrint("🔴 [DEBUG] Failed to launch Warning Toast: $e");
                 }
@@ -1192,7 +1721,9 @@ class _AppleStyleCompassState extends State<AppleStyleCompass> {
                   borderRadius: BorderRadius.circular(50),
                   child: RepaintBoundary(
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: kIsWeb ? 4.0 : 20.0, sigmaY: kIsWeb ? 4.0 : 20.0),
+                      filter: ImageFilter.blur(
+                          sigmaX: kIsWeb ? 4.0 : 20.0,
+                          sigmaY: kIsWeb ? 4.0 : 20.0),
                       child: Container(
                         width: 48,
                         height: 48,
@@ -1202,13 +1733,31 @@ class _AppleStyleCompassState extends State<AppleStyleCompass> {
                               : const Color(0xFF0B0E17).withValues(alpha: 0.75),
                           shape: BoxShape.circle,
                           border: !isDark
-                              ? Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.0)
-                              : Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1.0),
+                              ? Border.all(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  width: 1.0)
+                              : Border.all(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  width: 1.0),
                           boxShadow: !isDark
-                              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 4))]
+                              ? [
+                                  BoxShadow(
+                                      color:
+                                          Colors.black.withValues(alpha: 0.08),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4))
+                                ]
                               : [
-                                  BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 24, offset: const Offset(0, 12)),
-                                  BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 4)),
+                                  BoxShadow(
+                                      color:
+                                          Colors.black.withValues(alpha: 0.4),
+                                      blurRadius: 24,
+                                      offset: const Offset(0, 12)),
+                                  BoxShadow(
+                                      color:
+                                          Colors.black.withValues(alpha: 0.2),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 4)),
                                 ],
                         ),
                         child: Transform.rotate(
@@ -1219,7 +1768,8 @@ class _AppleStyleCompassState extends State<AppleStyleCompass> {
                               // The authentic dial with ticks and red triangle
                               CustomPaint(
                                 size: const Size(48, 48),
-                                painter: AppleCompassDialPainter(isDark: isDark),
+                                painter:
+                                    AppleCompassDialPainter(isDark: isDark),
                               ),
                               // The center "N"
                               Text(

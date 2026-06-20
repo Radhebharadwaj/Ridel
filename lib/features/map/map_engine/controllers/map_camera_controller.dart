@@ -541,25 +541,28 @@ class MapCameraController {
       _currentDotPos = pos;
       try {
         await map.addGeoJsonSource('user-puck-source', geoJson);
+      } catch (_) {}
 
+      try {
         await map.addCircleLayer('user-puck-source', 'user-halo-layer', CircleLayerProperties(
           circleColor: "#007AFF",
           circleRadius: targetHaloRadius,
           circleOpacity: targetHaloOpacity * _blueDotOpacity,
         ));
+      } catch (_) {}
 
+      try {
         await map.addSymbolLayer('user-puck-source', 'user-puck-layer', SymbolLayerProperties(
-          iconImage: "nav_puck",
+          iconImage: "nav_puck", // Fallback string is "nav_puck", but we can't easily do coalesce here.
           iconSize: 1.0,
           iconOpacity: targetPuckOpacity * _blueDotOpacity,
           iconRotate: heading,
           iconAllowOverlap: true,
           iconIgnorePlacement: true,
         ));
-        _isPuckInitialized = true;
-      } catch (e) {
-        debugPrint("Failed to initialize custom puck layers: $e");
-      }
+      } catch (_) {}
+      
+      _isPuckInitialized = true;
       return;
     }
 

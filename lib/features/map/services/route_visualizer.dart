@@ -1,5 +1,5 @@
+import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
-
 /// 🎨 Apple-Level Visualizer: Handles 3D drop shadows, zoom interpolation, white halo casings, and gradients.
 class RouteVisualizer {
   // ═══════════════════════════════════════════════════════════════════════════
@@ -68,7 +68,11 @@ class RouteVisualizer {
     };
 
     // 3. Inject GeoJSON Source
-    await controller.addGeoJsonSource(_sourceId, geoJsonData);
+    try {
+      await controller.addGeoJsonSource(_sourceId, geoJsonData);
+    } catch (e) {
+      debugPrint('Ignored Map Injection Error: $e');
+    }
 
     // 4. Determine theme-aware colors
     final bool isDark = theme == true ||
@@ -81,7 +85,11 @@ class RouteVisualizer {
       try {
         await controller.addLineLayer(sourceId, layerId, props, belowLayerId: 'ultimate-pin-layer');
       } catch (_) {
-        await controller.addLineLayer(sourceId, layerId, props);
+        try {
+          await controller.addLineLayer(sourceId, layerId, props);
+        } catch (e) {
+          debugPrint('Ignored safeAddLineLayer Error: $e');
+        }
       }
     }
 

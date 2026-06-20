@@ -143,21 +143,25 @@ class MapLayerController {
         await _map!.setGeoJsonSource(_routeSourceId, geoJson);
       } catch (_) {
         // Fallback: Buffer doesn't exist, create it once
-        await _map!.addGeoJsonSource(_routeSourceId, geoJson);
+        try { await _map!.addGeoJsonSource(_routeSourceId, geoJson); } catch (_) {}
 
-        await _map!.addLineLayer(_routeSourceId, _routeCasingLayerId, const LineLayerProperties(
-          lineColor: "#111111",
-          lineWidth: 8.0,
-          lineJoin: "round",
-          lineCap: "round",
-        ));
+        try {
+          await _map!.addLineLayer(_routeSourceId, _routeCasingLayerId, const LineLayerProperties(
+            lineColor: "#111111",
+            lineWidth: 8.0,
+            lineJoin: "round",
+            lineCap: "round",
+          ));
+        } catch (_) {}
 
-        await _map!.addLineLayer(_routeSourceId, _routeLineLayerId, const LineLayerProperties(
-          lineColor: "#0A84FF",
-          lineWidth: 5.0,
-          lineJoin: "round",
-          lineCap: "round",
-        ));
+        try {
+          await _map!.addLineLayer(_routeSourceId, _routeLineLayerId, const LineLayerProperties(
+            lineColor: "#0A84FF",
+            lineWidth: 5.0,
+            lineJoin: "round",
+            lineCap: "round",
+          ));
+        } catch (_) {}
       }
 
       await _map!.animateCamera(CameraUpdate.newLatLngBounds(
@@ -215,17 +219,19 @@ class MapLayerController {
       try {
         await _map!.setGeoJsonSource(_pinSourceId, geoJson);
       } catch (_) {
-        await _map!.addGeoJsonSource(_pinSourceId, geoJson);
+        try { await _map!.addGeoJsonSource(_pinSourceId, geoJson); } catch (_) {}
 
-        await _map!.addSymbolLayer(
-          _pinSourceId,
-          "custom-pin-layer",
-          const SymbolLayerProperties(
-            iconImage: 'custom_pin',
-            iconAnchor: 'bottom',
-            iconSize: 0.35,
-          ),
-        );
+        try {
+          await _map!.addSymbolLayer(
+            _pinSourceId,
+            "custom-pin-layer",
+            const SymbolLayerProperties(
+              iconImage: 'custom_pin', // Fallback string is 'custom_pin'
+              iconAnchor: 'bottom',
+              iconSize: 0.35,
+            ),
+          );
+        } catch (_) {}
       }
     } catch (e) {
       debugPrint("⚠️ Pin Drawing Failed: $e");
@@ -245,39 +251,45 @@ class MapLayerController {
       try {
         await _map!.setGeoJsonSource(_pinSourceId, geoJson);
       } catch (_) {
-        await _map!.addGeoJsonSource(_pinSourceId, geoJson);
+        try { await _map!.addGeoJsonSource(_pinSourceId, geoJson); } catch (_) {}
 
-        await _map!.addCircleLayer(
-            _pinSourceId,
-            _blueGlowLayerId,
-            CircleLayerProperties(
-                circleColor: _safeColorString(hexColor, '#0A84FF'),
-                circleOpacity: 0.3,
-                circleRadius: _safeSize(25.0, 10.0),
-                circlePitchAlignment: "map",
-                circleStrokeWidth: 0));
+        try {
+          await _map!.addCircleLayer(
+              _pinSourceId,
+              _blueGlowLayerId,
+              CircleLayerProperties(
+                  circleColor: _safeColorString(hexColor, '#0A84FF'),
+                  circleOpacity: 0.3,
+                  circleRadius: _safeSize(25.0, 10.0),
+                  circlePitchAlignment: "map",
+                  circleStrokeWidth: 0));
+        } catch (_) {}
 
-        await _map!.addCircleLayer(
-            _pinSourceId,
-            _blueBorderLayerId,
-            const CircleLayerProperties(
-                circleColor: "#FFFFFF",
-                circleOpacity: 1.0,
-                circleRadius: 10.0,
-                circlePitchAlignment: "map",
-                circleStrokeWidth: 0.5,
-                circleStrokeColor: "#000000",
-                circleStrokeOpacity: 0.15));
+        try {
+          await _map!.addCircleLayer(
+              _pinSourceId,
+              _blueBorderLayerId,
+              const CircleLayerProperties(
+                  circleColor: "#FFFFFF",
+                  circleOpacity: 1.0,
+                  circleRadius: 10.0,
+                  circlePitchAlignment: "map",
+                  circleStrokeWidth: 0.5,
+                  circleStrokeColor: "#000000",
+                  circleStrokeOpacity: 0.15));
+        } catch (_) {}
 
-        await _map!.addCircleLayer(
-            _pinSourceId,
-            _blueCoreLayerId,
-            CircleLayerProperties(
-                circleColor: _safeColorString(hexColor, '#0A84FF'),
-                circleOpacity: 1.0,
-                circleRadius: _safeSize(7.0, 4.0),
-                circlePitchAlignment: "map",
-                circleStrokeWidth: 0));
+        try {
+          await _map!.addCircleLayer(
+              _pinSourceId,
+              _blueCoreLayerId,
+              CircleLayerProperties(
+                  circleColor: _safeColorString(hexColor, '#0A84FF'),
+                  circleOpacity: 1.0,
+                  circleRadius: _safeSize(7.0, 4.0),
+                  circlePitchAlignment: "map",
+                  circleStrokeWidth: 0));
+        } catch (_) {}
       }
 
       // The pulsing glow will be handled via a Flutter CustomPaint Overlay

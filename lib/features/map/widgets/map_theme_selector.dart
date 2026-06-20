@@ -12,6 +12,8 @@ class MapThemeSelector {
     BuildContext context, {
     required MapThemeType currentTheme,
     required Function(MapThemeType) onThemeSelected,
+    required bool showPOIs,
+    required ValueChanged<bool> onPOIsToggled,
   }) {
     // 1. Get exact button coordinates
     final RenderBox renderBox = context.findRenderObject() as RenderBox;
@@ -52,6 +54,8 @@ class MapThemeSelector {
                     color: Colors.transparent,
                     child: _MapThemePopup(
                       currentTheme: currentTheme,
+                      showPOIs: showPOIs,
+                      onPOIsToggled: onPOIsToggled,
                       onThemeSelected: (theme) {
                         onThemeSelected(theme);
                         Navigator.of(dialogContext).pop();
@@ -68,14 +72,31 @@ class MapThemeSelector {
   }
 }
 
-class _MapThemePopup extends StatelessWidget {
+class _MapThemePopup extends StatefulWidget {
   final MapThemeType currentTheme;
   final ValueChanged<MapThemeType> onThemeSelected;
+  final bool showPOIs;
+  final ValueChanged<bool> onPOIsToggled;
 
   const _MapThemePopup({
     required this.currentTheme,
     required this.onThemeSelected,
+    required this.showPOIs,
+    required this.onPOIsToggled,
   });
+
+  @override
+  State<_MapThemePopup> createState() => _MapThemePopupState();
+}
+
+class _MapThemePopupState extends State<_MapThemePopup> {
+  late bool _localShowPOIs;
+
+  @override
+  void initState() {
+    super.initState();
+    _localShowPOIs = widget.showPOIs;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -89,49 +110,107 @@ class _MapThemePopup extends StatelessWidget {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
             child: Container(
-            width: 170, // Sleek, constrained width
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? const Color(0xFF0B0E17).withValues(alpha: 0.75)
-                    : Colors.white.withValues(alpha: 0.75),
-                borderRadius: BorderRadius.circular(24),
-                border: Theme.of(context).brightness == Brightness.dark
-                    ? Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1.0)
-                    : Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.0),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  )
-                ]),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _ThemeOption(
-                  icon: Icons.dark_mode_rounded,
-                  label: 'Dark',
-                  isSelected: currentTheme == MapThemeType.dark,
-                  onTap: () {
-                    AppHaptics.selectionClick();
-                    onThemeSelected(MapThemeType.dark);
-                  },
-                ),
-                const SizedBox(height: 4),
-                _ThemeOption(
-                  icon: Icons.light_mode_rounded,
-                  label: 'Light',
-                  isSelected: currentTheme == MapThemeType.light,
-                  onTap: () {
-                    AppHaptics.selectionClick();
-                    onThemeSelected(MapThemeType.light);
-                  },
-                ),
-              ],
+              width: 200, // Sleek, constrained width
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF0B0E17).withValues(alpha: 0.75)
+                      : Colors.white.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Theme.of(context).brightness == Brightness.dark
+                      ? Border.all(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          width: 1.0)
+                      : Border.all(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          width: 1.0),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    )
+                  ]),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ThemeOption(
+                    icon: Icons.dark_mode_rounded,
+                    label: 'Dark',
+                    isSelected: widget.currentTheme == MapThemeType.dark,
+                    onTap: () {
+                      AppHaptics.selectionClick();
+                      widget.onThemeSelected(MapThemeType.dark);
+                    },
+                  ),
+                  const SizedBox(height: 4),
+                  _ThemeOption(
+                    icon: Icons.light_mode_rounded,
+                    label: 'Light',
+                    isSelected: widget.currentTheme == MapThemeType.light,
+                    onTap: () {
+                      AppHaptics.selectionClick();
+                      widget.onThemeSelected(MapThemeType.light);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Divider(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : Colors.black.withValues(alpha: 0.05),
+                    height: 1,
+                  ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.local_offer_outlined,
+                          size: 18,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white70
+                              : Colors.black54,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Shops & Places',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.white
+                                  : Colors.black87,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          height: 24,
+                          child: Transform.scale(
+                            scale: 0.75,
+                            child: Switch(
+                              value: _localShowPOIs,
+                              activeTrackColor: const Color(0xFF0A84FF),
+                              onChanged: (val) {
+                                AppHaptics.selectionClick();
+                                setState(() {
+                                  _localShowPOIs = val;
+                                });
+                                widget.onPOIsToggled(val);
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
         ),
       ),
     );
@@ -195,7 +274,7 @@ class _ThemeOption extends StatelessWidget {
               ),
             ),
             if (isSelected)
-              Icon(
+              const Icon(
                 Icons.check_circle_rounded,
                 color: highlightColor,
                 size: 18,

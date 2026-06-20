@@ -13,7 +13,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../features/profile/services/profile_repository.dart';
 import '../core/utils/toast_service.dart';
 
-
 import '../core/providers/app_navigation_provider.dart';
 import '../core/utils/app_haptics.dart';
 import '../core/widgets/notification_sheet.dart';
@@ -37,7 +36,6 @@ class MainLayout extends StatefulWidget {
 }
 
 class _MainLayoutState extends State<MainLayout> {
-
   final ValueNotifier<double> _searchSheetProgressNotifier = ValueNotifier(0.0);
 
   double _railWidth = 70.0;
@@ -337,7 +335,6 @@ class _MainLayoutState extends State<MainLayout> {
                   ),
                 ),
               ),
-
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 350),
                 curve: Curves.easeOutCubic,
@@ -380,9 +377,9 @@ class _MainLayoutState extends State<MainLayout> {
             // ==========================================================
             if (isDesktop)
               Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
+                top: 110.0,
+                left: 16.0,
+                bottom: 24.0,
                 child: _WebNavigationRail(
                   desktopMargin: desktopMargin,
                   currentIndex: navProvider.currentIndex,
@@ -527,102 +524,92 @@ class _WebNavigationRailState extends State<_WebNavigationRail> {
   @override
   Widget build(BuildContext context) {
     final bool isExpanded = widget.currentWidth > 75 && !_isHidden;
-    final double currentRadius = _isHidden ? 24.0 : (isExpanded ? 24.0 : 100.0);
 
     return Padding(
-      padding: EdgeInsets.only(
-          left: widget.desktopMargin,
-          top: widget.desktopMargin,
-          bottom: widget.desktopMargin,
-          right: 0),
+      padding: EdgeInsets.zero,
       child: LayoutBuilder(
         builder: (context, constraints) {
           return Align(
-            alignment: Alignment.bottomLeft,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeOutCubic,
-              height: _isHidden ? 48.0 : constraints.maxHeight,
-              width: _isHidden ? 48.0 : widget.currentWidth,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(currentRadius),
-                border: Border.all(
-                    color: widget.isDark
-                        ? Colors.white.withValues(alpha: 0.12)
-                        : Colors.black.withValues(alpha: 0.08),
-                    width: 1),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black
-                          .withValues(alpha: _isHidden ? 0.15 : 0.25),
-                      blurRadius: _isHidden ? 20 : 40,
-                      offset: const Offset(0, 5))
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(currentRadius),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 350),
-                    curve: Curves.easeOutCubic,
-                    color: widget.isDark
-                        ? const Color(0xFF1C1C1E).withValues(alpha: 0.85)
-                        : const Color(0xFFF2F2F7).withValues(alpha: 0.90),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Positioned(
-                          top: 0,
-                          bottom: 0,
-                          left: 0,
-                          width: 220.0,
-                          child: AnimatedOpacity(
-                            duration: const Duration(milliseconds: 250),
-                            opacity: _isHidden ? 0.0 : 1.0,
-                            child: IgnorePointer(
-                                ignoring: _isHidden,
-                                child:
-                                    _buildSidebarContent(isExpanded, context)),
+              alignment: Alignment.centerLeft,
+              child: GestureDetector(
+                onTap: () {},
+                onPanUpdate: (_) {},
+                behavior: HitTestBehavior.opaque,
+                child: ClipRect(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 350),
+                      curve: Curves.easeOutCubic,
+                      height: constraints.maxHeight,
+                      width: _isHidden ? 48.0 : widget.currentWidth,
+                      decoration: BoxDecoration(
+                        color: widget.isDark 
+                            ? const Color(0xFF1E2129).withValues(alpha: 0.85) 
+                            : Colors.white.withValues(alpha: 0.85),
+                        border: Border(
+                          right: BorderSide(
+                            color: widget.isDark 
+                                ? Colors.white.withValues(alpha: 0.12) 
+                                : Colors.black.withValues(alpha: 0.05),
+                            width: 1.0,
                           ),
                         ),
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          child: AnimatedOpacity(
-                            duration: const Duration(milliseconds: 250),
-                            opacity: _isHidden ? 1.0 : 0.0,
-                            child: IgnorePointer(
-                              ignoring: !_isHidden,
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () {
-                                  AppHaptics.heavyImpact();
-                                  setState(() => _isHidden = false);
-                                  widget.onWidthChanged(70.0);
-                                },
-                                child: Container(
-                                    width: 48,
-                                    height: 48,
-                                    color: Colors.transparent,
-                                    child: Center(
-                                        child: Icon(Icons.menu_rounded,
-                                            color: widget.isDark
-                                                ? Colors.white
-                                                    .withValues(alpha: 0.9)
-                                                : Colors.black87,
-                                            size: 22))),
+                      ),
+                      child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Positioned(
+                              top: 0,
+                              bottom: 0,
+                              left: 0,
+                              width: 220.0,
+                              child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 250),
+                                opacity: _isHidden ? 0.0 : 1.0,
+                                child: IgnorePointer(
+                                    ignoring: _isHidden,
+                                    child: _buildSidebarContent(
+                                        isExpanded, context)),
                               ),
                             ),
-                          ),
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 250),
+                                opacity: _isHidden ? 1.0 : 0.0,
+                                child: IgnorePointer(
+                                  ignoring: !_isHidden,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () {
+                                      AppHaptics.heavyImpact();
+                                      setState(() => _isHidden = false);
+                                      widget.onWidthChanged(70.0);
+                                    },
+                                    child: Container(
+                                        width: 48,
+                                        height: 48,
+                                        color: Colors.transparent,
+                                        child: Center(
+                                            child: Icon(Icons.menu_rounded,
+                                                color: widget.isDark
+                                                    ? Colors.white
+                                                        .withValues(alpha: 0.9)
+                                                    : Colors.black87,
+                                                size: 22))),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
-          );
+              );
         },
       ),
     );
@@ -667,37 +654,36 @@ class _WebNavigationRailState extends State<_WebNavigationRail> {
                             child: Container(
                               height: 60,
                               color: Colors.transparent,
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                      width: 68,
-                                      child: Center(
-                                          child: Icon(
-                                              Icons.directions_bike_rounded,
-                                              color: widget.isDark
-                                                  ? Colors.white
-                                                  : Colors.black,
-                                              size: 30))),
-                                  Expanded(
-                                      child: ClipRect(
-                                          child: AnimatedOpacity(
-                                              duration: const Duration(
-                                                  milliseconds: 200),
-                                              opacity: isExpanded ? 1.0 : 0.0,
-                                              child: Text("RIDEL",
-                                                  style: GoogleFonts.poppins(
-                                                      color: widget.isDark
-                                                          ? Colors.white
-                                                          : Colors.black,
-                                                      fontSize: 24,
-                                                      fontWeight:
-                                                          FontWeight.w900,
-                                                      letterSpacing: 2.5),
-                                                  maxLines: 1,
-                                                  softWrap: false,
-                                                  overflow:
-                                                      TextOverflow.fade))))
-                                ],
+                              child: ClipRect(
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                        width: 68,
+                                        child: Center(
+                                            child: Icon(
+                                                Icons.directions_bike_rounded,
+                                                color: widget.isDark
+                                                    ? Colors.white
+                                                    : Colors.black,
+                                                size: 30))),
+                                    Expanded(
+                                        child: AnimatedOpacity(
+                                            duration: const Duration(
+                                                milliseconds: 200),
+                                            opacity: isExpanded ? 1.0 : 0.0,
+                                            child: Text("RIDEL",
+                                                style: GoogleFonts.poppins(
+                                                    color: widget.isDark
+                                                        ? Colors.white
+                                                        : Colors.black,
+                                                    fontSize: 24,
+                                                    fontWeight: FontWeight.w900,
+                                                    letterSpacing: 2.5),
+                                                maxLines: 1,
+                                                softWrap: false,
+                                                overflow: TextOverflow.fade)))
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -945,32 +931,33 @@ class _RailItemState extends State<_RailItem> {
                               decoration: BoxDecoration(
                                   color: widget.activeColor,
                                   borderRadius: BorderRadius.circular(4))))),
-                  Row(
-                    children: [
-                      SizedBox(
-                          width: 52,
-                          child: Center(
-                              child: AnimatedScale(
-                                  scale: _isHovering ? 1.1 : 1.0,
-                                  duration: const Duration(milliseconds: 200),
-                                  child: Icon(widget.icon,
-                                      color: color, size: 26)))),
-                      Expanded(
-                          child: ClipRect(
-                              child: AnimatedOpacity(
-                                  duration: const Duration(milliseconds: 200),
-                                  opacity: widget.isExpanded ? 1.0 : 0.0,
-                                  child: Text(widget.label,
-                                      style: GoogleFonts.inter(
-                                          fontSize: 15,
-                                          fontWeight: widget.isActive
-                                              ? FontWeight.bold
-                                              : FontWeight.w600,
-                                          color: color),
-                                      maxLines: 1,
-                                      softWrap: false,
-                                      overflow: TextOverflow.fade))))
-                    ],
+                  ClipRect(
+                    child: Row(
+                      children: [
+                        SizedBox(
+                            width: 52,
+                            child: Center(
+                                child: AnimatedScale(
+                                    scale: _isHovering ? 1.1 : 1.0,
+                                    duration: const Duration(milliseconds: 200),
+                                    child: Icon(widget.icon,
+                                        color: color, size: 26)))),
+                        Expanded(
+                            child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 200),
+                                opacity: widget.isExpanded ? 1.0 : 0.0,
+                                child: Text(widget.label,
+                                    style: GoogleFonts.inter(
+                                        fontSize: 15,
+                                        fontWeight: widget.isActive
+                                            ? FontWeight.bold
+                                            : FontWeight.w600,
+                                        color: color),
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.fade)))
+                      ],
+                    ),
                   ),
                 ],
               ),

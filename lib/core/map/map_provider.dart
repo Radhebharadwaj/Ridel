@@ -157,24 +157,29 @@ class MapProvider extends ChangeNotifier {
     if (controller == null) return;
     try {
       final bool isVisible = opacity > 0.0;
-      await controller!.setGeoJsonSource('nav_puck_source', {
-        "type": "FeatureCollection",
-        "features": isVisible
-            ? [
-                {
-                  "type": "Feature",
-                  "geometry": {
-                    "type": "Point",
-                    "coordinates": [location.longitude, location.latitude]
-                  },
-                  "properties": {"bearing": bearing}
-                }
-              ]
-            : []
-      });
+      
+      final geoJsonFeature = isVisible 
+        ? {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [location.longitude, location.latitude]
+            },
+            "properties": {
+              "bearing": bearing
+            }
+          }
+        : {
+            "type": "FeatureCollection",
+            "features": []
+          };
+
+      await controller!.setGeoJsonSource("nav_puck_source", geoJsonFeature);
       _lastPuckLocation = location;
       _lastPuckBearing = bearing;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint("Failed to update puck source: $e");
+    }
   }
 
   Future<void> updatePuckVisibility() async {
@@ -722,7 +727,7 @@ class MapProvider extends ChangeNotifier {
       try {
         final bool isWalking = currentNavMode == 'walking';
         if (isWalking) {
-          await controller!.addGeoJsonSource('alt-source-$i', geoJson);
+          try { await controller!.addGeoJsonSource('alt-source-$i', geoJson); } catch (_) {}
           await safeAddLineLayer(
             'alt-source-$i',
             'alt-walk-layer-$i',
@@ -735,7 +740,7 @@ class MapProvider extends ChangeNotifier {
             ),
           );
         } else {
-          await controller!.addGeoJsonSource('route-source-$i', geoJson);
+          try { await controller!.addGeoJsonSource('route-source-$i', geoJson); } catch (_) {}
           await safeAddLineLayer(
             'route-source-$i',
             'route-layer-$i',
@@ -809,7 +814,7 @@ class MapProvider extends ChangeNotifier {
         final bool isWalking = currentNavMode == 'walking';
 
         if (isWalking) {
-          await controller!.addGeoJsonSource('primary-source', geoJson);
+          try { await controller!.addGeoJsonSource('primary-source', geoJson); } catch (_) {}
           await safeAddLineLayer(
             'primary-source',
             'primary-walk-layer',
@@ -822,7 +827,7 @@ class MapProvider extends ChangeNotifier {
             ),
           );
         } else {
-          await controller!.addGeoJsonSource('route-source-0', geoJson);
+          try { await controller!.addGeoJsonSource('route-source-0', geoJson); } catch (_) {}
 
           // 1. BOTTOM: Casing (Deep shadow to give height/3D effect)
           await safeAddLineLayer(
@@ -890,20 +895,22 @@ class MapProvider extends ChangeNotifier {
           await controller!.removeLayer('nav_puck_layer');
         } catch (_) {}
 
-        await controller!.addSymbolLayer(
-          'nav_puck_source',
-          'nav_puck_layer',
-          const SymbolLayerProperties(
-            iconImage: 'nav_puck',
-            iconPitchAlignment: 'map',
-            iconRotationAlignment: 'map',
-            iconAllowOverlap: true,
-            iconIgnorePlacement: true,
-            iconSize: 1.0,
-            iconOpacity: 1.0,
-            iconRotate: ['get', 'bearing'],
-          ),
-        );
+        try {
+          await controller!.addSymbolLayer(
+            'nav_puck_source',
+            'nav_puck_layer',
+            const SymbolLayerProperties(
+              iconImage: 'nav_puck',
+              iconPitchAlignment: 'map',
+              iconRotationAlignment: 'map',
+              iconAllowOverlap: true,
+              iconIgnorePlacement: true,
+              iconSize: 1.0,
+              iconOpacity: 1.0,
+              iconRotate: ['get', 'bearing'],
+            ),
+          );
+        } catch (_) {}
       } catch (e) {
         debugPrint("🗺️ Failed to enforce render sequence: $e");
       }
@@ -972,13 +979,15 @@ class MapProvider extends ChangeNotifier {
             await controller!.removeSource('intermediate-pins-source');
           } catch (_) {}
 
-          await controller!.addGeoJsonSource("connectors-source", {
-            "type": "Feature",
-            "geometry": {
-              "type": "MultiLineString",
-              "coordinates": connectorLines,
-            },
-          });
+          try {
+            await controller!.addGeoJsonSource("connectors-source", {
+              "type": "Feature",
+              "geometry": {
+                "type": "MultiLineString",
+                "coordinates": connectorLines,
+              },
+            });
+          } catch (_) {}
 
           await safeAddLineLayer(
             "connectors-source",
@@ -1054,32 +1063,38 @@ class MapProvider extends ChangeNotifier {
           timeString,
           isPrimary,
         );
-        await controller!.addImage(imageId, imageBytes);
+        try {
+          await controller!.addImage(imageId, imageBytes);
+        } catch (_) {}
 
         // 2. Add Point Source
-        await controller!.addGeoJsonSource(sourceId, {
-          "type": "Feature",
-          "geometry": {
-            "type": "Point",
-            "coordinates": [midpoint.longitude, midpoint.latitude],
-          },
-        });
+        try {
+          await controller!.addGeoJsonSource(sourceId, {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [midpoint.longitude, midpoint.latitude],
+            },
+          });
+        } catch (_) {}
 
         // 3. Add Symbol Layer (ICON ONLY, NO TEXT)
-        await controller!.addSymbolLayer(
-          sourceId,
-          layerId,
-          SymbolLayerProperties(
-            iconImage: imageId,
-            iconSize: 0.32,
-            iconAnchor: "center", // Centered perfectly on the route line
-            symbolSortKey: i,
-            symbolPlacement: "point",
-            iconAllowOverlap: isPrimary ? true : false,
-            iconIgnorePlacement: isPrimary ? true : false,
-          ),
-          belowLayerId: 'nav_puck_layer', // CRITICAL Z-INDEX FIX: Forces tags beneath the user dot
-        );
+        try {
+          await controller!.addSymbolLayer(
+            sourceId,
+            layerId,
+            SymbolLayerProperties(
+              iconImage: imageId.isNotEmpty ? imageId : 'custom-marker', // Fallback added
+              iconSize: 0.32,
+              iconAnchor: "center", // Centered perfectly on the route line
+              symbolSortKey: i,
+              symbolPlacement: "point",
+              iconAllowOverlap: isPrimary ? true : false,
+              iconIgnorePlacement: isPrimary ? true : false,
+            ),
+            belowLayerId: 'nav_puck_layer', // CRITICAL Z-INDEX FIX: Forces tags beneath the user dot
+          );
+        } catch (_) {}
       } catch (e) {
         debugPrint("🗺️ ETA TAG DRAW ERROR for index $i: $e");
       }
@@ -1102,10 +1117,12 @@ class MapProvider extends ChangeNotifier {
           "type": "Feature",
           "geometry": {
             "type": "Point",
-            "coordinates": [targetDestination!.longitude, targetDestination!.latitude], // CRITICAL: Exact user location
+            "coordinates": [targetDestination!.longitude, targetDestination!.latitude],
           },
         });
+      } catch (_) {}
 
+      try {
         await controller!.addSymbolLayer(
           'ultimate-pin-source',
           'ultimate-pin-layer',
@@ -1117,9 +1134,7 @@ class MapProvider extends ChangeNotifier {
             iconIgnorePlacement: true,
           ),
         );
-      } catch (e) {
-        debugPrint("🗺️ PIN DROP ERROR: $e");
-      }
+      } catch (_) {}
     }
 
     // 9. INTERMEDIATE PINS
@@ -1140,7 +1155,9 @@ class MapProvider extends ChangeNotifier {
           "type": "FeatureCollection",
           "features": features,
         });
+      } catch (_) {}
 
+      try {
         await controller!.addSymbolLayer(
           'intermediate-pins-source',
           'intermediate-pins-layer',
