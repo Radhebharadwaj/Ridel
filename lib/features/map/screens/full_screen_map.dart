@@ -17,6 +17,7 @@ import 'package:ridel/features/map/widgets/search_sheet/map_search_sheet.dart';
 import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/features/map/widgets/map_theme_selector.dart';
 import 'package:ridel/features/map/widgets/weather_floating_widget.dart';
+import 'package:ridel/features/map/widgets/quick_action_buttons.dart';
 import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:ridel/core/utils/toast_service.dart';
@@ -48,7 +49,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   bool _showScaleBar = false;
   Timer? _scaleBarTimer;
-  double _lastZoom = -1.0;
+
   String _scaleText = '0 m';
   double _scaleWidth = 60.0;
 
@@ -103,22 +104,17 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           ? '${chosenMeters ~/ 1000} km'
           : '$chosenMeters m';
 
-      // TRIGGER ONLY ON ZOOM CHANGE — PANNING MUST NOT TRIGGER IT
-      if (_lastZoom != -1.0 && (_lastZoom - currentZoom).abs() > 0.005) {
-        // Update scale values ONLY during active zoom
-        setState(() {
-          _showScaleBar = true;
-          _scaleText = newText;
-          _scaleWidth = newWidth.clamp(20.0, 150.0);
-        });
+      setState(() {
+        _showScaleBar = true;
+        _scaleText = newText;
+        _scaleWidth = newWidth.clamp(20.0, 150.0);
+      });
+      _scaleBarTimer?.cancel();
+      _scaleBarTimer = Timer(const Duration(milliseconds: 1000), () {
+        if (mounted) setState(() => _showScaleBar = false);
+      });
 
-        _scaleBarTimer?.cancel();
-        _scaleBarTimer = Timer(const Duration(milliseconds: 1500), () {
-          if (mounted) setState(() => _showScaleBar = false);
-        });
-      }
 
-      _lastZoom = currentZoom;
     }
   }
 
@@ -850,64 +846,58 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             ),
           ),
 
-          // 🚀 PREMIUM APPLE-STYLE SCALE RULER (Zoom-Only, Cinematic Fade)
-          // Top edge aligned with Weather Widget, right-anchored at 16px
-          Positioned(
-            top: topMargin, // Matches weather widget top position exactly
-            right: 16.0, // Clean right alignment
-            child: IgnorePointer(
-              child: AnimatedOpacity(
-                opacity: _showScaleBar ? 1.0 : 0.0,
-                duration:
-                    const Duration(milliseconds: 400), // Buttery smooth fade
-                curve: Curves.easeInOutCubic, // Premium cinematic curve
-                child: Container(
-                  padding: const EdgeInsets.only(
-                      top: 4, bottom: 4, left: 8, right: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.black
-                        .withValues(alpha: 0.3), // Very subtle dark glass
-                    borderRadius: BorderRadius.circular(6.0),
-                    border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
-                        width: 0.5),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        _scaleText,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Container(
-                        height: 4,
-                        width: _scaleWidth,
-                        decoration: BoxDecoration(
-                          border: Border(
-                            left: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.6),
-                                width: 1.2),
-                            right: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.6),
-                                width: 1.2),
-                            bottom: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.6),
-                                width: 1.2),
+          ValueListenableBuilder<bool>(
+            valueListenable: globalSidebarOpen,
+            builder: (context, isSidebarOpen, _) {
+              final double leftOffset = isDesktop ? (isSidebarOpen ? 260.0 : 20.0) : 16.0; 
+
+              return AnimatedPositioned(
+                duration: const Duration(milliseconds: 350),
+                curve: Curves.easeOutCubic,
+                bottom: isDesktop ? 32.0 : (MediaQuery.paddingOf(context).bottom + 90),
+                left: leftOffset,
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    opacity: _showScaleBar ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 150),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _scaleText,
+                          style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black87,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            shadows: [Shadow(color: isDark ? Colors.black87 : Colors.white, blurRadius: 3)],
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Container(
+                              height: 4, width: _scaleWidth / 2,
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.white : Colors.black87,
+                                border: Border.all(color: isDark ? Colors.black54 : Colors.white54, width: 0.5),
+                              ),
+                            ),
+                            Container(
+                              height: 4, width: _scaleWidth / 2,
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.white30 : Colors.black38,
+                                border: Border.all(color: isDark ? Colors.black54 : Colors.white54, width: 0.5),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ),
+              );
+            }
           ),
 
           if (MediaQuery.sizeOf(context).width < 800)
@@ -1347,7 +1337,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               : content;
                         }),
                       ),
-
+                      if (isDesktop) ...[
+                        const SizedBox(height: 16),
+                        const DesktopZoomPill(),
+                      ],
                     ],
                   ),
                 ),

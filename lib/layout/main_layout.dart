@@ -3,6 +3,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -503,21 +505,56 @@ class _WebNavigationRailState extends State<_WebNavigationRail> {
           curve: Curves.easeInOutCubic,
           top: 0, bottom: 0,
           left: widget.isSidebarVisible ? 0 : -600.0, 
-          child: Row(
-            children: [
-              _buildLeftPane(),
-              _buildDynamicRightPane(),
-            ],
-          ),
+          child: _buildSidebarContent(),
         ),
       ],
     );
   }
 
+  Widget _buildSidebarContent() {
+    final content = MouseRegion(
+      opaque: true, // Safely blocks clicks/hovers from reaching the map without swallowing children's taps
+      child: Listener(
+        onPointerSignal: (event) {}, // Blocks scroll wheel leaks
+        child: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0), // EXACT Weather Card Blur
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 350),
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                color: isDark 
+                    ? const Color(0xFF1E2129).withValues(alpha: 0.85) // EXACT Weather Card Color
+                    : Colors.white.withValues(alpha: 0.85),
+                border: Border(
+                  right: BorderSide(
+                    color: isDark 
+                        ? Colors.white.withValues(alpha: 0.12) // EXACT Weather Card Border
+                        : Colors.black.withValues(alpha: 0.05),
+                    width: 1.0,
+                  ),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min, // Hugs the animating right pane
+                children: [
+                  _buildLeftPane(),
+                  _buildDynamicRightPane(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    
+    return kIsWeb ? PointerInterceptor(child: content) : content;
+  }
+
   Widget _buildLeftPane() {
     return Container(
       width: 240,
-      color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF9F9F9),
+      color: Colors.transparent, // CRITICAL: Let the unified parent glass show through
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -641,11 +678,17 @@ class _WebNavigationRailState extends State<_WebNavigationRail> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 350),
       curve: Curves.easeOutCubic,
-      width: _isRightPaneOpen ? 360.0 : 0.0, // Smooth slide effect
+      width: _isRightPaneOpen ? 360.0 : 0.0,
       height: double.infinity,
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF151515) : Colors.white,
-        border: Border(right: BorderSide(color: isDark ? Colors.white10 : Colors.black12)),
+        color: Colors.transparent, // CRITICAL: Let the unified parent glass show through
+        border: Border(
+          left: BorderSide(
+            // Subtle inner divider between the left and right pane
+            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+            width: 1.0,
+          ),
+        ),
       ),
       child: ClipRect(
         child: OverflowBox(

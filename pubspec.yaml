@@ -144,4 +144,5 @@ flutter:
     - assets/images/nav_puck.png
     - assets/images/custom_pin.png
     - assets/images/add_places.png
+    - assets/ridel_dark_theme.json
     - .env

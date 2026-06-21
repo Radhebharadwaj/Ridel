@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
@@ -195,7 +197,7 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
   Widget build(BuildContext context) {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
     final isDark = !isLightMode;
-    final bool isDesktop = MediaQuery.sizeOf(context).width >= 600;
+
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
@@ -316,60 +318,7 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
                           ],
                         ),
                       ),
-                    // ─── Zoom Pill (Desktop Only) ───
-                    if (isDesktop && uiState == MapUIState.idle)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16.0),
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: Container(
-                            width: 48,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(24),
-                              color: isDark ? const Color(0xFF1E2129).withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.20),
-                              gradient: isDark ? null : LinearGradient(
-                                begin: Alignment.topLeft, end: Alignment.bottomRight,
-                                colors: [Colors.white.withValues(alpha: 0.20), Colors.white.withValues(alpha: 0.06)],
-                              ),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.35),
-                                  blurRadius: 20, spreadRadius: -2, offset: const Offset(0, 14),
-                                ),
-                              ],
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(24),
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _ContinuousZoomButton(
-                                      icon: CupertinoIcons.add, isDark: isDark,
-                                      onZoomStep: () {
-                                        final mapProvider = Provider.of<MapProvider>(context, listen: false);
-                                        final z = mapProvider.controller?.cameraPosition?.zoom ?? 14.0;
-                                        mapProvider.controller?.moveCamera(CameraUpdate.zoomTo(z + 0.06));
-                                      },
-                                    ),
-                                    Container(height: 1, width: 32, color: Colors.white.withValues(alpha: 0.15)),
-                                    _ContinuousZoomButton(
-                                      icon: CupertinoIcons.minus, isDark: isDark,
-                                      onZoomStep: () {
-                                        final mapProvider = Provider.of<MapProvider>(context, listen: false);
-                                        final z = mapProvider.controller?.cameraPosition?.zoom ?? 14.0;
-                                        mapProvider.controller?.moveCamera(CameraUpdate.zoomTo(z - 0.06));
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+
                   ],
                 );
               },
@@ -561,65 +510,92 @@ class _ActionButtonConfig {
   });
 }
 
+class DesktopZoomPill extends StatelessWidget {
+  const DesktopZoomPill({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final content = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {}, // Blocks stray taps
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(50),
+          border: Border.all(color: isDark ? const Color(0xFF38383A) : const Color(0xFFE5E5EA), width: 0.5),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 20, offset: const Offset(0, 8), spreadRadius: 0),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(50),
+          child: RepaintBoundary(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: kIsWeb ? 4.0 : 20.0, sigmaY: kIsWeb ? 4.0 : 20.0),
+              child: Container(
+                width: 48,
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0B0E17).withValues(alpha: 0.80) : Colors.white.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(50),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _ContinuousZoomButton(
+                      icon: Icons.add_rounded, isDark: isDark,
+                      onZoomStep: () {
+                        final ctrl = Provider.of<MapProvider>(context, listen: false).controller;
+                        final z = ctrl?.cameraPosition?.zoom ?? 14.0;
+                        ctrl?.moveCamera(CameraUpdate.zoomTo(z + 0.06));
+                      },
+                    ),
+                    // CRITICAL: NO DIVIDER HERE TO MATCH THE TOP PILL
+                    _ContinuousZoomButton(
+                      icon: Icons.remove_rounded, isDark: isDark,
+                      onZoomStep: () {
+                        final ctrl = Provider.of<MapProvider>(context, listen: false).controller;
+                        final z = ctrl?.cameraPosition?.zoom ?? 14.0;
+                        ctrl?.moveCamera(CameraUpdate.zoomTo(z - 0.06));
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return kIsWeb ? PointerInterceptor(child: content) : content;
+  }
+}
+
 class _ContinuousZoomButton extends StatefulWidget {
   final IconData icon;
   final bool isDark;
   final VoidCallback onZoomStep;
-
-  const _ContinuousZoomButton({
-    required this.icon,
-    required this.isDark,
-    required this.onZoomStep,
-  });
-
+  const _ContinuousZoomButton({required this.icon, required this.isDark, required this.onZoomStep});
   @override
   State<_ContinuousZoomButton> createState() => _ContinuousZoomButtonState();
 }
 
 class _ContinuousZoomButtonState extends State<_ContinuousZoomButton> {
-  Timer? _timer;
-  Timer? _delayTimer;
-
-  void _startZooming() {
-    if (_timer != null || _delayTimer != null) return;
-    AppHaptics.lightImpact();
-    widget.onZoomStep();
-    _delayTimer = Timer(const Duration(milliseconds: 300), () {
-      _timer = Timer.periodic(const Duration(milliseconds: 40), (timer) {
-        widget.onZoomStep();
-      });
-    });
-  }
-
-  void _stopZooming() {
-    _delayTimer?.cancel();
-    _delayTimer = null;
-    _timer?.cancel();
-    _timer = null;
-  }
-
-  @override
-  void dispose() {
-    _stopZooming();
-    super.dispose();
-  }
+  // ... keep existing _startZooming / _stopZooming logic ...
+  Timer? _timer; Timer? _delayTimer;
+  void _startZooming() { if (_timer != null || _delayTimer != null) return; AppHaptics.lightImpact(); widget.onZoomStep(); _delayTimer = Timer(const Duration(milliseconds: 300), () { _timer = Timer.periodic(const Duration(milliseconds: 40), (timer) { widget.onZoomStep(); }); }); }
+  void _stopZooming() { _delayTimer?.cancel(); _delayTimer = null; _timer?.cancel(); _timer = null; }
+  @override void dispose() { _stopZooming(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown: (_) => _startZooming(),
-      onTapUp: (_) => _stopZooming(),
-      onTapCancel: _stopZooming,
+      onTapDown: (_) => _startZooming(), onTapUp: (_) => _stopZooming(), onTapCancel: _stopZooming,
       child: SizedBox(
-        height: 48,
+        height: 44, // EXACTLY 44px TO MATCH TOP PILL (Was 48)
         width: 48,
-        child: Center(
-            child: Icon(widget.icon,
-                color: widget.isDark ? Colors.white70 : Colors.black87,
-                size: 22)),
+        child: Center(child: Icon(widget.icon, color: widget.isDark ? Colors.white70 : Colors.black87, size: 20)), // EXACTLY 20px TO MATCH TOP PILL
       ),
     );
   }
 }
-
