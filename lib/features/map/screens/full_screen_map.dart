@@ -41,7 +41,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   late AnimationController _fadeScaleController;
 
   String? _loadedMapStyle;
-  bool _isLoadingStyle = true;
+  bool _isMapFullyLoaded = false;
   MapLibreMapController? _tempController;
   MapThemeType? _currentTheme;
   bool _isTilted = false;
@@ -165,9 +165,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   Future<void> _initMapStyle({bool updateExisting = false}) async {
     if (!mounted) return;
     if (!updateExisting) {
-      setState(() {
-        _isLoadingStyle = true;
-      });
+      // Intentionally left blank, state update removed as variable was unused
     }
 
     try {
@@ -181,7 +179,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       if (mounted) {
         setState(() {
           _loadedMapStyle = style;
-          _isLoadingStyle = false;
         });
 
         final themeToSet =
@@ -190,11 +187,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       }
     } catch (e) {
       debugPrint("❌ Error fixing Ola Style: $e");
-      if (mounted) {
-        setState(() {
-          _isLoadingStyle = false;
-        });
-      }
+      // removed empty setState
     }
   }
 
@@ -596,6 +589,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 Provider.of<GlobalLocationService>(context,
                                     listen: false),
                                 this);
+
+                            Future.delayed(const Duration(milliseconds: 500), () {
+                              if (mounted) {
+                                setState(() {
+                                  _isMapFullyLoaded = true;
+                                });
+                              }
+                            });
                           },
                           onMapClick: (point, latLng) async {
                             FocusScope.of(context).unfocus();
@@ -642,7 +643,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 Map? poi;
                                 for (var f in features) {
                                   if (f is Map && f['properties'] != null) {
-                                    print('DEBUG TAPPED FEATURE PROPERTIES: ${f['properties']}');
+                                    debugPrint('DEBUG TAPPED FEATURE PROPERTIES: ${f['properties']}');
                                     if (f['properties']['name'] != null && f['geometry'] != null) {
                                       poi ??= f; // Store the first named feature but keep looping to print all
                                     }
@@ -794,11 +795,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           // 🚀 0.5: SKELETON MAP OVERLAY
           Positioned.fill(
             child: IgnorePointer(
-              ignoring: !_isLoadingStyle,
+              ignoring: _isMapFullyLoaded,
               child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 300),
-                opacity: _isLoadingStyle ? 1.0 : 0.0,
-                child: PremiumMapSkeleton(isDark: isDark),
+                opacity: _isMapFullyLoaded ? 0.0 : 1.0,
+                duration: const Duration(milliseconds: 800),
+                curve: Curves.easeInOut,
+                child: const PremiumMapSkeleton(),
               ),
             ),
           ),
@@ -908,21 +910,24 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             ),
           ),
 
-          Positioned.fill(
-            child: MapSearchSheet(
-              key: const ValueKey('map_search_sheet'),
-              isMapTabActive: widget.isMapTabActive,
-              onSearchModeChanged: (isActive) {},
-              onSearchSubmitted: (query) {},
-              onProgressChanged: (progress) {
-                widget.searchSheetProgressNotifier.value = progress;
-              },
-              onBackToPreviousTab: () {
-                Provider.of<AppNavigationProvider>(context, listen: false)
-                    .goBack();
-              },
+          if (MediaQuery.sizeOf(context).width < 800)
+            Positioned.fill(
+              child: MapSearchSheet(
+                key: const ValueKey('map_search_sheet'),
+                isMapTabActive: widget.isMapTabActive,
+                onSearchModeChanged: (isActive) {},
+                onSearchSubmitted: (query) {},
+                onProgressChanged: (progress) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    widget.searchSheetProgressNotifier.value = progress;
+                  });
+                },
+                onBackToPreviousTab: () {
+                  Provider.of<AppNavigationProvider>(context, listen: false)
+                      .goBack();
+                },
+              ),
             ),
-          ),
 
           // 🚀 1. SMOOTH WEATHER WIDGET (Mobile = Left, Desktop = Right)
           ValueListenableBuilder<bool>(
@@ -931,11 +936,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
               return AnimatedPositioned(
                   duration: const Duration(milliseconds: 400),
                   curve: Curves.easeOutCubic,
-                  top: topMargin,
-                  left: isDesktop
-                      ? ((isSidebarExpanded ? 220.0 : 80.0) + 16.0)
-                      : sideMargin,
-                  right: sideMargin,
+                  top: 16.0,
+                  left: isDesktop ? null : 16.0,
+                  right: isDesktop ? 16.0 : null,
                   child: ValueListenableBuilder<double>(
                     valueListenable: widget.searchSheetProgressNotifier,
                     builder: (context, progress, _) {
@@ -1078,33 +1081,35 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             ),
           ),
 
-          Positioned(
-            bottom: isDesktop ? 32.0 : 0.0,
-            right: sideMargin,
-            child: ValueListenableBuilder<double>(
-              valueListenable: widget.searchSheetProgressNotifier,
-              builder: (context, progress, pillChild) {
-                if (isDesktop) {
-                  return pillChild!;
-                }
-                final screenSize = MediaQuery.sizeOf(context);
-                final sheetHeight = progress * screenSize.height;
-                final bottomOffset = sheetHeight + 32.0;
-
-                final opacity = (progress <= 0.45)
-                    ? 1.0
-                    : (1.0 - ((progress - 0.45) / (0.90 - 0.45)))
-                        .clamp(0.0, 1.0);
-
-                return Transform.translate(
-                  offset: Offset(0, -bottomOffset),
-                  child: Opacity(
-                    opacity: opacity,
-                    child: pillChild,
-                  ),
+          ValueListenableBuilder<double>(
+            valueListenable: widget.searchSheetProgressNotifier,
+            builder: (context, progress, pillChild) {
+              if (isDesktop) {
+                return Positioned(
+                  bottom: 32.0,
+                  right: sideMargin,
+                  child: pillChild!,
                 );
-              },
-              child: Listener(
+              }
+              final screenSize = MediaQuery.sizeOf(context);
+              final sheetHeight = progress * screenSize.height;
+              final bottomOffset = sheetHeight + 32.0;
+
+              final opacity = (progress <= 0.45)
+                  ? 1.0
+                  : (1.0 - ((progress - 0.45) / (0.90 - 0.45)))
+                      .clamp(0.0, 1.0);
+
+              return Positioned(
+                bottom: bottomOffset,
+                right: sideMargin,
+                child: Opacity(
+                  opacity: opacity,
+                  child: pillChild!,
+                ),
+              );
+            },
+            child: Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: (_) {},
                 onPointerMove: (_) {},
@@ -1346,58 +1351,28 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       if (isDesktop) ...[
                         const SizedBox(height: 16),
                         Builder(builder: (context) {
-                          final content = Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(24),
-                              boxShadow: !isDark
-                                  ? [
-                                      BoxShadow(
-                                          color: Colors.black
-                                              .withValues(alpha: 0.15),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 4))
-                                    ]
-                                  : [
-                                      BoxShadow(
-                                          color: Colors.black
-                                              .withValues(alpha: 0.4),
-                                          blurRadius: 24,
-                                          offset: const Offset(0, 12)),
-                                      BoxShadow(
-                                          color: Colors.black
-                                              .withValues(alpha: 0.2),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 4)),
-                                    ],
-                            ),
+                          final content = SizedBox(
+                            width: 48.0, // EXACTLY match the width of the top Map/Locate pill
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(24),
-                              child: RepaintBoundary(
-                                child: BackdropFilter(
-                                  filter: ImageFilter.blur(
-                                      sigmaX: kIsWeb ? 4.0 : 25.0,
-                                      sigmaY: kIsWeb ? 4.0 : 25.0),
-                                  child: Container(
-                                    width: 48,
-                                    decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(100),
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? const Color(0xFF1E2129).withValues(alpha: 0.85) // Matches top pill
+                                        : Colors.white.withValues(alpha: 0.85),
+                                    borderRadius: BorderRadius.circular(100),
+                                    border: Border.all(
                                       color: isDark
-                                          ? const Color(0xFF1E2129)
-                                              .withValues(alpha: 0.85)
-                                          : Colors.white
-                                              .withValues(alpha: 0.85),
-                                      borderRadius: BorderRadius.circular(100),
-                                      border: Border.all(
-                                        color: isDark
-                                            ? Colors.white
-                                                .withValues(alpha: 0.12)
-                                            : Colors.black
-                                                .withValues(alpha: 0.05),
-                                        width: 1.0,
-                                      ),
+                                          ? Colors.white.withValues(alpha: 0.12)
+                                          : Colors.black.withValues(alpha: 0.05),
+                                      width: 1.0,
                                     ),
-                                    child: Column(
-                                      children: [
-                                        _ContinuousZoomButton(
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      _ContinuousZoomButton(
                                           icon: Icons.add_rounded,
                                           isDark: isDark,
                                           onZoomStep: () {
@@ -1440,8 +1415,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                   ),
                                 ),
                               ),
-                            ),
-                          );
+                            );
                           return kIsWeb
                               ? PointerInterceptor(child: content)
                               : content;
@@ -1452,8 +1426,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                 ),
               ),
             ),
-          ),
-        ],
+    ],
       ),
     );
   }
@@ -2030,24 +2003,95 @@ class _ContinuousZoomButtonState extends State<_ContinuousZoomButton> {
   }
 }
 
-class PremiumMapSkeleton extends StatelessWidget {
-  final bool isDark;
+class PremiumMapSkeleton extends StatefulWidget {
+  const PremiumMapSkeleton({super.key});
 
-  const PremiumMapSkeleton({super.key, required this.isDark});
+  @override
+  State<PremiumMapSkeleton> createState() => _PremiumMapSkeletonState();
+}
+
+class _PremiumMapSkeletonState extends State<PremiumMapSkeleton> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 2000), // Slightly faster for a snappy shine
+      vsync: this,
+    )..repeat(); 
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: isDark ? const Color(0xFF0B0E17) : const Color(0xFFF1F2F4),
+      color: const Color(0xFF161E28),
       child: Center(
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(
-              isDark ? Colors.white24 : Colors.black26,
-            ),
-            strokeWidth: 3,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            return ShaderMask(
+              blendMode: BlendMode.srcATop,
+              shaderCallback: (bounds) {
+                return LinearGradient(
+                  // Sweeps tightly from left to right
+                  begin: Alignment(-2.0 + (_controller.value * 4), -0.5),
+                  end: Alignment(-1.0 + (_controller.value * 4), 0.5),
+                  colors: [
+                    Colors.transparent, // Lets the dim base color show
+                    Colors.white.withValues(alpha: 0.9), // The intense bright shine
+                    Colors.transparent, // Back to dim base
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
+                ).createShader(bounds);
+              },
+              child: child,
+            );
+          },
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // BASE ELEMENTS (Dimmed to 40% so the shine pops)
+              Icon(Icons.directions_bike, color: Colors.white.withValues(alpha: 0.4), size: 38), 
+              const SizedBox(width: 8),
+              
+              Text(
+                'Maps',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.4), // Dimmed base
+                  fontSize: 32,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: -0.5,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+              const SizedBox(width: 12),
+              
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08), // Dimmed pill background
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'BETA',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.4), // Dimmed text
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

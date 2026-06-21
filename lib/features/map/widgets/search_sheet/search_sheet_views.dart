@@ -37,7 +37,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     final isSelected = _selectedPlace != null;
 
     final showTransportModes = isSelected && !provider.isAddingStopMode;
-    final showQuickActions = isEmpty && (!isSelected || provider.isAddingStopMode);
+    final showQuickActions = !isFocused && isEmpty && (!isSelected || provider.isAddingStopMode);
     final showRecentSearches =
         (!isSelected || provider.isAddingStopMode) && (isFocused || provider.isEditingHistory) && isEmpty;
 
@@ -529,7 +529,10 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                 ),
               ),
             ),
-          if (showRecentSearches && !isSelected) const SizedBox(height: 16),
+          if (showRecentSearches && !isSelected) ...[
+            const SizedBox(height: 16),
+            _buildFindNearbyList(isDark),
+          ],
           if (!isSelected && !isFocused && isEmpty)
             Material(
               color: isDark
@@ -1285,78 +1288,77 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     }
     final dynamicRadius = combinedResults.length == 1 ? 50.0 : 24.0;
 
-    final card = _buildProfileStyleCard(
-      context,
-      isDark: isDark,
-      bgColor: isDark ? const Color(0xFF1C1F26) : Colors.white,
-      borderRadius: dynamicRadius,
-      child: ListView(
-        padding: EdgeInsets.zero,
-        shrinkWrap: !isExpanded,
-        physics: const ClampingScrollPhysics(),
-        children: combinedResults.asMap().entries.map((entry) {
-          final index = entry.key;
-          final place = entry.value;
-          final isLast = index == combinedResults.length - 1;
-
-          return Column(
-            children: [
-              Listener(
-                behavior: HitTestBehavior.opaque,
-                // Trigger INSTANTLY on touch, before any keyboard unfocus events can destroy the widget
-                onPointerDown: (event) async {
-                  debugPrint(
-                      "💥 RAW POINTER DOWN REGISTERED ON: ${place.name}");
-                  AppHaptics.selectionClick();
-                  await _selectPlaceFromList(place);
-                },
-                child: ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white12 : Colors.black12,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      CupertinoIcons.location_solid,
-                      color: Colors.grey,
-                      size: 18,
-                    ),
+    final card = Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7), // Apple style grouped background
+        borderRadius: BorderRadius.circular(dynamicRadius),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.10)
+              : Colors.black.withValues(alpha: 0.06),
+        ),
+        boxShadow: AppShadows.buttonSoft,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(dynamicRadius),
+        child: ListView.separated(
+          padding: EdgeInsets.zero,
+          shrinkWrap: !isExpanded,
+          physics: const ClampingScrollPhysics(),
+          itemCount: combinedResults.length,
+          separatorBuilder: (context, index) => Padding(
+            padding: const EdgeInsets.only(left: 60.0), // Indent divider
+            child: Divider(
+              height: 1,
+              color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+            ),
+          ),
+          itemBuilder: (context, index) {
+            final place = combinedResults[index];
+            return Listener(
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: (event) async {
+                debugPrint("💥 RAW POINTER DOWN REGISTERED ON: ${place.name}");
+                AppHaptics.selectionClick();
+                await _selectPlaceFromList(place);
+              },
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white12 : Colors.black12,
+                    shape: BoxShape.circle,
                   ),
-                  title: Text(
-                    place.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isDark ? Colors.white : Colors.black,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
+                  child: const Icon(
+                    CupertinoIcons.location_solid,
+                    color: Colors.grey,
+                    size: 18,
                   ),
-                  subtitle: Text(
-                    place.address,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isDark ? Colors.white60 : Colors.black54,
-                      fontSize: 13,
-                    ),
+                ),
+                title: Text(
+                  place.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+                subtitle: Text(
+                  place.address,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isDark ? Colors.white60 : Colors.black54,
+                    fontSize: 13,
                   ),
                 ),
               ),
-              if (!isLast)
-                Divider(
-                  height: 1,
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.08)
-                      : Colors.black12,
-                  indent: 60,
-                ),
-            ],
-          );
-        }).toList(),
+            );
+          },
+        ),
       ),
     );
 
@@ -1437,6 +1439,79 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
             indent: 60,
           ),
       ],
+    );
+  }
+
+  Widget _buildFindNearbyList(bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Find Nearby', style: GoogleFonts.inter(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E2129) : const Color(0xFFF2F2F7), // Match your premium dark card color
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.transparent),
+          ),
+          child: Column(
+            children: [
+              _buildVerticalNearbyTile(context, icon: Icons.local_gas_station_rounded, color: Colors.blueAccent, title: 'Petrol Pumps', isDark: isDark),
+              _buildDivider(isDark),
+              _buildVerticalNearbyTile(context, icon: Icons.train_rounded, color: Colors.blue, title: 'Railway Stations', isDark: isDark),
+              _buildDivider(isDark),
+              _buildVerticalNearbyTile(context, icon: Icons.hotel_rounded, color: Colors.purpleAccent, title: 'Hotels', isDark: isDark),
+              _buildDivider(isDark),
+              _buildVerticalNearbyTile(context, icon: Icons.directions_subway_rounded, color: Colors.blueAccent, title: 'Metro', isDark: isDark),
+              _buildDivider(isDark),
+              _buildVerticalNearbyTile(context, icon: Icons.restaurant_rounded, color: Colors.orange, title: 'Restaurants', isDark: isDark),
+              _buildDivider(isDark),
+              _buildVerticalNearbyTile(context, icon: Icons.local_parking_rounded, color: Colors.blueAccent, title: 'Parking', isDark: isDark),
+              _buildDivider(isDark),
+              _buildVerticalNearbyTile(context, icon: Icons.coffee_rounded, color: Colors.orangeAccent, title: 'Coffee', isDark: isDark),
+              _buildDivider(isDark),
+              _buildVerticalNearbyTile(context, icon: Icons.local_gas_station_rounded, color: Colors.lightBlue, title: 'CNG', isDark: isDark),
+              _buildDivider(isDark),
+              _buildVerticalNearbyTile(context, icon: Icons.fitness_center_rounded, color: Colors.cyan, title: 'Gym', isDark: isDark),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVerticalNearbyTile(BuildContext context, {required IconData icon, required Color color, required String title, required bool isDark}) {
+    return InkWell(
+      onTap: () {
+        AppHaptics.selectionClick();
+        _searchCtrl.text = title;
+        _handleSearchExecution(title);
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 22),
+            const SizedBox(width: 16),
+            Text(
+              title,
+              style: GoogleFonts.inter(
+                color: isDark ? Colors.white : Colors.black,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDivider(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 48.0), // Indented just like Apple Maps
+      child: Divider(height: 1, color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05)),
     );
   }
 }

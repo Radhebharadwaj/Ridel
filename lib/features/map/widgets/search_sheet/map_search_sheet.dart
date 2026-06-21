@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/core/map/map_provider.dart';
@@ -207,8 +208,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     _searchFocus.addListener(() {
       if (_searchFocus.hasFocus) {
         _safeAnimateSheet(_safeMaxSize);
-      } else {
-        _safeAnimateSheet(_safeMidSize);
       }
       setState(() {});
     });

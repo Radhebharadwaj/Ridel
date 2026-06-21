@@ -1140,18 +1140,18 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                         focusNode: _searchFocus,
                         textAlignVertical: TextAlignVertical.center,
                         onTap: () {
-                          if (_sheetController.isAttached) {
+                          if (_sheetController.isAttached && _sheetController.size < _safeMaxSize) {
                             _sheetController.animateTo(
                               _safeMaxSize,
                               duration: const Duration(milliseconds: 300),
                               curve: Curves.easeOutCubic,
                             );
                           }
-                          Future.delayed(const Duration(milliseconds: 350), () {
-                            if (mounted && !_searchFocus.hasFocus) {
-                              FocusScope.of(context).requestFocus(_searchFocus);
-                            }
-                          });
+                          // Force focus to stay active
+                          if (!_searchFocus.hasFocus) {
+                            FocusScope.of(context).requestFocus(_searchFocus);
+                          }
+                          rebuildState(() {}); // Trigger UI update for states
                         },
                         style: TextStyle(
                           color: isDark ? Colors.white : Colors.black,

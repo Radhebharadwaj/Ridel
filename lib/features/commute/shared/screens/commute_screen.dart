@@ -30,7 +30,7 @@ class _CommuteScreenState extends State<CommuteScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: Colors.transparent,
       resizeToAvoidBottomInset: false,
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -119,13 +119,7 @@ class _CommuteScreenState extends State<CommuteScreen> {
         builder: (context, isRailExpanded, child) {
           return Stack(
             children: [
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: DesktopPromoDashboard(isDark: isDark),
-                ),
-              ),
+
               ValueListenableBuilder<bool>(
                   valueListenable: _isSearchSheetOpen,
                   builder: (context, isSheetOpen, child) {
@@ -416,150 +410,4 @@ class MapSearchSheetContent extends StatelessWidget {
   }
 }
 
-// ==============================================================
-// 💎 THE DESKTOP BENTO DASHBOARD
-// ==============================================================
-class DesktopPromoDashboard extends StatelessWidget {
-  final bool isDark;
-  const DesktopPromoDashboard({super.key, required this.isDark});
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF07090F) : const Color(0xFFF5F5F7),
-        border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.02)
-                : Colors.black.withValues(alpha: 0.05)),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -50,
-            top: -50,
-            child: Icon(Icons.location_city_rounded,
-                size: 400, color: Colors.white.withValues(alpha: 0.03)),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(40.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Welcome to Ridel Web",
-                      style: GoogleFonts.poppins(
-                          color: isDark ? Colors.white : Colors.black,
-                          fontSize: 42,
-                          fontWeight: FontWeight.w800,
-                          height: 1.1),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      "Search a station to explore interactive routes,\nor discover our features below.",
-                      style: GoogleFonts.inter(
-                          color: isDark ? Colors.white54 : Colors.black54,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w400),
-                    ),
-                  ],
-                ),
-                Wrap(
-                  spacing: 20,
-                  runSpacing: 20,
-                  children: [
-                    SizedBox(
-                      width: 280,
-                      child: _buildPromoCard(
-                          title: "Live Bus Tracking",
-                          subtitle:
-                              "Never miss a bus again with real-time GPS tracking across Delhi.",
-                          icon: Icons.directions_bus_filled_rounded,
-                          color: const Color(0xFFFF9F0A),
-                          isDark: isDark),
-                    ),
-                    SizedBox(
-                      width: 280,
-                      child: _buildPromoCard(
-                          title: "Ridel Premium",
-                          subtitle:
-                              "Get ad-free experience, AR navigation & personalized commute insights.",
-                          icon: Icons.workspace_premium_rounded,
-                          color: const Color(0xFFB15EFF),
-                          isDark: isDark),
-                    ),
-                    SizedBox(
-                      width: 280,
-                      child: _buildPromoCard(
-                          title: "Smart AQI",
-                          subtitle:
-                              "Check the air quality of your destination before you travel.",
-                          icon: Icons.air_rounded,
-                          color: const Color(0xFF00E5FF),
-                          isDark: isDark),
-                    ),
-                  ],
-                )
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPromoCard(
-      {required String title,
-      required String subtitle,
-      required IconData icon,
-      required Color color,
-      required bool isDark}) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E2129) : Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.12)
-                    : Colors.black.withValues(alpha: 0.05)),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10))
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(16)),
-                  child: Icon(icon, color: color, size: 28)),
-              const SizedBox(height: 20),
-              Text(title,
-                  style: GoogleFonts.inter(
-                      color: isDark ? Colors.white : Colors.black,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text(subtitle,
-                  style: GoogleFonts.inter(
-                      color: isDark ? Colors.white54 : Colors.black54,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400)),
-            ],
-          ),
-        ),
-    );
-  }
-}

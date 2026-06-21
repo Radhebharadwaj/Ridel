@@ -416,85 +416,88 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     if (showLoading || _hasError || activeWeather == null) {
       return PointerInterceptor(
         child: AnimatedAlign(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          alignment: Alignment.topLeft,
-          child: GestureDetector(
-            onTap: () async {
-              debugPrint("🟡 [WEATHER DEBUG] FALLBACK BUTTON TAPPED!");
-              if (_hasError || activeWeather == null) {
-                AppHaptics.lightImpact();
-                if (mounted) {
-                  setState(() {
-                    _isLoading = true;
-                    _hasError = false;
-                  });
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOutCubic,
+          alignment: Alignment.topRight,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 16.0, right: 16.0, left: 16.0),
+            child: GestureDetector(
+              onTap: () async {
+                debugPrint("🟡 [WEATHER DEBUG] FALLBACK BUTTON TAPPED!");
+                if (_hasError || activeWeather == null) {
+                  AppHaptics.lightImpact();
+                  if (mounted) {
+                    setState(() {
+                      _isLoading = true;
+                      _hasError = false;
+                    });
+                  }
+                  await _resolveLocationAndFetchWeather();
                 }
-                await _resolveLocationAndFetchWeather();
-              }
-            },
-            behavior: HitTestBehavior.opaque,
-            child: Container(
-              width: _compactWidth,
-              height: _compactHeight,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: isLightMode
-                    ? [
-                        BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 32,
-                            offset: const Offset(0, 12))
-                      ]
-                    : [
-                        BoxShadow(
-                          color: Colors.white.withValues(alpha: 0.04),
-                          blurRadius: 16,
-                          spreadRadius: 1,
-                        ),
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          blurRadius: 24,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-              ),
-              child: RepaintBoundary(
-                child: ClipRRect(
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: _compactWidth,
+                height: _compactHeight,
+                decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(24),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: glassColor,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: borderColor, width: 1.0),
+                  boxShadow: isLightMode
+                      ? [
+                          BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 32,
+                              offset: const Offset(0, 12))
+                        ]
+                      : [
+                          BoxShadow(
+                            color: Colors.white.withValues(alpha: 0.04),
+                            blurRadius: 16,
+                            spreadRadius: 1,
+                          ),
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 24,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                ),
+                child: RepaintBoundary(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: glassColor,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: borderColor, width: 1.0),
+                        ),
+                        child: Center(
+                            child: _isLoading
+                                ? CupertinoActivityIndicator(
+                                    color: isLightMode
+                                        ? Colors.black54
+                                        : Colors.white,
+                                    radius: 10)
+                                : Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.cloud_outlined,
+                                          color: isLightMode
+                                              ? Colors.black54
+                                              : Colors.white60,
+                                          size: 20),
+                                      const SizedBox(height: 5),
+                                      Text("Weather",
+                                          style: GoogleFonts.inter(
+                                              color: isLightMode
+                                                  ? Colors.black38
+                                                  : Colors.white38,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w500)),
+                                    ],
+                                  )),
                       ),
-                      child: Center(
-                          child: _isLoading
-                              ? CupertinoActivityIndicator(
-                                  color: isLightMode
-                                      ? Colors.black54
-                                      : Colors.white,
-                                  radius: 10)
-                              : Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.cloud_outlined,
-                                        color: isLightMode
-                                            ? Colors.black54
-                                            : Colors.white60,
-                                        size: 20),
-                                    const SizedBox(height: 5),
-                                    Text("Weather",
-                                        style: GoogleFonts.inter(
-                                            color: isLightMode
-                                                ? Colors.black38
-                                                : Colors.white38,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w500)),
-                                  ],
-                                )),
                     ),
                   ),
                 ),
@@ -513,96 +516,102 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
 
     return PointerInterceptor(
         child: AnimatedAlign(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOutCubic,
-      alignment: Alignment.topLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 450),
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              debugPrint("🟢 [WEATHER DEBUG] MAIN CARD TAPPED!");
-              _handleTap();
-            },
-            onVerticalDragUpdate: _handleVerticalDragUpdate,
-            onVerticalDragEnd: _handleVerticalDragEnd,
-            child: AnimatedContainer(
-              duration: Duration(milliseconds: _dragHeight != null ? 0 : 650),
-              curve: _dragHeight != null ? Curves.linear : Curves.fastOutSlowIn,
-              width: targetWidth,
-              height: targetHeight,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(currentRadius),
-                boxShadow: isLightMode
-                    ? [
-                        BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 32,
-                            offset: const Offset(0, 12))
-                      ]
-                    : [
-                        BoxShadow(
-                          color: Colors.white.withValues(alpha: 0.04),
-                          blurRadius: 16,
-                          spreadRadius: 1,
-                        ),
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          blurRadius: 24,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-              ),
-              child: RepaintBoundary(
-                child: ClipRRect(
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOutCubic,
+      alignment: Alignment.topRight,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 16.0, right: 16.0, left: 16.0),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                debugPrint("🟢 [WEATHER DEBUG] MAIN CARD TAPPED!");
+                _handleTap();
+              },
+              onVerticalDragUpdate: _handleVerticalDragUpdate,
+              onVerticalDragEnd: _handleVerticalDragEnd,
+              child: AnimatedContainer(
+                duration: Duration(milliseconds: _dragHeight != null ? 0 : 650),
+                curve:
+                    _dragHeight != null ? Curves.linear : Curves.fastOutSlowIn,
+                width: targetWidth,
+                height: targetHeight,
+                decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(currentRadius),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: glassColor,
-                        borderRadius: BorderRadius.circular(currentRadius),
-                        border: Border.all(color: borderColor, width: 1.0),
-                      ),
-                      child: OverflowBox(
-                        maxWidth: maxWidth,
-                        maxHeight: _fullHeight,
-                        alignment: Alignment.topLeft,
-                        child: Stack(
-                          children: [
-                            AnimatedOpacity(
-                              duration: const Duration(milliseconds: 200),
-                              opacity: _currentState == WeatherState.compact
-                                  ? 0.0
-                                  : 1.0,
-                              child: IgnorePointer(
-                                ignoring: _currentState == WeatherState.compact,
-                                child: SizedBox(
-                                  width: maxWidth,
-                                  height: _fullHeight,
-                                  child: _buildExpandedAndFullView(isNight,
-                                      isLightMode, displayCity, displayState),
+                  boxShadow: isLightMode
+                      ? [
+                          BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 32,
+                              offset: const Offset(0, 12))
+                        ]
+                      : [
+                          BoxShadow(
+                            color: Colors.white.withValues(alpha: 0.04),
+                            blurRadius: 16,
+                            spreadRadius: 1,
+                          ),
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 24,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                ),
+                child: RepaintBoundary(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(currentRadius),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: glassColor,
+                          borderRadius: BorderRadius.circular(currentRadius),
+                          border: Border.all(color: borderColor, width: 1.0),
+                        ),
+                        child: OverflowBox(
+                          maxWidth: maxWidth,
+                          maxHeight: _fullHeight,
+                          alignment: Alignment.topLeft,
+                          child: Stack(
+                            children: [
+                              AnimatedOpacity(
+                                duration: const Duration(milliseconds: 200),
+                                opacity: _currentState == WeatherState.compact
+                                    ? 0.0
+                                    : 1.0,
+                                child: IgnorePointer(
+                                  ignoring:
+                                      _currentState == WeatherState.compact,
+                                  child: SizedBox(
+                                    width: maxWidth,
+                                    height: _fullHeight,
+                                    child: _buildExpandedAndFullView(isNight,
+                                        isLightMode, displayCity, displayState),
+                                  ),
                                 ),
                               ),
-                            ),
-                            AnimatedOpacity(
-                              duration: const Duration(milliseconds: 200),
-                              opacity: _currentState == WeatherState.compact
-                                  ? 1.0
-                                  : 0.0,
-                              child: IgnorePointer(
-                                ignoring: _currentState != WeatherState.compact,
-                                child: SizedBox(
-                                  width: _compactWidth,
-                                  height: _compactHeight,
-                                  child:
-                                      _buildCompactView(isNight, isLightMode),
+                              AnimatedOpacity(
+                                duration: const Duration(milliseconds: 200),
+                                opacity: _currentState == WeatherState.compact
+                                    ? 1.0
+                                    : 0.0,
+                                child: IgnorePointer(
+                                  ignoring:
+                                      _currentState != WeatherState.compact,
+                                  child: SizedBox(
+                                    width: _compactWidth,
+                                    height: _compactHeight,
+                                    child:
+                                        _buildCompactView(isNight, isLightMode),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -819,7 +828,8 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                                       ]))),
                               Align(
                                 alignment: Alignment(
-                                    (_weather!.aqi / 500).clamp(0.0, 1.0) * 2 - 1,
+                                    (_weather!.aqi / 500).clamp(0.0, 1.0) * 2 -
+                                        1,
                                     0),
                                 child: Container(
                                     width: 12,

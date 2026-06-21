@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:ridel/core/widgets/app_header.dart';
@@ -15,7 +16,7 @@ import '../core/utils/toast_service.dart';
 
 import '../core/providers/app_navigation_provider.dart';
 import '../core/utils/app_haptics.dart';
-import '../core/widgets/notification_sheet.dart';
+
 import '../core/widgets/ridel_glass.dart';
 import '../core/widgets/ridel_sheet.dart';
 import '../features/commute/bus/widgets/bus_services_grid.dart';
@@ -38,7 +39,8 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   final ValueNotifier<double> _searchSheetProgressNotifier = ValueNotifier(0.0);
 
-  double _railWidth = 70.0;
+  double _railWidth = 240.0;
+  bool _isSidebarVisible = true;
 
   @override
   void initState() {
@@ -99,7 +101,7 @@ class _MainLayoutState extends State<MainLayout> {
         statusBarBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        backgroundColor: Colors.transparent,
         resizeToAvoidBottomInset: false,
         body: Stack(
           children: [
@@ -119,8 +121,7 @@ class _MainLayoutState extends State<MainLayout> {
                             isCommuteActive && transportMode == 0 && !isHome;
                         bool showBusMapPlaceholder =
                             isCommuteActive && transportMode == 1 && !isHome;
-                        bool showOlaMap =
-                            isMapActive && (isDesktop ? !isHome : true);
+                        bool showOlaMap = isDesktop || isMapActive;
 
                         return AnimatedPositioned(
                           duration: const Duration(milliseconds: 400),
@@ -129,8 +130,10 @@ class _MainLayoutState extends State<MainLayout> {
                           top: 0,
                           bottom: 0,
                           right: 0,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.zero,
+                          child: IgnorePointer(
+                            ignoring: isDesktop && _isSidebarVisible,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.zero,
                             child: Stack(
                               children: [
                                 AnimatedOpacity(
@@ -151,9 +154,7 @@ class _MainLayoutState extends State<MainLayout> {
                                   child: IgnorePointer(
                                     ignoring: !showMetroMap,
                                     child: Container(
-                                      color: isDark
-                                          ? const Color(0xFF0B0E17)
-                                          : Colors.white,
+                                      color: Colors.transparent,
                                       child: const SizedBox.shrink(),
                                     ),
                                   ),
@@ -164,16 +165,15 @@ class _MainLayoutState extends State<MainLayout> {
                                   child: IgnorePointer(
                                     ignoring: !showBusMapPlaceholder,
                                     child: Container(
-                                        color: isDark
-                                            ? const Color(0xFF0B0E17)
-                                            : Colors.white),
+                                        color: Colors.transparent),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        );
-                      },
+                        ),
+                      );
+                    },
                     );
                   },
                 );
@@ -200,41 +200,7 @@ class _MainLayoutState extends State<MainLayout> {
 
                           return Stack(
                             children: [
-                              AnimatedPositioned(
-                                duration: const Duration(milliseconds: 400),
-                                curve: Curves.easeOutQuint,
-                                top: desktopMargin,
-                                bottom: desktopMargin,
-                                right: desktopMargin,
-                                left: baseLeft,
-                                child: AnimatedOpacity(
-                                  duration: const Duration(milliseconds: 200),
-                                  opacity: isHome ? 1.0 : 0.0,
-                                  child: IgnorePointer(
-                                    ignoring: !isHome,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: isDark
-                                            ? const Color(0xFF0B0E17)
-                                            : Colors.white,
-                                        borderRadius: BorderRadius.circular(24),
-                                        border: Border.all(
-                                            color: isDark
-                                                ? Colors.white
-                                                    .withValues(alpha: 0.02)
-                                                : Colors.black
-                                                    .withValues(alpha: 0.05)),
-                                      ),
-                                      child: ClipRRect(
-                                          borderRadius:
-                                              BorderRadius.circular(24),
-                                          child: _DesktopPromoDashboard(
-                                              isDark: isDark,
-                                              navProvider: navProvider)),
-                                    ),
-                                  ),
-                                ),
-                              ),
+
                               Positioned(
                                 top: desktopMargin + 24.0,
                                 left: baseLeft + 24.0,
@@ -376,10 +342,7 @@ class _MainLayoutState extends State<MainLayout> {
             // 🚀 LAYER 4: WEB NAVIGATION RAIL
             // ==========================================================
             if (isDesktop)
-              Positioned(
-                top: 110.0,
-                left: 16.0,
-                bottom: 24.0,
+              Positioned.fill(
                 child: _WebNavigationRail(
                   desktopMargin: desktopMargin,
                   currentIndex: navProvider.currentIndex,
@@ -387,6 +350,10 @@ class _MainLayoutState extends State<MainLayout> {
                   currentWidth: _railWidth,
                   onWidthChanged: (width) => setState(() => _railWidth = width),
                   onTabSelected: (index) => navProvider.setTab(index),
+                  isSidebarVisible: _isSidebarVisible,
+                  onVisibilityChanged: (visible) {
+                    setState(() => _isSidebarVisible = visible);
+                  },
                 ),
               ),
 
@@ -489,6 +456,8 @@ class _WebNavigationRail extends StatefulWidget {
   final double currentWidth;
   final Function(double) onWidthChanged;
   final Function(int) onTabSelected;
+  final bool isSidebarVisible;
+  final ValueChanged<bool> onVisibilityChanged;
 
   const _WebNavigationRail({
     required this.desktopMargin,
@@ -497,6 +466,8 @@ class _WebNavigationRail extends StatefulWidget {
     required this.currentWidth,
     required this.onWidthChanged,
     required this.onTabSelected,
+    required this.isSidebarVisible,
+    required this.onVisibilityChanged,
   });
 
   @override
@@ -504,677 +475,375 @@ class _WebNavigationRail extends StatefulWidget {
 }
 
 class _WebNavigationRailState extends State<_WebNavigationRail> {
-  bool _isHidden = false;
-  bool _isNotifActive = false;
-  bool _isProfileActive = false;
-  bool _isGetAppActive = false;
-  bool _isAnimating = false;
+  bool _isRightPaneOpen = false; 
+  String _activeRightPaneTab = ''; // can be 'search', 'metro', 'bus', etc.
 
-  void _toggleRailExpand() {
-    if (_isHidden || _isAnimating) return;
-    AppHaptics.selectionClick();
-    _isAnimating = true;
-    final bool isCurrentlyExpanded = widget.currentWidth > 75.0;
-    widget.onWidthChanged(isCurrentlyExpanded ? 70.0 : 220.0);
-    Future.delayed(const Duration(milliseconds: 450), () {
-      if (mounted) _isAnimating = false;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isExpanded = widget.currentWidth > 75 && !_isHidden;
-
-    return Padding(
-      padding: EdgeInsets.zero,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return Align(
-              alignment: Alignment.centerLeft,
-              child: GestureDetector(
-                onTap: () {},
-                onPanUpdate: (_) {},
-                behavior: HitTestBehavior.opaque,
-                child: ClipRect(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 350),
-                      curve: Curves.easeOutCubic,
-                      height: constraints.maxHeight,
-                      width: _isHidden ? 48.0 : widget.currentWidth,
-                      decoration: BoxDecoration(
-                        color: widget.isDark 
-                            ? const Color(0xFF1E2129).withValues(alpha: 0.85) 
-                            : Colors.white.withValues(alpha: 0.85),
-                        border: Border(
-                          right: BorderSide(
-                            color: widget.isDark 
-                                ? Colors.white.withValues(alpha: 0.12) 
-                                : Colors.black.withValues(alpha: 0.05),
-                            width: 1.0,
-                          ),
-                        ),
-                      ),
-                      child: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Positioned(
-                              top: 0,
-                              bottom: 0,
-                              left: 0,
-                              width: 220.0,
-                              child: AnimatedOpacity(
-                                duration: const Duration(milliseconds: 250),
-                                opacity: _isHidden ? 0.0 : 1.0,
-                                child: IgnorePointer(
-                                    ignoring: _isHidden,
-                                    child: _buildSidebarContent(
-                                        isExpanded, context)),
-                              ),
-                            ),
-                            Positioned(
-                              top: 0,
-                              left: 0,
-                              child: AnimatedOpacity(
-                                duration: const Duration(milliseconds: 250),
-                                opacity: _isHidden ? 1.0 : 0.0,
-                                child: IgnorePointer(
-                                  ignoring: !_isHidden,
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () {
-                                      AppHaptics.heavyImpact();
-                                      setState(() => _isHidden = false);
-                                      widget.onWidthChanged(70.0);
-                                    },
-                                    child: Container(
-                                        width: 48,
-                                        height: 48,
-                                        color: Colors.transparent,
-                                        child: Center(
-                                            child: Icon(Icons.menu_rounded,
-                                                color: widget.isDark
-                                                    ? Colors.white
-                                                        .withValues(alpha: 0.9)
-                                                    : Colors.black87,
-                                                size: 22))),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-        },
-      ),
-    );
-  }
-
-  Widget _buildSidebarContent(bool isExpanded, BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _toggleRailExpand,
-      onDoubleTap: _toggleRailExpand,
-      child: ValueListenableBuilder<bool>(
-        valueListenable: globalIsHome,
-        builder: (context, isHome, child) {
-          return ValueListenableBuilder<int>(
-            valueListenable: globalTransportMode,
-            builder: (context, transportMode, child) {
-              return CustomScrollView(
-                physics: const BouncingScrollPhysics(),
-                slivers: [
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 30),
-                        MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () {
-                              AppHaptics.lightImpact();
-                              Navigator.of(context)
-                                  .popUntil((route) => route.isFirst);
-                              Future.delayed(const Duration(milliseconds: 150),
-                                  () {
-                                if (mounted) {
-                                  globalIsHome.value = true;
-                                  widget.onTabSelected(0);
-                                }
-                              });
-                            },
-                            child: Container(
-                              height: 60,
-                              color: Colors.transparent,
-                              child: ClipRect(
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                        width: 68,
-                                        child: Center(
-                                            child: Icon(
-                                                Icons.directions_bike_rounded,
-                                                color: widget.isDark
-                                                    ? Colors.white
-                                                    : Colors.black,
-                                                size: 30))),
-                                    Expanded(
-                                        child: AnimatedOpacity(
-                                            duration: const Duration(
-                                                milliseconds: 200),
-                                            opacity: isExpanded ? 1.0 : 0.0,
-                                            child: Text("RIDEL",
-                                                style: GoogleFonts.poppins(
-                                                    color: widget.isDark
-                                                        ? Colors.white
-                                                        : Colors.black,
-                                                    fontSize: 24,
-                                                    fontWeight: FontWeight.w900,
-                                                    letterSpacing: 2.5),
-                                                maxLines: 1,
-                                                softWrap: false,
-                                                overflow: TextOverflow.fade)))
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 16.0),
-                            child: Divider(
-                                color: widget.isDark
-                                    ? Colors.white.withValues(alpha: 0.1)
-                                    : Colors.black.withValues(alpha: 0.1),
-                                height: 1,
-                                thickness: 1)),
-                        const SizedBox(height: 15),
-                        _RailItem(
-                            icon: Icons.train_rounded,
-                            label: "Metro",
-                            isActive: widget.currentIndex == 0 &&
-                                transportMode == 0 &&
-                                !isHome,
-                            activeColor: const Color(0xFF00E5FF),
-                            isDark: widget.isDark,
-                            isExpanded: isExpanded,
-                            onTap: () {
-                              AppHaptics.lightImpact();
-                              Navigator.of(context)
-                                  .popUntil((route) => route.isFirst);
-                              Future.delayed(const Duration(milliseconds: 150),
-                                  () {
-                                if (mounted) {
-                                  globalTransportMode.value = 0;
-                                  globalIsHome.value = false;
-                                  globalSearchSheetOpen.value = true;
-                                  widget.onTabSelected(0);
-                                }
-                              });
-                            }),
-                        const SizedBox(height: 4),
-                        _RailItem(
-                            icon: Icons.directions_bus_rounded,
-                            label: "Bus",
-                            isActive: widget.currentIndex == 0 &&
-                                transportMode == 1 &&
-                                !isHome,
-                            activeColor: const Color(0xFFFF9F0A),
-                            isDark: widget.isDark,
-                            isExpanded: isExpanded,
-                            onTap: () {
-                              AppHaptics.lightImpact();
-                              Navigator.of(context)
-                                  .popUntil((route) => route.isFirst);
-                              Future.delayed(const Duration(milliseconds: 150),
-                                  () {
-                                if (mounted) {
-                                  globalTransportMode.value = 1;
-                                  globalIsHome.value = false;
-                                  globalSearchSheetOpen.value = true;
-                                  widget.onTabSelected(0);
-                                }
-                              });
-                            }),
-                        const SizedBox(height: 4),
-                        _RailItem(
-                            icon: Icons.map_rounded,
-                            label: "Map",
-                            isActive: widget.currentIndex == 1 && !isHome,
-                            activeColor: const Color(0xFF00E5FF),
-                            isDark: widget.isDark,
-                            isExpanded: isExpanded,
-                            onTap: () {
-                              Navigator.of(context)
-                                  .popUntil((route) => route.isFirst);
-                              Future.delayed(const Duration(milliseconds: 150),
-                                  () {
-                                if (mounted) {
-                                  globalIsHome.value = false;
-                                  globalSearchSheetOpen.value = true;
-                                  widget.onTabSelected(1);
-                                }
-                              });
-                            }),
-                        const Spacer(),
-                        _RailItem(
-                            icon: Icons.notifications_rounded,
-                            label: "Notifications",
-                            isActive: _isNotifActive,
-                            activeColor: const Color(0xFFFF3B30),
-                            isDark: widget.isDark,
-                            isExpanded: isExpanded,
-                            onTap: () {
-                              AppHaptics.lightImpact();
-                              setState(() => _isNotifActive = true);
-                              RidelSheet.show(context,
-                                      title: "Notifications",
-                                      showCloseButton: true,
-                                      child: const NotificationSheetContent())
-                                  .whenComplete(() {
-                                if (mounted) {
-                                  // 🚀 ADDED {
-                                  setState(() => _isNotifActive = false);
-                                } // 🚀 ADDED }
-                              });
-                            }),
-                        const SizedBox(height: 4),
-                        _RailItem(
-                            icon: Icons.person_rounded,
-                            label: "Profile",
-                            isActive: _isProfileActive,
-                            activeColor: const Color(0xFFB15EFF),
-                            isDark: widget.isDark,
-                            isExpanded: isExpanded,
-                            onTap: () {
-                              AppHaptics.lightImpact();
-                              setState(() => _isProfileActive = true);
-                              RidelSheet.show(context,
-                                      title: "Settings",
-                                      showCloseButton: true,
-                                      customHeader: true,
-                                      child: const ProfileSheetContent())
-                                  .whenComplete(() {
-                                if (mounted) {
-                                  setState(() => _isProfileActive = false);
-                                }
-                              });
-                            }),
-                        const SizedBox(height: 4),
-                        _RailItem(
-                            icon: Icons.smartphone_rounded,
-                            label: "Get App",
-                            isActive: _isGetAppActive,
-                            activeColor: const Color(0xFF00E5FF),
-                            isDark: widget.isDark,
-                            isExpanded: isExpanded,
-                            onTap: () {
-                              AppHaptics.selectionClick();
-                              setState(() => _isGetAppActive = true);
-                            }),
-                        const SizedBox(height: 12),
-                        Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 16.0),
-                            child: Divider(
-                                color: widget.isDark
-                                    ? Colors.white.withValues(alpha: 0.1)
-                                    : Colors.black.withValues(alpha: 0.1),
-                                height: 1,
-                                thickness: 1)),
-                        const SizedBox(height: 12),
-                        _RailItem(
-                            icon: Icons.keyboard_double_arrow_down_rounded,
-                            label: "Hide Sidebar",
-                            isActive: false,
-                            activeColor: Colors.white,
-                            isDark: widget.isDark,
-                            isExpanded: isExpanded,
-                            onTap: () {
-                              AppHaptics.heavyImpact();
-                              if (isExpanded) widget.onWidthChanged(70.0);
-                              setState(() => _isHidden = true);
-                              widget.onWidthChanged(48.0);
-                            }),
-                        const SizedBox(height: 25),
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _RailItem extends StatefulWidget {
-  final IconData icon;
-  final String label;
-  final bool isActive;
-  final Color activeColor;
-  final bool isDark;
-  final bool isExpanded;
-  final VoidCallback onTap;
-
-  const _RailItem(
-      {required this.icon,
-      required this.label,
-      required this.isActive,
-      required this.activeColor,
-      required this.isDark,
-      required this.isExpanded,
-      required this.onTap});
-
-  @override
-  State<_RailItem> createState() => _RailItemState();
-}
-
-class _RailItemState extends State<_RailItem> {
-  bool _isHovering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = widget.isActive
-        ? widget.activeColor
-        : (widget.isDark ? Colors.white60 : Colors.black54);
-    final hoverBgColor = widget.isDark
-        ? Colors.white.withValues(alpha: 0.05)
-        : Colors.black.withValues(alpha: 0.04);
-
-    return Tooltip(
-      message: widget.isExpanded ? "" : widget.label,
-      waitDuration: const Duration(milliseconds: 500),
-      decoration: BoxDecoration(
-          color: widget.isDark ? Colors.grey[900] : Colors.grey[800],
-          borderRadius: BorderRadius.circular(8)),
-      textStyle: const TextStyle(color: Colors.white, fontSize: 12),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _isHovering = true),
-        onExit: (_) => setState(() => _isHovering = false),
-        child: GestureDetector(
-          onTap: widget.onTap,
-          behavior: HitTestBehavior.opaque,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              height: 52,
-              decoration: BoxDecoration(
-                  color: _isHovering ? hoverBgColor : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12)),
-              child: Stack(
-                children: [
-                  AnimatedPositioned(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOutBack,
-                      left: 0,
-                      top: widget.isActive ? 12 : 26,
-                      bottom: widget.isActive ? 12 : 26,
-                      width: 4,
-                      child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 200),
-                          opacity: widget.isActive ? 1.0 : 0.0,
-                          child: Container(
-                              decoration: BoxDecoration(
-                                  color: widget.activeColor,
-                                  borderRadius: BorderRadius.circular(4))))),
-                  ClipRect(
-                    child: Row(
-                      children: [
-                        SizedBox(
-                            width: 52,
-                            child: Center(
-                                child: AnimatedScale(
-                                    scale: _isHovering ? 1.1 : 1.0,
-                                    duration: const Duration(milliseconds: 200),
-                                    child: Icon(widget.icon,
-                                        color: color, size: 26)))),
-                        Expanded(
-                            child: AnimatedOpacity(
-                                duration: const Duration(milliseconds: 200),
-                                opacity: widget.isExpanded ? 1.0 : 0.0,
-                                child: Text(widget.label,
-                                    style: GoogleFonts.inter(
-                                        fontSize: 15,
-                                        fontWeight: widget.isActive
-                                            ? FontWeight.bold
-                                            : FontWeight.w600,
-                                        color: color),
-                                    maxLines: 1,
-                                    softWrap: false,
-                                    overflow: TextOverflow.fade)))
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DesktopPromoDashboard extends StatelessWidget {
-  final bool isDark;
-  final AppNavigationProvider navProvider;
-
-  const _DesktopPromoDashboard(
-      {required this.isDark, required this.navProvider});
+  bool get isDark => widget.isDark;
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        Positioned(
-            right: -50,
-            top: -50,
-            child: Icon(Icons.hub_rounded,
-                size: 500, color: Colors.white.withValues(alpha: 0.02))),
-        Positioned.fill(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.only(
-                top: 60.0, left: 50.0, right: 50.0, bottom: 60.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
-                Text("Navigate Delhi NCR,\nSmarter.",
-                    style: GoogleFonts.poppins(
-                        color: isDark ? Colors.white : Colors.black,
-                        fontSize: 52,
-                        fontWeight: FontWeight.w800,
-                        height: 1.1)),
-                const SizedBox(height: 20),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 600),
-                  child: Text(
-                      "Your ultimate companion for Metro & Bus routes. Explore live tracking, find accurate fares, and plan seamless journeys instantly.",
-                      style: GoogleFonts.inter(
-                          color: isDark ? Colors.white54 : Colors.black54,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w400,
-                          height: 1.6)),
-                ),
-                const SizedBox(height: 32),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    AppHaptics.selectionClick();
-                    globalTransportMode.value = 0;
-                    globalIsHome.value = false;
-                    globalSearchSheetOpen.value = true;
-                    navProvider.setTab(0);
-                  },
-                  icon: const Icon(Icons.map_rounded),
-                  label: Text("Plan Journey",
-                      style: GoogleFonts.inter(
-                          fontWeight: FontWeight.bold, fontSize: 16)),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: isDark ? Colors.white : Colors.black,
-                      foregroundColor: isDark ? Colors.black : Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 32, vertical: 20),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
-                      elevation: 0),
-                ),
-                const SizedBox(height: 60),
-                Wrap(
-                  spacing: 24.0,
-                  runSpacing: 24.0,
-                  children: [
-                    _HoverFeatureCard(
-                        title: "Metro Network",
-                        subtitle:
-                            "Interactive map with fares, platforms, and train timings.",
-                        icon: Icons.subway_rounded,
-                        color: const Color(0xFF00E5FF),
-                        isDark: isDark,
-                        onTap: () {
-                          AppHaptics.lightImpact();
-                          globalTransportMode.value = 0;
-                          globalIsHome.value = false;
-                          globalSearchSheetOpen.value = true;
-                          navProvider.setTab(0);
-                        }),
-                    _HoverFeatureCard(
-                        title: "Live Bus Tracking",
-                        subtitle:
-                            "Real-time DTC bus GPS tracking and route finder.",
-                        icon: Icons.directions_bus_filled_rounded,
-                        color: const Color(0xFFFF9F0A),
-                        isDark: isDark,
-                        onTap: () {
-                          AppHaptics.lightImpact();
-                          globalTransportMode.value = 1;
-                          globalIsHome.value = false;
-                          globalSearchSheetOpen.value = true;
-                          navProvider.setTab(0);
-                        }),
-                    _HoverFeatureCard(
-                        title: "Download App",
-                        subtitle:
-                            "Get the Ridel app on your phone for AR navigation.",
-                        icon: Icons.phone_android_rounded,
-                        color: const Color(0xFFB15EFF),
-                        isDark: isDark,
-                        onTap: () {}),
-                  ],
-                )
-              ],
-            ),
+        // Floating "Restore Sidebar" button
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOutCubic,
+          top: 24,
+          left: widget.isSidebarVisible ? -100 : 20, // Only visible when sidebar is hidden
+          child: FloatingActionButton.small(
+            backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+            child: Icon(Icons.view_sidebar_rounded, color: isDark ? Colors.white : Colors.black),
+            onPressed: () => widget.onVisibilityChanged(true),
+          ),
+        ),
+
+        // Sliding Sidebar (Fixed - No RawGestureDetector, No EagerGestureRecognizer)
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOutCubic,
+          top: 0, bottom: 0,
+          left: widget.isSidebarVisible ? 0 : -600.0, 
+          child: Row(
+            children: [
+              _buildLeftPane(),
+              _buildDynamicRightPane(),
+            ],
           ),
         ),
       ],
     );
   }
-}
 
-class _HoverFeatureCard extends StatefulWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final bool isDark;
-  final VoidCallback onTap;
+  Widget _buildLeftPane() {
+    return Container(
+      width: 240,
+      color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF9F9F9),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. Header (Logo & BETA)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+            child: Row(
+              children: [
+                Icon(Icons.directions_bike_rounded, color: isDark ? Colors.white : Colors.black, size: 24),
+                const SizedBox(width: 8),
+                Text('Maps', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 22, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: isDark ? Colors.white24 : Colors.black12, borderRadius: BorderRadius.circular(8)),
+                  child: Text('BETA', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+          
+          // 2. SCROLLABLE MIDDLE SECTION (Fixes Overflow)
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Transport Modes (Wiring to globalTransportMode)
+                  ValueListenableBuilder<int>(
+                    valueListenable: globalTransportMode,
+                    builder: (context, mode, child) {
+                      return Column(
+                        children: [
+                          _buildDesktopNavButton(
+                            icon: Icons.train_rounded, 
+                            title: 'Metro', 
+                            isActive: _activeRightPaneTab == 'metro', 
+                            isDark: isDark, 
+                            onTap: () {
+                              globalTransportMode.value = 0;
+                              setState(() {
+                                _isRightPaneOpen = true;
+                                _activeRightPaneTab = 'metro';
+                              });
+                            }
+                          ),
+                          _buildDesktopNavButton(
+                            icon: Icons.directions_bus_rounded, 
+                            title: 'Bus', 
+                            isActive: _activeRightPaneTab == 'bus', 
+                            isDark: isDark, 
+                            onTap: () {
+                              globalTransportMode.value = 1;
+                              setState(() {
+                                _isRightPaneOpen = true;
+                                _activeRightPaneTab = 'bus';
+                              });
+                            }
+                          ),
+                        ],
+                      );
+                    }
+                  ),
+                  
+                  const Padding(padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0), child: Divider(color: Colors.white10, height: 1)),
+                  
+                  // 3. Main Actions
+                  _buildDesktopNavButton(
+                    icon: Icons.search, 
+                    title: 'Search', 
+                    isActive: _activeRightPaneTab == 'search', 
+                    isDark: isDark, 
+                    onTap: () {
+                      setState(() {
+                        _isRightPaneOpen = true;
+                        _activeRightPaneTab = 'search';
+                      });
+                    }
+                  ),
+                  _buildDesktopNavButton(icon: Icons.grid_view_rounded, title: 'Guides', isActive: false, isDark: isDark, onTap: () {}),
+                  _buildDesktopNavButton(icon: Icons.directions_rounded, title: 'Directions', isActive: false, isDark: isDark, onTap: () {}),
+                  
+                  const Padding(padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0), child: Divider(color: Colors.white10, height: 1)),
+                  
+                  // 4. Recents
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+                    child: Text('Recents', style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 13)),
+                  ),
+                  // (Inject Recent items list here later)
+                ],
+              ),
+            ),
+          ),
+          
+          // 3. BOTTOM BUTTONS (Safely anchored, no Spacer needed)
+          const Padding(padding: EdgeInsets.symmetric(horizontal: 20), child: Divider(color: Colors.white10, height: 1)),
+          const SizedBox(height: 8),
+          
+          // 5. Bottom Settings & Profile
+          _buildDesktopNavButton(icon: Icons.notifications_rounded, title: 'Notifications', isActive: _activeRightPaneTab == 'notifications', isDark: isDark, onTap: () {
+            setState(() { _isRightPaneOpen = true; _activeRightPaneTab = 'notifications'; });
+          }),
+          _buildDesktopNavButton(icon: Icons.person_outline_rounded, title: 'Profile', isActive: _activeRightPaneTab == 'profile', isDark: isDark, onTap: () {
+            setState(() { _isRightPaneOpen = true; _activeRightPaneTab = 'profile'; });
+          }),
+          _buildDesktopNavButton(icon: Icons.phone_iphone_rounded, title: 'Get App', isActive: _activeRightPaneTab == 'get_app', isDark: isDark, onTap: () {
+            setState(() { _isRightPaneOpen = true; _activeRightPaneTab = 'get_app'; });
+          }),
+          _buildDesktopNavButton(icon: Icons.keyboard_double_arrow_left_rounded, title: 'Hide Sidebar', isActive: false, isDark: isDark, onTap: () {
+            widget.onVisibilityChanged(false);
+          }),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
 
-  const _HoverFeatureCard(
-      {required this.title,
-      required this.subtitle,
-      required this.icon,
-      required this.color,
-      required this.isDark,
-      required this.onTap});
+  Widget _buildDynamicRightPane() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
+      width: _isRightPaneOpen ? 360.0 : 0.0, // Smooth slide effect
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF151515) : Colors.white,
+        border: Border(right: BorderSide(color: isDark ? Colors.white10 : Colors.black12)),
+      ),
+      child: ClipRect(
+        child: OverflowBox(
+          minWidth: 360.0,
+          maxWidth: 360.0,
+          alignment: Alignment.topLeft,
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Dynamic Header with Close Button
+                Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _activeRightPaneTab == 'search' ? 'Search' : 
+                        _activeRightPaneTab == 'metro' ? 'Metro Routing' : 
+                        _activeRightPaneTab == 'bus' ? 'Bus Routing' :
+                        _activeRightPaneTab == 'profile' ? 'Profile Settings' :
+                        _activeRightPaneTab == 'notifications' ? 'Notifications' :
+                        _activeRightPaneTab == 'get_app' ? 'Get App' : 'Menu', 
+                        style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 22, fontWeight: FontWeight.bold)
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.cancel_rounded, color: isDark ? Colors.white30 : Colors.black38),
+                        onPressed: () => setState(() => _isRightPaneOpen = false), // Closes the pane
+                      ),
+                    ],
+                  ),
+                ),
+                // Dynamic Body Content
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: _buildRightPaneContent(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-  @override
-  State<_HoverFeatureCard> createState() => _HoverFeatureCardState();
-}
+  Widget _buildRightPaneContent() {
+    switch (_activeRightPaneTab) {
+      case 'metro':
+      case 'bus':
+        return Column(
+          children: [
+            CommuteSearchCard(isDark: isDark, selectedMode: _activeRightPaneTab == 'metro' ? 0 : 1, activeTicketingMode: null, onTicketingModeChanged: (_) {}),
+            const SizedBox(height: 24),
+            _activeRightPaneTab == 'metro' ? MetroServicesGrid(onTicketingIntent: (_) {}) : BusServicesGrid(onTicketingIntent: (_) {}),
+          ],
+        );
+      case 'profile':
+        return Center(child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Text('Profile Settings Content', style: TextStyle(color: isDark ? Colors.white54 : Colors.black54)),
+        ));
+      case 'get_app':
+        return Center(child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Text('QR Code & App Download Links', style: TextStyle(color: isDark ? Colors.white54 : Colors.black54)),
+        ));
+      case 'notifications':
+        return Center(child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Text('Your Notifications', style: TextStyle(color: isDark ? Colors.white54 : Colors.black54)),
+        ));
+      case 'search':
+      default:
+        return _buildSearchTabContent(); // Your existing search logic
+    }
+  }
 
-class _HoverFeatureCardState extends State<_HoverFeatureCard> {
-  bool _isHovering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _isHovering = true),
-      onExit: (_) => setState(() => _isHovering = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          width: 320,
-          transform: Matrix4.translationValues(0, _isHovering ? -8.0 : 0, 0),
-          padding: const EdgeInsets.all(32),
+  Widget _buildSearchTabContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 2. Search Input Box
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: widget.isDark
-                ? (_isHovering
-                    ? const Color(0xFF1E1E1E)
-                    : const Color(0xFF151515))
-                : (_isHovering ? Colors.white : const Color(0xFFF5F5F7)),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-                color: widget.isDark
-                    ? (_isHovering
-                        ? widget.color.withValues(alpha: 0.3)
-                        : Colors.white.withValues(alpha: 0.04))
-                    : (_isHovering
-                        ? widget.color.withValues(alpha: 0.3)
-                        : Colors.black.withValues(alpha: 0.05))),
-            boxShadow: _isHovering
-                ? [
-                    BoxShadow(
-                        color: widget.color.withValues(alpha: 0.15),
-                        blurRadius: 30,
-                        offset: const Offset(0, 10))
-                  ]
-                : [],
+            color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: isDark ? Colors.white10 : Colors.transparent),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.search, color: isDark ? Colors.white54 : Colors.black54, size: 20),
+              const SizedBox(width: 10),
+              Text('Ridel Maps', style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 15)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        // 3. Find Nearby Header & List
+        Text('Find Nearby', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 15, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+            borderRadius: BorderRadius.circular(16),
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                      color: widget.color.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(16)),
-                  child: Icon(widget.icon, color: widget.color, size: 28)),
-              const SizedBox(height: 24),
-              Text(widget.title,
-                  style: GoogleFonts.inter(
-                      color: widget.isDark ? Colors.white : Colors.black,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              Text(widget.subtitle,
-                  style: GoogleFonts.inter(
-                      color: widget.isDark ? Colors.white54 : Colors.black54,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w400,
-                      height: 1.5)),
+              _buildDesktopNearbyTile(context, icon: Icons.local_gas_station_rounded, color: Colors.blueAccent, title: 'Petrol Pumps', isDark: isDark),
+              _buildDesktopDivider(isDark),
+              _buildDesktopNearbyTile(context, icon: Icons.train_rounded, color: Colors.blue, title: 'Railway Stations', isDark: isDark),
+              _buildDesktopDivider(isDark),
+              _buildDesktopNearbyTile(context, icon: Icons.hotel_rounded, color: Colors.purpleAccent, title: 'Hotels', isDark: isDark),
+              _buildDesktopDivider(isDark),
+              _buildDesktopNearbyTile(context, icon: Icons.directions_subway_rounded, color: Colors.blueAccent, title: 'Metro', isDark: isDark),
+              _buildDesktopDivider(isDark),
+              _buildDesktopNearbyTile(context, icon: Icons.restaurant_rounded, color: Colors.orange, title: 'Restaurants', isDark: isDark),
+              _buildDesktopDivider(isDark),
+              _buildDesktopNearbyTile(context, icon: Icons.local_parking_rounded, color: Colors.blueAccent, title: 'Parking', isDark: isDark),
+              _buildDesktopDivider(isDark),
+              _buildDesktopNearbyTile(context, icon: Icons.coffee_rounded, color: Colors.orangeAccent, title: 'Coffee', isDark: isDark),
+              _buildDesktopDivider(isDark),
+              _buildDesktopNearbyTile(context, icon: Icons.local_gas_station_rounded, color: Colors.lightBlue, title: 'CNG', isDark: isDark),
+              _buildDesktopDivider(isDark),
+              _buildDesktopNearbyTile(context, icon: Icons.fitness_center_rounded, color: Colors.cyan, title: 'Gym', isDark: isDark),
+            ],
+          ),
+        ),
+        const SizedBox(height: 30),
+      ],
+    );
+  }
+
+  Widget _buildDesktopNavButton({required IconData icon, required String title, required bool isActive, required bool isDark, required VoidCallback onTap}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+      child: InkWell(
+        onTap: onTap, // WIRED UP
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isActive ? (isDark ? Colors.blue.withValues(alpha: 0.2) : Colors.blue.shade50) : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
+          child: Row(
+            children: [
+              Icon(icon, color: isActive ? Colors.blue : (isDark ? Colors.white54 : Colors.black54), size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title, 
+                  style: TextStyle(color: isActive ? Colors.blue : (isDark ? Colors.white : Colors.black), fontSize: 15, fontWeight: isActive ? FontWeight.bold : FontWeight.normal),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _buildDesktopNearbyTile(BuildContext context, {required IconData icon, required Color color, required String title, required bool isDark}) {
+    return InkWell(
+      onTap: () {
+        AppHaptics.selectionClick();
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 22),
+            const SizedBox(width: 16),
+            Text(
+              title,
+              style: GoogleFonts.inter(
+                color: isDark ? Colors.white : Colors.black,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopDivider(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 48.0),
+      child: Divider(height: 1, color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05)),
+    );
+  }
 }
+
 
 class DelayedOffstage extends StatefulWidget {
   final bool offstage;
