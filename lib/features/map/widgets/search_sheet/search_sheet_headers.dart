@@ -1140,7 +1140,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                         focusNode: _searchFocus,
                         textAlignVertical: TextAlignVertical.center,
                         onTap: () {
-                          if (_sheetController.isAttached && _sheetController.size < _safeMaxSize) {
+                          if (_sheetController.isAttached &&
+                              _sheetController.size < _safeMaxSize) {
                             _sheetController.animateTo(
                               _safeMaxSize,
                               duration: const Duration(milliseconds: 300),
@@ -1167,7 +1168,84 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                           ),
                           border: InputBorder.none,
                           isDense: true,
-                          contentPadding: const EdgeInsets.only(bottom: 2),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                          suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                          suffixIcon: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ValueListenableBuilder(
+                                valueListenable: _searchCtrl,
+                                builder: (context, value, child) {
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (value.text.isNotEmpty)
+                                        RidelBounceButton(
+                                          onTap: () {
+                                            AppHaptics.lightImpact();
+                                            _searchCtrl.clear();
+                                            rebuildState(() {});
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: BoxDecoration(
+                                              color: isDark
+                                                  ? Colors.white30
+                                                  : Colors.black26,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(
+                                              Icons.close,
+                                              size: 12,
+                                              color: isDark
+                                                  ? Colors.black87
+                                                  : Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      if (value.text.isEmpty)
+                                        UniversalMicButton(
+                                          isDark: isDark,
+                                          onTextRecognized: (text) =>
+                                              _searchCtrl.text = text,
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                              if (!isDesktop) ...[
+                                const SizedBox(width: 8),
+                                ValueListenableBuilder(
+                                  valueListenable: _searchCtrl,
+                                  builder: (context, value, child) {
+                                    final isTyping = value.text.isNotEmpty;
+                                    return RidelBounceButton(
+                                      onTap: () {
+                                        if (isTyping) {
+                                          _handleSearchExecution(value.text);
+                                        } else {
+                                          _handleCancelTap();
+                                        }
+                                      },
+                                      child: Container(
+                                        alignment: Alignment.center,
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 4),
+                                        child: Text(
+                                          isTyping ? 'Done' : 'Cancel',
+                                          style: const TextStyle(
+                                            color: Color(0xFF0A84FF),
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                         onSubmitted: (value) async {
                           FocusScope.of(context).unfocus();
@@ -1200,87 +1278,6 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                                 context, "No places found for '$query'");
                           }
                         },
-                      ),
-                    ),
-                    Flexible(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        physics: const NeverScrollableScrollPhysics(),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ValueListenableBuilder(
-                              valueListenable: _searchCtrl,
-                              builder: (context, value, child) {
-                                return Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (value.text.isNotEmpty)
-                                      RidelBounceButton(
-                                        onTap: () {
-                                          AppHaptics.lightImpact();
-                                          _searchCtrl.clear();
-                                          rebuildState(() {});
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: BoxDecoration(
-                                            color: isDark
-                                                ? Colors.white30
-                                                : Colors.black26,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Icon(
-                                            Icons.close,
-                                            size: 12,
-                                            color:
-                                                isDark ? Colors.black87 : Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                    if (value.text.isEmpty)
-                                      UniversalMicButton(
-                                        isDark: isDark,
-                                        onTextRecognized: (text) =>
-                                            _searchCtrl.text = text,
-                                      ),
-                                  ],
-                                );
-                              },
-                            ),
-                            if (!isDesktop) ...[
-                              const SizedBox(width: 12),
-                              ValueListenableBuilder(
-                                valueListenable: _searchCtrl,
-                                builder: (context, value, child) {
-                                  final isTyping = value.text.isNotEmpty;
-                                  return RidelBounceButton(
-                                    onTap: () {
-                                      if (isTyping) {
-                                        _handleSearchExecution(value.text);
-                                      } else {
-                                        _handleCancelTap();
-                                      }
-                                    },
-                                    child: Container(
-                                      alignment: Alignment.center,
-                                      padding:
-                                          const EdgeInsets.symmetric(horizontal: 4),
-                                      child: Text(
-                                        isTyping ? 'Done' : 'Cancel',
-                                        style: const TextStyle(
-                                          color: Color(0xFF0A84FF),
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ],
-                        ),
                       ),
                     ),
                   ],

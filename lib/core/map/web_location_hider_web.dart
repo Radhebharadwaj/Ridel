@@ -4,7 +4,7 @@ import 'dart:html' as html;
 void hideWebLocationDot() {
   // Prevent duplicate injections
   if (html.document.getElementById('web-location-hider') != null) return;
-  
+
   final styleElement = html.StyleElement();
   styleElement.id = 'web-location-hider';
   styleElement.text = '''

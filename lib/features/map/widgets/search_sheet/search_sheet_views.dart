@@ -37,9 +37,11 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     final isSelected = _selectedPlace != null;
 
     final showTransportModes = isSelected && !provider.isAddingStopMode;
-    final showQuickActions = !isFocused && isEmpty && (!isSelected || provider.isAddingStopMode);
-    final showRecentSearches =
-        (!isSelected || provider.isAddingStopMode) && (isFocused || provider.isEditingHistory) && isEmpty;
+    final showQuickActions =
+        !isFocused && isEmpty && (!isSelected || provider.isAddingStopMode);
+    final showRecentSearches = (!isSelected || provider.isAddingStopMode) &&
+        (isFocused || provider.isEditingHistory) &&
+        isEmpty;
 
     final isExpanded = progress > (_safeMinSize + 0.05);
     final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
@@ -391,16 +393,23 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
 
                                                 // 4. Fly Camera
                                                 if (lat != 0.0 && lng != 0.0) {
-                                                  await safeProvider.cancelAndClearRoute(resetCamera: false);
-                                                  
+                                                  await safeProvider
+                                                      .cancelAndClearRoute(
+                                                          resetCamera: false);
+
                                                   // 1. Set the tapped place so the bottom sheet shows the details UI
-                                                  safeProvider.setTappedPlace(place);
+                                                  safeProvider
+                                                      .setTappedPlace(place);
 
                                                   // 2. Set the routing destination
-                                                  safeProvider.setTargetDestination(LatLng(lat, lng));
+                                                  safeProvider
+                                                      .setTargetDestination(
+                                                          LatLng(lat, lng));
 
                                                   // 3. Force the UI state to Place Selected (This stops the sheet from closing)
-                                                  safeProvider.engine.setUIState(MapUIState.placeSelected);
+                                                  safeProvider.engine
+                                                      .setUIState(MapUIState
+                                                          .placeSelected);
 
                                                   rebuildState(() =>
                                                       _selectedPlace = place);
@@ -920,24 +929,33 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                   children: [
                                     const Padding(
                                       padding: EdgeInsets.only(top: 14.0),
-                                      child: Icon(Icons.drag_handle_rounded, color: Colors.grey, size: 20),
+                                      child: Icon(Icons.drag_handle_rounded,
+                                          color: Colors.grey, size: 20),
                                     ),
                                     const SizedBox(width: 8),
                                     const Padding(
                                       padding: EdgeInsets.only(top: 14.0),
-                                      child: Icon(Icons.trip_origin, color: Colors.orangeAccent, size: 20),
+                                      child: Icon(Icons.trip_origin,
+                                          color: Colors.orangeAccent, size: 20),
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Padding(
-                                        padding: const EdgeInsets.only(top: 14.0),
+                                        padding:
+                                            const EdgeInsets.only(top: 14.0),
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            Text("Stop ${index + 1}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                            Text("Stop ${index + 1}",
+                                                style: const TextStyle(
+                                                    color: Colors.grey,
+                                                    fontSize: 12)),
                                             Text(
                                               stop.name,
-                                              style: const TextStyle(color: Colors.white, fontSize: 14),
+                                              style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 14),
                                               maxLines: 2,
                                               overflow: TextOverflow.ellipsis,
                                             ),
@@ -948,15 +966,21 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                                     Padding(
                                       padding: const EdgeInsets.only(top: 4.0),
                                       child: IconButton(
-                                        icon: const Icon(Icons.close, color: Colors.white54, size: 20),
-                                        onPressed: () => provider.removeIntermediateStop(index),
+                                        icon: const Icon(Icons.close,
+                                            color: Colors.white54, size: 20),
+                                        onPressed: () => provider
+                                            .removeIntermediateStop(index),
                                       ),
                                     ),
                                   ],
                                 ),
                                 const Padding(
-                                  padding: EdgeInsets.only(left: 37.0, top: 4, bottom: 4),
-                                  child: SizedBox(height: 12, child: VerticalDivider(color: Colors.grey, thickness: 1)),
+                                  padding: EdgeInsets.only(
+                                      left: 37.0, top: 4, bottom: 4),
+                                  child: SizedBox(
+                                      height: 12,
+                                      child: VerticalDivider(
+                                          color: Colors.grey, thickness: 1)),
                                 ),
                               ],
                             ),
@@ -1014,7 +1038,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                       // ➕ ADD STOP BUTTON
                       if (provider.intermediateStops.length < 3)
                         Padding(
-                          padding: const EdgeInsets.only(top: 16.0, bottom: 4.0),
+                          padding:
+                              const EdgeInsets.only(top: 16.0, bottom: 4.0),
                           child: InkWell(
                             onTap: () {
                               AppHaptics.selectionClick();
@@ -1032,15 +1057,20 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                             },
                             borderRadius: BorderRadius.circular(8),
                             child: const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+                              padding: EdgeInsets.symmetric(
+                                  vertical: 8.0, horizontal: 4.0),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.add_circle_outline, color: Colors.blueAccent, size: 20),
+                                  Icon(Icons.add_circle_outline,
+                                      color: Colors.blueAccent, size: 20),
                                   SizedBox(width: 12),
                                   Text(
                                     "Add Stop",
-                                    style: TextStyle(color: Colors.blueAccent, fontSize: 14, fontWeight: FontWeight.w500),
+                                    style: TextStyle(
+                                        color: Colors.blueAccent,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500),
                                   ),
                                 ],
                               ),
@@ -1143,8 +1173,10 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: isActive 
-                  ? (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05))
+              color: isActive
+                  ? (isDark
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.black.withValues(alpha: 0.05))
                   : Colors.transparent,
               shape: BoxShape.circle,
             ),
@@ -1290,7 +1322,9 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
 
     final card = Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7), // Apple style grouped background
+        color: isDark
+            ? const Color(0xFF1C1C1E)
+            : const Color(0xFFF2F2F7), // Apple style grouped background
         borderRadius: BorderRadius.circular(dynamicRadius),
         border: Border.all(
           color: isDark
@@ -1310,7 +1344,9 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
             padding: const EdgeInsets.only(left: 60.0), // Indent divider
             child: Divider(
               height: 1,
-              color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : Colors.black.withValues(alpha: 0.05),
             ),
           ),
           itemBuilder: (context, index) {
@@ -1323,7 +1359,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                 await _selectPlaceFromList(place);
               },
               child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -1373,7 +1410,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
   Widget _buildSheetContent(bool isDark, double progress,
       {bool isExpanded = false}) {
     final provider = Provider.of<MapProvider>(context);
-    if (_searchCtrl.text.isNotEmpty && (_selectedPlace == null || provider.isAddingStopMode)) {
+    if (_searchCtrl.text.isNotEmpty &&
+        (_selectedPlace == null || provider.isAddingStopMode)) {
       return _buildSearchResultsView(isDark, isExpanded: isExpanded);
     }
     return _buildUnifiedExploreView(isDark, progress,
@@ -1446,33 +1484,78 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Find Nearby', style: GoogleFonts.inter(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+        Text('Find Nearby',
+            style: GoogleFonts.inter(
+                color: isDark ? Colors.white : Colors.black,
+                fontSize: 18,
+                fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E2129) : const Color(0xFFF2F2F7), // Match your premium dark card color
+            color: isDark
+                ? const Color(0xFF1E2129)
+                : const Color(0xFFF2F2F7), // Match your premium dark card color
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.transparent),
+            border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.transparent),
           ),
           child: Column(
             children: [
-              _buildVerticalNearbyTile(context, icon: Icons.local_gas_station_rounded, color: Colors.blueAccent, title: 'Petrol Pumps', isDark: isDark),
+              _buildVerticalNearbyTile(context,
+                  icon: Icons.local_gas_station_rounded,
+                  color: Colors.blueAccent,
+                  title: 'Petrol Pumps',
+                  isDark: isDark),
               _buildDivider(isDark),
-              _buildVerticalNearbyTile(context, icon: Icons.train_rounded, color: Colors.blue, title: 'Railway Stations', isDark: isDark),
+              _buildVerticalNearbyTile(context,
+                  icon: Icons.train_rounded,
+                  color: Colors.blue,
+                  title: 'Railway Stations',
+                  isDark: isDark),
               _buildDivider(isDark),
-              _buildVerticalNearbyTile(context, icon: Icons.hotel_rounded, color: Colors.purpleAccent, title: 'Hotels', isDark: isDark),
+              _buildVerticalNearbyTile(context,
+                  icon: Icons.hotel_rounded,
+                  color: Colors.purpleAccent,
+                  title: 'Hotels',
+                  isDark: isDark),
               _buildDivider(isDark),
-              _buildVerticalNearbyTile(context, icon: Icons.directions_subway_rounded, color: Colors.blueAccent, title: 'Metro', isDark: isDark),
+              _buildVerticalNearbyTile(context,
+                  icon: Icons.directions_subway_rounded,
+                  color: Colors.blueAccent,
+                  title: 'Metro',
+                  isDark: isDark),
               _buildDivider(isDark),
-              _buildVerticalNearbyTile(context, icon: Icons.restaurant_rounded, color: Colors.orange, title: 'Restaurants', isDark: isDark),
+              _buildVerticalNearbyTile(context,
+                  icon: Icons.restaurant_rounded,
+                  color: Colors.orange,
+                  title: 'Restaurants',
+                  isDark: isDark),
               _buildDivider(isDark),
-              _buildVerticalNearbyTile(context, icon: Icons.local_parking_rounded, color: Colors.blueAccent, title: 'Parking', isDark: isDark),
+              _buildVerticalNearbyTile(context,
+                  icon: Icons.local_parking_rounded,
+                  color: Colors.blueAccent,
+                  title: 'Parking',
+                  isDark: isDark),
               _buildDivider(isDark),
-              _buildVerticalNearbyTile(context, icon: Icons.coffee_rounded, color: Colors.orangeAccent, title: 'Coffee', isDark: isDark),
+              _buildVerticalNearbyTile(context,
+                  icon: Icons.coffee_rounded,
+                  color: Colors.orangeAccent,
+                  title: 'Coffee',
+                  isDark: isDark),
               _buildDivider(isDark),
-              _buildVerticalNearbyTile(context, icon: Icons.local_gas_station_rounded, color: Colors.lightBlue, title: 'CNG', isDark: isDark),
+              _buildVerticalNearbyTile(context,
+                  icon: Icons.local_gas_station_rounded,
+                  color: Colors.lightBlue,
+                  title: 'CNG',
+                  isDark: isDark),
               _buildDivider(isDark),
-              _buildVerticalNearbyTile(context, icon: Icons.fitness_center_rounded, color: Colors.cyan, title: 'Gym', isDark: isDark),
+              _buildVerticalNearbyTile(context,
+                  icon: Icons.fitness_center_rounded,
+                  color: Colors.cyan,
+                  title: 'Gym',
+                  isDark: isDark),
             ],
           ),
         ),
@@ -1480,7 +1563,11 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     );
   }
 
-  Widget _buildVerticalNearbyTile(BuildContext context, {required IconData icon, required Color color, required String title, required bool isDark}) {
+  Widget _buildVerticalNearbyTile(BuildContext context,
+      {required IconData icon,
+      required Color color,
+      required String title,
+      required bool isDark}) {
     return InkWell(
       onTap: () {
         AppHaptics.selectionClick();
@@ -1510,8 +1597,13 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
 
   Widget _buildDivider(bool isDark) {
     return Padding(
-      padding: const EdgeInsets.only(left: 48.0), // Indented just like Apple Maps
-      child: Divider(height: 1, color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05)),
+      padding:
+          const EdgeInsets.only(left: 48.0), // Indented just like Apple Maps
+      child: Divider(
+          height: 1,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.1)
+              : Colors.black.withValues(alpha: 0.05)),
     );
   }
 }

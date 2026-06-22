@@ -152,7 +152,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     if (!mounted) return 0.15;
     final screenSize = MediaQuery.sizeOf(context);
     final safeBottom = MediaQuery.paddingOf(context).bottom;
-    final requiredHeight = 88.0 + safeBottom; 
+    final requiredHeight = 88.0 + safeBottom;
     return (requiredHeight / screenSize.height).clamp(0.05, 0.40);
   }
 
@@ -1352,30 +1352,36 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                           ? 190.0
                                           : (lerpDouble(60.0, 76.0, progress) ??
                                               60.0));
-                                  // 1. Determine the morph factor: 0.0 at 45% (midS), 1.0 at 90% (maxS)
-                                  final double morphFactor =
-                                      (progress <= _safeMidSize)
-                                          ? 0.0
-                                          : ((progress - _safeMidSize) /
-                                                  (_safeMaxSize - _safeMidSize))
-                                              .clamp(0.0, 1.0);
+                                  // 1. Calculate how far the sheet is dragged beyond half-open
+                                  final double morphFactor = (progress <= 0.45) 
+                                      ? 0.0 
+                                      : ((progress - 0.45) / (0.95 - 0.45)).clamp(0.0, 1.0);
 
                                   // Lifted to 28.0 to perfectly match the Home Screen Navigation Bar height
-                                  final currentBottomMargin = lerpDouble(28.0, 0.0, progress) ?? 28.0;
-                                  final currentSideMargin = lerpDouble(16.0, 0.0, progress) ?? 16.0;
-                                  
-                                  // Fast transition to 32.0 radius so the half-open state looks like a normal sheet (not a circle).
-                                  final sheetRadius = progress < 0.2 
-                                      ? (lerpDouble(100.0, 32.0, progress * 5) ?? 100.0) 
-                                      : 32.0;
-                                  final double opacity =
-                                      lerpDouble(0.65, 1.0, morphFactor)!;
+                                  final currentBottomMargin =
+                                      lerpDouble(28.0, 0.0, progress) ?? 28.0;
+                                  final currentSideMargin =
+                                      lerpDouble(16.0, 0.0, progress) ?? 16.0;
 
+                                  // Fast transition to 32.0 radius so the half-open state looks like a normal sheet (not a circle).
+                                  final sheetRadius = progress < 0.2
+                                      ? (lerpDouble(
+                                              100.0, 32.0, progress * 5) ??
+                                          100.0)
+                                      : 32.0;
+
+                                  // 2. EXACT Weather Card Alpha (0.65 when idle, 0.95 when fully dragged)
+                                  final double currentAlpha = lerpDouble(0.65, 0.95, morphFactor) ?? 0.65;
+
+                                  // 3. EXACT Weather Card Base Colors (0xFF0B0E17 for dark mode)
                                   final Color sheetBgColor = isDark
-                                      ? const Color(0xFF0B0E17)
-                                          .withValues(alpha: opacity)
-                                      : Colors.white.withValues(alpha: opacity);
-                                  const double blurAmount = 30.0;
+                                      ? const Color(0xFF0B0E17).withValues(alpha: currentAlpha)
+                                      : Colors.white.withValues(alpha: currentAlpha);
+                                      
+                                  // 4. EXACT Weather Card Border Color (Blue tint for dark mode)
+                                  final Color sheetBorderColor = isDark
+                                      ? const Color(0xFF7CA1FF).withValues(alpha: 0.15)
+                                      : Colors.white.withValues(alpha: 0.9);
 
                                   return PointerInterceptor(
                                     child: Align(
@@ -1409,47 +1415,35 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                       left: currentSideMargin,
                                                       right: currentSideMargin,
                                                       bottom: currentBottomMargin +
-                                                              MediaQuery.paddingOf(
-                                                                      context)
-                                                                  .bottom,
+                                                          MediaQuery.paddingOf(
+                                                                  context)
+                                                              .bottom,
                                                     ),
+                                                    // OUTER CONTAINER: SHADOWS ONLY, STRICTLY NO BACKGROUND COLOR
                                                     decoration: BoxDecoration(
-                                                      color: sheetBgColor,
                                                       borderRadius: BorderRadius.circular(sheetRadius),
-                                                      border: Border.all(
-                                                        color: isDark
-                                                            ? const Color(
-                                                                0xFF38383A) // Premium iOS greyish non-white border
-                                                            : const Color(
-                                                                0xFFE5E5EA),
-                                                        width: 0.5,
-                                                      ),
-                                                      boxShadow: [
-                                                        BoxShadow(
-                                                          color: Colors.black
-                                                              .withValues(
-                                                                  alpha:
-                                                                      0.25), // Softer shadow
-                                                          blurRadius: 20,
-                                                          offset: const Offset(
-                                                              0, 8),
-                                                          spreadRadius: 0,
-                                                        ),
-                                                      ],
+                                                      boxShadow: isDark 
+                                                        ? [
+                                                            // EXACT Weather Card Dual-Shadow
+                                                            BoxShadow(color: Colors.white.withValues(alpha: 0.04), blurRadius: 16, spreadRadius: 1),
+                                                            BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 24, offset: const Offset(0, 8)),
+                                                          ] 
+                                                        : [
+                                                            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 32, offset: const Offset(0, 12))
+                                                          ],
                                                     ),
                                                     child: ClipRRect(
+                                                      // CRITICAL: MUST CLIP THE BLUR TO MATCH CORNERS
                                                       borderRadius: BorderRadius.circular(sheetRadius),
                                                       child: BackdropFilter(
-                                                        filter:
-                                                            ImageFilter.blur(
-                                                                sigmaX:
-                                                                    blurAmount,
-                                                                sigmaY:
-                                                                    blurAmount),
+                                                        // CRITICAL: THE BLUR ITSELF
+                                                        filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
                                                         child: Container(
-                                                          decoration:
-                                                              BoxDecoration(
+                                                          // INNER CONTAINER: TRANSLUCENT COLOR & BORDER ONLY
+                                                          decoration: BoxDecoration(
                                                             color: sheetBgColor,
+                                                            borderRadius: BorderRadius.circular(sheetRadius),
+                                                            border: Border.all(color: sheetBorderColor, width: 1.0),
                                                           ),
                                                           child: Stack(
                                                             children: [

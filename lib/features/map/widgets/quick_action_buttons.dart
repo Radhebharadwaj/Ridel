@@ -198,7 +198,6 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
     final isDark = !isLightMode;
 
-
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
       child: _isLoading
@@ -232,7 +231,8 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
                                     iconColor: _homePlace != null
                                         ? const Color(0xFF0A84FF)
                                         : const Color(0xFF0A84FF),
-                                    bgColor: const Color(0xFF0A84FF).withValues(alpha: 0.12),
+                                    bgColor: const Color(0xFF0A84FF)
+                                        .withValues(alpha: 0.12),
                                     size: 52.0,
                                     iconSize: 24.0,
                                     onTap: _handleHomeTap,
@@ -260,7 +260,8 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
                                     iconColor: _workPlace != null
                                         ? const Color(0xFF0A84FF)
                                         : const Color(0xFF0A84FF),
-                                    bgColor: const Color(0xFF0A84FF).withValues(alpha: 0.12),
+                                    bgColor: const Color(0xFF0A84FF)
+                                        .withValues(alpha: 0.12),
                                     size: 52.0,
                                     iconSize: 24.0,
                                     onTap: _handleWorkTap,
@@ -276,49 +277,58 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
                                 ],
                               ),
                             ),
-                            Builder(
-                              builder: (context) {
-                                final isAddingStop = context.watch<MapProvider>().isAddingStopMode;
-                                final thirdLabel = isAddingStop ? "Drop Pin" : "Add Place";
-                                final thirdIcon = isAddingStop ? Icons.location_on_rounded : CupertinoIcons.add;
-                                final thirdColor = isAddingStop ? Colors.amber.shade600 : const Color(0xFF0A84FF);
-                                final thirdBg = isAddingStop ? Colors.amber.shade600.withValues(alpha: 0.12) : const Color(0xFF0A84FF).withValues(alpha: 0.12);
+                            Builder(builder: (context) {
+                              final isAddingStop =
+                                  context.watch<MapProvider>().isAddingStopMode;
+                              final thirdLabel =
+                                  isAddingStop ? "Drop Pin" : "Add Place";
+                              final thirdIcon = isAddingStop
+                                  ? Icons.location_on_rounded
+                                  : CupertinoIcons.add;
+                              final thirdColor = isAddingStop
+                                  ? Colors.amber.shade600
+                                  : const Color(0xFF0A84FF);
+                              final thirdBg = isAddingStop
+                                  ? Colors.amber.shade600
+                                      .withValues(alpha: 0.12)
+                                  : const Color(0xFF0A84FF)
+                                      .withValues(alpha: 0.12);
 
-                                return Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _buildPremiumCircleButton(
-                                      icon: thirdIcon,
-                                      iconColor: thirdColor,
-                                      bgColor: thirdBg,
-                                      size: 52.0,
-                                      iconSize: 26.0,
-                                      onTap: () {
-                                        if (isAddingStop) {
-                                          AppHaptics.heavyImpact();
-                                          context.read<MapProvider>().setDropPinMode(true);
-                                          widget.onDropPinTapped?.call();
-                                        } else {
-                                          _handleAddPlaceTap();
-                                        }
-                                      },
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(thirdLabel,
-                                        style: TextStyle(
-                                            color: isDark
-                                                ? Colors.white70
-                                                : Colors.black54,
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500)),
-                                  ],
-                                );
-                              }
-                            ),
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildPremiumCircleButton(
+                                    icon: thirdIcon,
+                                    iconColor: thirdColor,
+                                    bgColor: thirdBg,
+                                    size: 52.0,
+                                    iconSize: 26.0,
+                                    onTap: () {
+                                      if (isAddingStop) {
+                                        AppHaptics.heavyImpact();
+                                        context
+                                            .read<MapProvider>()
+                                            .setDropPinMode(true);
+                                        widget.onDropPinTapped?.call();
+                                      } else {
+                                        _handleAddPlaceTap();
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(thirdLabel,
+                                      style: TextStyle(
+                                          color: isDark
+                                              ? Colors.white70
+                                              : Colors.black54,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500)),
+                                ],
+                              );
+                            }),
                           ],
                         ),
                       ),
-
                   ],
                 );
               },
@@ -464,15 +474,17 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
         decoration: BoxDecoration(
           color: bgColor,
           shape: BoxShape.circle,
-          gradient: bgColor == null ? LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withValues(alpha: 0.20),
-              Colors.white.withValues(alpha: 0.10),
-              Colors.white.withValues(alpha: 0.06),
-            ],
-          ) : null,
+          gradient: bgColor == null
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withValues(alpha: 0.20),
+                    Colors.white.withValues(alpha: 0.10),
+                    Colors.white.withValues(alpha: 0.06),
+                  ],
+                )
+              : null,
           border:
               Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
           boxShadow: [
@@ -516,46 +528,83 @@ class DesktopZoomPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final Color pillBgColor = isDark
+        ? const Color(0xFF0B0E17).withValues(alpha: 0.65)
+        : Colors.white.withValues(alpha: 0.65);
+
+    final Color pillBorderColor = isDark
+        ? const Color(0xFF7CA1FF).withValues(alpha: 0.15)
+        : Colors.white.withValues(alpha: 0.9);
+
     final content = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {}, // Blocks stray taps
       child: Container(
+        // OUTER: CLEAN SHADOWS MATCHING TOP PILL
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(50),
-          border: Border.all(color: isDark ? const Color(0xFF38383A) : const Color(0xFFE5E5EA), width: 0.5),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 20, offset: const Offset(0, 8), spreadRadius: 0),
-          ],
+          boxShadow: isDark
+              ? [
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.04),
+                    blurRadius: 16,
+                    spreadRadius: 1,
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 32,
+                      offset: const Offset(0, 12))
+                ],
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(50),
           child: RepaintBoundary(
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: kIsWeb ? 4.0 : 20.0, sigmaY: kIsWeb ? 4.0 : 20.0),
+              filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
               child: Container(
                 width: 48,
+                // INNER: COLOR & BORDER ONLY
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0B0E17).withValues(alpha: 0.80) : Colors.white.withValues(alpha: 0.65),
+                  color: pillBgColor,
                   borderRadius: BorderRadius.circular(50),
+                  border: Border.all(color: pillBorderColor, width: 1.0),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _ContinuousZoomButton(
-                      icon: Icons.add_rounded, isDark: isDark,
+                      icon: Icons.add_rounded,
+                      isDark: isDark,
                       onZoomStep: () {
-                        final ctrl = Provider.of<MapProvider>(context, listen: false).controller;
-                        final z = ctrl?.cameraPosition?.zoom ?? 14.0;
-                        ctrl?.moveCamera(CameraUpdate.zoomTo(z + 0.06));
+                        final ctrl =
+                            Provider.of<MapProvider>(context, listen: false)
+                                .controller; //[cite: 1]
+                        final z =
+                            ctrl?.cameraPosition?.zoom ?? 14.0; //[cite: 1]
+                        ctrl?.moveCamera(
+                            CameraUpdate.zoomTo(z + 0.06)); //[cite: 1]
                       },
                     ),
                     // CRITICAL: NO DIVIDER HERE TO MATCH THE TOP PILL
                     _ContinuousZoomButton(
-                      icon: Icons.remove_rounded, isDark: isDark,
+                      icon: Icons.remove_rounded,
+                      isDark: isDark,
                       onZoomStep: () {
-                        final ctrl = Provider.of<MapProvider>(context, listen: false).controller;
-                        final z = ctrl?.cameraPosition?.zoom ?? 14.0;
-                        ctrl?.moveCamera(CameraUpdate.zoomTo(z - 0.06));
+                        final ctrl =
+                            Provider.of<MapProvider>(context, listen: false)
+                                .controller; //[cite: 1]
+                        final z =
+                            ctrl?.cameraPosition?.zoom ?? 14.0; //[cite: 1]
+                        ctrl?.moveCamera(
+                            CameraUpdate.zoomTo(z - 0.06)); //[cite: 1]
                       },
                     ),
                   ],
@@ -566,7 +615,7 @@ class DesktopZoomPill extends StatelessWidget {
         ),
       ),
     );
-    return kIsWeb ? PointerInterceptor(child: content) : content;
+    return kIsWeb ? PointerInterceptor(child: content) : content; //[cite: 1]
   }
 }
 
@@ -574,28 +623,205 @@ class _ContinuousZoomButton extends StatefulWidget {
   final IconData icon;
   final bool isDark;
   final VoidCallback onZoomStep;
-  const _ContinuousZoomButton({required this.icon, required this.isDark, required this.onZoomStep});
+  const _ContinuousZoomButton(
+      {required this.icon, required this.isDark, required this.onZoomStep});
   @override
   State<_ContinuousZoomButton> createState() => _ContinuousZoomButtonState();
 }
 
 class _ContinuousZoomButtonState extends State<_ContinuousZoomButton> {
   // ... keep existing _startZooming / _stopZooming logic ...
-  Timer? _timer; Timer? _delayTimer;
-  void _startZooming() { if (_timer != null || _delayTimer != null) return; AppHaptics.lightImpact(); widget.onZoomStep(); _delayTimer = Timer(const Duration(milliseconds: 300), () { _timer = Timer.periodic(const Duration(milliseconds: 40), (timer) { widget.onZoomStep(); }); }); }
-  void _stopZooming() { _delayTimer?.cancel(); _delayTimer = null; _timer?.cancel(); _timer = null; }
-  @override void dispose() { _stopZooming(); super.dispose(); }
+  Timer? _timer;
+  Timer? _delayTimer;
+  void _startZooming() {
+    if (_timer != null || _delayTimer != null) return;
+    AppHaptics.lightImpact();
+    widget.onZoomStep();
+    _delayTimer = Timer(const Duration(milliseconds: 300), () {
+      _timer = Timer.periodic(const Duration(milliseconds: 40), (timer) {
+        widget.onZoomStep();
+      });
+    });
+  }
+
+  void _stopZooming() {
+    _delayTimer?.cancel();
+    _delayTimer = null;
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  @override
+  void dispose() {
+    _stopZooming();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown: (_) => _startZooming(), onTapUp: (_) => _stopZooming(), onTapCancel: _stopZooming,
+      onTapDown: (_) => _startZooming(),
+      onTapUp: (_) => _stopZooming(),
+      onTapCancel: _stopZooming,
       child: SizedBox(
         height: 44, // EXACTLY 44px TO MATCH TOP PILL (Was 48)
         width: 48,
-        child: Center(child: Icon(widget.icon, color: widget.isDark ? Colors.white70 : Colors.black87, size: 20)), // EXACTLY 20px TO MATCH TOP PILL
+        child: Center(
+            child: Icon(widget.icon,
+                color: widget.isDark ? Colors.white70 : Colors.black87,
+                size: 20)), // EXACTLY 20px TO MATCH TOP PILL
       ),
     );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🗺️ MAP CONTROLS PILL (Theme Settings & Locate Me)
+// ═══════════════════════════════════════════════════════════════════════════
+class MapControlsPill extends StatelessWidget {
+  final VoidCallback onThemeTap;
+  final VoidCallback onLocateTap;
+
+  const MapControlsPill({
+    super.key,
+    required this.onThemeTap,
+    required this.onLocateTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final Color pillBgColor = isDark
+        ? const Color(0xFF0B0E17).withValues(alpha: 0.65)
+        : Colors.white.withValues(alpha: 0.65);
+
+    final Color pillBorderColor = isDark
+        ? const Color(0xFF7CA1FF).withValues(alpha: 0.15)
+        : Colors.white.withValues(alpha: 0.9);
+
+    final content = Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(50),
+        boxShadow: isDark
+            ? [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  blurRadius: 16,
+                  spreadRadius: 1,
+                ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 32,
+                    offset: const Offset(0, 12))
+              ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(50),
+        child: RepaintBoundary(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+            child: Container(
+              width: 48,
+              decoration: BoxDecoration(
+                  color: pillBgColor,
+                  border: Border.all(color: pillBorderColor, width: 1.0),
+                  borderRadius: BorderRadius.circular(50)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onThemeTap,
+                    child: SizedBox(
+                      height: 44,
+                      width: 48,
+                      child: Center(
+                          child: Icon(Icons.map,
+                              color: isDark ? Colors.white70 : Colors.black87,
+                              size: 20)),
+                    ),
+                  ),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onLocateTap,
+                    child: SizedBox(
+                      height: 44,
+                      width: 48,
+                      child: Center(
+                        child: Selector<MapProvider,
+                            (bool, bool, bool, bool, bool)>(
+                          selector: (context, provider) => (
+                            provider.isActiveNavigation,
+                            provider.isAutoTracking,
+                            provider.isRouteCalculated,
+                            provider.targetDestination != null,
+                            provider.isUserVisibleOnScreen,
+                          ),
+                          builder: (context, _, __) {
+                            final mapProvider = Provider.of<MapProvider>(
+                                context,
+                                listen: false);
+                            return AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 300),
+                              transitionBuilder: (child, animation) =>
+                                  ScaleTransition(
+                                      scale: animation, child: child),
+                              child: _buildDynamicIcon(
+                                  context, mapProvider, isDark),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return kIsWeb ? PointerInterceptor(child: content) : content;
+  }
+
+  Widget _buildDynamicIcon(
+      BuildContext context, MapProvider provider, bool isDark) {
+    final Color iconColor = isDark ? Colors.white70 : Colors.black87;
+    const double defaultSize = 20.0;
+
+    if (provider.isActiveNavigation && !provider.isAutoTracking) {
+      return Icon(Icons.navigation_rounded,
+          key: const ValueKey('icon_recenter'),
+          color: const Color(0xFF0A84FF).withValues(alpha: 0.9),
+          size: defaultSize);
+    } else if (provider.isRouteCalculated && !provider.isActiveNavigation) {
+      return Icon(Icons.navigation_rounded,
+          key: const ValueKey('icon_start'),
+          color: const Color(0xFF0A84FF).withValues(alpha: 0.9),
+          size: defaultSize);
+    } else if (provider.targetDestination != null) {
+      return Icon(Icons.directions_rounded,
+          key: const ValueKey('icon_directions'),
+          color: iconColor,
+          size: defaultSize);
+    } else {
+      IconData locateIcon = Icons.my_location_rounded;
+      Color locateColor = provider.isUserVisibleOnScreen
+          ? iconColor
+          : const Color(0xFF0A84FF).withValues(alpha: 0.9);
+      return Icon(locateIcon,
+          key: ValueKey('icon_locate_${provider.isUserVisibleOnScreen}'),
+          color: locateColor,
+          size: defaultSize);
+    }
   }
 }

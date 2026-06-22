@@ -405,7 +405,8 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
         : const Color(0xFF7CA1FF).withValues(alpha: 0.15);
 
     // 🚀 OPTIMIZATION: Dynamic max width instead of hardcoded 340 to fix overflow
-    double maxWidth = MediaQuery.sizeOf(context).width - 32;
+    final bool isDesktop = MediaQuery.sizeOf(context).width >= 600;
+    double maxWidth = isDesktop ? 400 : (MediaQuery.sizeOf(context).width - 32);
 
     // 🚀 CRITICAL FIX: Removed ValueListenableBuilder to prevent double-rendering.
     // Rely exclusively on the synced local `_weather` state.
@@ -415,13 +416,7 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     // 🚀 NEW: Handled Error & Loading States smoothly
     if (showLoading || _hasError || activeWeather == null) {
       return PointerInterceptor(
-        child: AnimatedAlign(
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOutCubic,
-          alignment: Alignment.topRight,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 16.0, right: 16.0, left: 16.0),
-            child: GestureDetector(
+        child: GestureDetector(
               onTap: () async {
                 debugPrint("🟡 [WEATHER DEBUG] FALLBACK BUTTON TAPPED!");
                 if (_hasError || activeWeather == null) {
@@ -503,8 +498,6 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                 ),
               ),
             ),
-          ),
-        ),
       );
     }
 
@@ -515,17 +508,9 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     double currentRadius = _currentState == WeatherState.compact ? 24 : 35;
 
     return PointerInterceptor(
-        child: AnimatedAlign(
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOutCubic,
-      alignment: Alignment.topRight,
-      child: Padding(
-        padding: const EdgeInsets.only(top: 16.0, right: 16.0, left: 16.0),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () {
                 debugPrint("🟢 [WEATHER DEBUG] MAIN CARD TAPPED!");
@@ -620,10 +605,8 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
               ),
             ),
           ),
-        ),
-      ),
-    ));
-  }
+      );
+    }
 
   Widget _buildCompactView(bool isNight, bool isLightMode) {
     return Container(
@@ -920,12 +903,14 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
               behavior: _NoScrollbarBehavior(),
               child: SizedBox(
                 height: 100,
-                child: ListView(
+                child: SingleChildScrollView(
                   controller: _hourlyScrollController,
                   padding: const EdgeInsets.symmetric(horizontal: 5),
                   scrollDirection: Axis.horizontal,
                   physics: const BouncingScrollPhysics(),
-                  children: _generate24Hours(isLightMode),
+                  child: Row(
+                    children: _generate24Hours(isLightMode),
+                  ),
                 ),
               ),
             ),

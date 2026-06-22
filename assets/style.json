@@ -19,25 +19,25 @@
       "type": "vector",
       "maxzoom": 14,
       "tiles": [
-        "https://api.olamaps.io/tiles/vector/v1/data/planet/{z}/{x}/{y}.pbf?api_key=LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs"
+        "https://api.olamaps.io/tiles/vector/v1/data/planet/{z}/{x}/{y}.pbf?api_key={YOUR_API_KEY}"
       ]
     },
     "vectordata": {
       "type": "vector",
       "maxzoom": 14,
       "tiles": [
-        "https://api.olamaps.io/tiles/vector/v1/data/vectordata/{z}/{x}/{y}.pbf?api_key=LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs"
+        "https://api.olamaps.io/tiles/vector/v1/data/vectordata/{z}/{x}/{y}.pbf?api_key={YOUR_API_KEY}"
       ]
     },
     "street": {
       "type": "vector",
       "maxzoom": 14,
       "tiles": [
-        "https://api.olamaps.io/tiles/vector/v1/data/street/{z}/{x}/{y}.pbf?api_key=LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs"
+        "https://api.olamaps.io/tiles/vector/v1/data/street/{z}/{x}/{y}.pbf?api_key={YOUR_API_KEY}"
       ]
     }
   },
-  "glyphs": "https://api.olamaps.io/tiles/vector/v1/fonts/{fontstack}/{range}.pbf?api_key=LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs",
+  "glyphs": "https://api.olamaps.io/tiles/vector/v1/fonts/{fontstack}/{range}.pbf?api_key={YOUR_API_KEY}",
   "layers": [
     {
       "id": "background",

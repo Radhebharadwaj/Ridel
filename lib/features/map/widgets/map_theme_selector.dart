@@ -162,7 +162,8 @@ class _MapThemePopupState extends State<_MapThemePopup> {
                   ),
                   const SizedBox(height: 8),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12.0, vertical: 4.0),
                     child: Row(
                       children: [
                         Icon(
@@ -179,7 +180,8 @@ class _MapThemePopupState extends State<_MapThemePopup> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.inter(
-                              color: Theme.of(context).brightness == Brightness.dark
+                              color: Theme.of(context).brightness ==
+                                      Brightness.dark
                                   ? Colors.white
                                   : Colors.black87,
                               fontSize: 14,

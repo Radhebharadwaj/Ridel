@@ -28,13 +28,13 @@ class MapProvider extends ChangeNotifier {
   final MapEngine engine = MapEngine();
   final RouteEngineService _routingService = RouteEngineService();
   int _routingSessionCounter = 0;
-  
+
   // Multi-stop tracking
   List<PlaceModel> intermediateStops = [];
 
   bool isAddingStopMode = false;
   bool isDropPinMode = false;
-  
+
   void setAddingStopMode(bool value) {
     if (isAddingStopMode != value) {
       isAddingStopMode = value;
@@ -50,7 +50,8 @@ class MapProvider extends ChangeNotifier {
   }
 
   void addIntermediateStop(PlaceModel place) {
-    if (intermediateStops.length < 3) { // Limit to 3 stops for premium UX
+    if (intermediateStops.length < 3) {
+      // Limit to 3 stops for premium UX
       intermediateStops.add(place);
       notifyListeners();
     }
@@ -80,14 +81,16 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
-  static Future<Uint8List> loadAndResizeImage(String assetPath, int targetWidth) async {
+  static Future<Uint8List> loadAndResizeImage(
+      String assetPath, int targetWidth) async {
     final ByteData data = await rootBundle.load(assetPath);
     final ui.Codec codec = await ui.instantiateImageCodec(
       data.buffer.asUint8List(),
       targetWidth: targetWidth, // CRITICAL: Locks the pixel width strictly
     );
     final ui.FrameInfo fi = await codec.getNextFrame();
-    final ByteData? resizedData = await fi.image.toByteData(format: ui.ImageByteFormat.png);
+    final ByteData? resizedData =
+        await fi.image.toByteData(format: ui.ImageByteFormat.png);
     return resizedData!.buffer.asUint8List();
   }
 
@@ -147,8 +150,8 @@ class MapProvider extends ChangeNotifier {
       engine.mapUIState.value == MapUIState.placeSelected;
 
   double get customPuckOpacity =>
-      (engine.mapUIState.value == MapUIState.navigating || 
-       engine.mapUIState.value == MapUIState.routeDrawn)
+      (engine.mapUIState.value == MapUIState.navigating ||
+              engine.mapUIState.value == MapUIState.routeDrawn)
           ? 1.0
           : 0.0;
 
@@ -157,22 +160,17 @@ class MapProvider extends ChangeNotifier {
     if (controller == null) return;
     try {
       final bool isVisible = opacity > 0.0;
-      
-      final geoJsonFeature = isVisible 
-        ? {
-            "type": "Feature",
-            "geometry": {
-              "type": "Point",
-              "coordinates": [location.longitude, location.latitude]
-            },
-            "properties": {
-              "bearing": bearing
+
+      final geoJsonFeature = isVisible
+          ? {
+              "type": "Feature",
+              "geometry": {
+                "type": "Point",
+                "coordinates": [location.longitude, location.latitude]
+              },
+              "properties": {"bearing": bearing}
             }
-          }
-        : {
-            "type": "FeatureCollection",
-            "features": []
-          };
+          : {"type": "FeatureCollection", "features": []};
 
       await controller!.setGeoJsonSource("nav_puck_source", geoJsonFeature);
       _lastPuckLocation = location;
@@ -204,8 +202,12 @@ class MapProvider extends ChangeNotifier {
 
     // 1. Calculate shortest rotation path
     double diff = newBearing - _lastPuckBearing;
-    while (diff > 180) { diff -= 360; }
-    while (diff < -180) { diff += 360; }
+    while (diff > 180) {
+      diff -= 360;
+    }
+    while (diff < -180) {
+      diff += 360;
+    }
     double targetBearing = _lastPuckBearing + diff;
 
     // 2. Animate Camera to Follow User & Rotate Map ONLY if actively navigating
@@ -219,7 +221,8 @@ class MapProvider extends ChangeNotifier {
           tilt: 50.0, // Keep the 3D perspective
           zoom: 18.0, // Zoomed in for navigation
         )),
-        duration: const Duration(seconds: 1), // Smooth 1-second animation between GPS ticks
+        duration: const Duration(
+            seconds: 1), // Smooth 1-second animation between GPS ticks
       );
     }
 
@@ -239,11 +242,13 @@ class MapProvider extends ChangeNotifier {
     _puckTweenTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
       currentStep++;
       _lastPuckBearing += stepSize;
-      _updatePuckGeoJson(_lastPuckLocation, _lastPuckBearing, customPuckOpacity);
+      _updatePuckGeoJson(
+          _lastPuckLocation, _lastPuckBearing, customPuckOpacity);
 
       if (currentStep >= steps) {
         _lastPuckBearing = targetBearing;
-        _updatePuckGeoJson(_lastPuckLocation, _lastPuckBearing, customPuckOpacity);
+        _updatePuckGeoJson(
+            _lastPuckLocation, _lastPuckBearing, customPuckOpacity);
         timer.cancel();
       }
     });
@@ -328,25 +333,32 @@ class MapProvider extends ChangeNotifier {
       debugPrint("⏳ [ROUTE ENGINE] Waiting for Route Engine API...");
 
       RouteResult? routeResult;
-      
+
       final waypointsList = intermediateStops.isNotEmpty
-          ? intermediateStops.map((place) => LatLng(place.latitude, place.longitude)).toList()
+          ? intermediateStops
+              .map((place) => LatLng(place.latitude, place.longitude))
+              .toList()
           : null;
 
       if (mode == 'walking' || mode == 'walk') {
-        routeResult = await _routingService.getWaterfallWalkRoute(
-            origin, targetDestination!, waypoints: waypointsList).timeout(const Duration(seconds: 10));
+        routeResult = await _routingService
+            .getWaterfallWalkRoute(origin, targetDestination!,
+                waypoints: waypointsList)
+            .timeout(const Duration(seconds: 10));
       } else {
-        routeResult = await _routingService.getRoute(
-          origin,
-          targetDestination!,
-          mode: 'driving',
-          waypoints: waypointsList,
-        ).timeout(const Duration(seconds: 10));
+        routeResult = await _routingService
+            .getRoute(
+              origin,
+              targetDestination!,
+              mode: 'driving',
+              waypoints: waypointsList,
+            )
+            .timeout(const Duration(seconds: 10));
       }
 
       if (currentSessionId != _routingSessionCounter) {
-        debugPrint("⚠️ [ROUTE ENGINE] Discarding stale route response due to new user request.");
+        debugPrint(
+            "⚠️ [ROUTE ENGINE] Discarding stale route response due to new user request.");
         return; // Completely abort processing this stale data
       }
 
@@ -374,7 +386,8 @@ class MapProvider extends ChangeNotifier {
       _setLoading(false);
       final context = ToastService.navigatorKey.currentContext;
       if (context != null && context.mounted) {
-        ToastService.showError(context, "Poor internet connection. Please try again.");
+        ToastService.showError(
+            context, "Poor internet connection. Please try again.");
       }
       return;
     }
@@ -581,7 +594,8 @@ class MapProvider extends ChangeNotifier {
     List<String> altLayerIds = [];
     for (int i = 1; i < _drawnRoutesCount; i++) {
       altLayerIds.add('route-layer-$i');
-      altLayerIds.add('alt-walk-layer-$i'); // CRITICAL: Makes walking routes clickable!
+      altLayerIds.add(
+          'alt-walk-layer-$i'); // CRITICAL: Makes walking routes clickable!
     }
     final features = await controller!.queryRenderedFeatures(
       point,
@@ -654,7 +668,8 @@ class MapProvider extends ChangeNotifier {
   Future<void> drawNativeRoute(List<List<LatLng>> allRoutes) async {
     if (controller == null || allRoutes.isEmpty) return;
 
-    Future<void> safeAddLineLayer(String sourceId, String layerId, LineLayerProperties props) async {
+    Future<void> safeAddLineLayer(
+        String sourceId, String layerId, LineLayerProperties props) async {
       try {
         await controller!.addLineLayer(sourceId, layerId, props);
       } catch (e) {
@@ -727,7 +742,9 @@ class MapProvider extends ChangeNotifier {
       try {
         final bool isWalking = currentNavMode == 'walking';
         if (isWalking) {
-          try { await controller!.addGeoJsonSource('alt-source-$i', geoJson); } catch (_) {}
+          try {
+            await controller!.addGeoJsonSource('alt-source-$i', geoJson);
+          } catch (_) {}
           await safeAddLineLayer(
             'alt-source-$i',
             'alt-walk-layer-$i',
@@ -740,7 +757,9 @@ class MapProvider extends ChangeNotifier {
             ),
           );
         } else {
-          try { await controller!.addGeoJsonSource('route-source-$i', geoJson); } catch (_) {}
+          try {
+            await controller!.addGeoJsonSource('route-source-$i', geoJson);
+          } catch (_) {}
           await safeAddLineLayer(
             'route-source-$i',
             'route-layer-$i',
@@ -814,7 +833,9 @@ class MapProvider extends ChangeNotifier {
         final bool isWalking = currentNavMode == 'walking';
 
         if (isWalking) {
-          try { await controller!.addGeoJsonSource('primary-source', geoJson); } catch (_) {}
+          try {
+            await controller!.addGeoJsonSource('primary-source', geoJson);
+          } catch (_) {}
           await safeAddLineLayer(
             'primary-source',
             'primary-walk-layer',
@@ -827,7 +848,9 @@ class MapProvider extends ChangeNotifier {
             ),
           );
         } else {
-          try { await controller!.addGeoJsonSource('route-source-0', geoJson); } catch (_) {}
+          try {
+            await controller!.addGeoJsonSource('route-source-0', geoJson);
+          } catch (_) {}
 
           // 1. BOTTOM: Casing (Deep shadow to give height/3D effect)
           await safeAddLineLayer(
@@ -922,7 +945,7 @@ class MapProvider extends ChangeNotifier {
         await controller!.animateCamera(
           CameraUpdate.newLatLngBounds(
             _calculateBounds(allRoutes.first),
-            bottom: 380, 
+            bottom: 380,
             left: 50,
             right: 50,
             top: 100,
@@ -1084,7 +1107,9 @@ class MapProvider extends ChangeNotifier {
             sourceId,
             layerId,
             SymbolLayerProperties(
-              iconImage: imageId.isNotEmpty ? imageId : 'custom-marker', // Fallback added
+              iconImage: imageId.isNotEmpty
+                  ? imageId
+                  : 'custom-marker', // Fallback added
               iconSize: 0.32,
               iconAnchor: "center", // Centered perfectly on the route line
               symbolSortKey: i,
@@ -1092,7 +1117,8 @@ class MapProvider extends ChangeNotifier {
               iconAllowOverlap: isPrimary ? true : false,
               iconIgnorePlacement: isPrimary ? true : false,
             ),
-            belowLayerId: 'nav_puck_layer', // CRITICAL Z-INDEX FIX: Forces tags beneath the user dot
+            belowLayerId:
+                'nav_puck_layer', // CRITICAL Z-INDEX FIX: Forces tags beneath the user dot
           );
         } catch (_) {}
       } catch (e) {
@@ -1109,15 +1135,22 @@ class MapProvider extends ChangeNotifier {
 
     // 8. ROAD SNAP & BULLETPROOF Z-INDEX FOR PIN
     if (targetDestination != null && controller != null && !isDropPinMode) {
-      try { await controller!.removeLayer('ultimate-pin-layer'); } catch (_) {}
-      try { await controller!.removeSource('ultimate-pin-source'); } catch (_) {}
+      try {
+        await controller!.removeLayer('ultimate-pin-layer');
+      } catch (_) {}
+      try {
+        await controller!.removeSource('ultimate-pin-source');
+      } catch (_) {}
 
       try {
         await controller!.addGeoJsonSource('ultimate-pin-source', {
           "type": "Feature",
           "geometry": {
             "type": "Point",
-            "coordinates": [targetDestination!.longitude, targetDestination!.latitude],
+            "coordinates": [
+              targetDestination!.longitude,
+              targetDestination!.latitude
+            ],
           },
         });
       } catch (_) {}
@@ -1128,7 +1161,7 @@ class MapProvider extends ChangeNotifier {
           'ultimate-pin-layer',
           const SymbolLayerProperties(
             iconImage: 'custom_pin',
-            iconSize: 1.0, 
+            iconSize: 1.0,
             iconAnchor: 'bottom',
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
@@ -1139,16 +1172,22 @@ class MapProvider extends ChangeNotifier {
 
     // 9. INTERMEDIATE PINS
     if (intermediateStops.isNotEmpty && controller != null) {
-      try { await controller!.removeLayer('intermediate-pins-layer'); } catch (_) {}
-      try { await controller!.removeSource('intermediate-pins-source'); } catch (_) {}
+      try {
+        await controller!.removeLayer('intermediate-pins-layer');
+      } catch (_) {}
+      try {
+        await controller!.removeSource('intermediate-pins-source');
+      } catch (_) {}
 
-      final features = intermediateStops.map((stop) => {
-        "type": "Feature",
-        "geometry": {
-          "type": "Point",
-          "coordinates": [stop.longitude, stop.latitude]
-        }
-      }).toList();
+      final features = intermediateStops
+          .map((stop) => {
+                "type": "Feature",
+                "geometry": {
+                  "type": "Point",
+                  "coordinates": [stop.longitude, stop.latitude]
+                }
+              })
+          .toList();
 
       try {
         await controller!.addGeoJsonSource('intermediate-pins-source', {
@@ -1178,7 +1217,9 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<void> clearNativeRoute({bool preserveState = false}) async {
-    if (_drawnRoutesCount == 0) return; // Do not spam the bridge if already clear
+    if (_drawnRoutesCount == 0) {
+      return; // Do not spam the bridge if already clear
+    }
     if (controller != null && _drawnRoutesCount > 0) {
       // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
       try {
@@ -1289,55 +1330,55 @@ class MapProvider extends ChangeNotifier {
       if (_drawnRoutesCount > 0 || isRouteCalculated) {
         // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
         try {
-        await controller!.removeLayer('primary-casing');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-core');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-shine');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-walk-layer');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('connectors-layer');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('intermediate-pins-layer');
-      } catch (_) {}
+          await controller!.removeLayer('primary-casing');
+        } catch (_) {}
+        try {
+          await controller!.removeLayer('primary-core');
+        } catch (_) {}
+        try {
+          await controller!.removeLayer('primary-shine');
+        } catch (_) {}
+        try {
+          await controller!.removeLayer('primary-walk-layer');
+        } catch (_) {}
+        try {
+          await controller!.removeLayer('connectors-layer');
+        } catch (_) {}
+        try {
+          await controller!.removeLayer('intermediate-pins-layer');
+        } catch (_) {}
 
-      for (int i = 0; i < 5; i++) {
-        try {
-          await controller!.removeLayer('route-layer-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('alt-walk-layer-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('time-tag-layer-$i');
-        } catch (_) {}
-      }
+        for (int i = 0; i < 5; i++) {
+          try {
+            await controller!.removeLayer('route-layer-$i');
+          } catch (_) {}
+          try {
+            await controller!.removeLayer('alt-walk-layer-$i');
+          } catch (_) {}
+          try {
+            await controller!.removeLayer('time-tag-layer-$i');
+          } catch (_) {}
+        }
 
-      // 2. SECURE SOURCE CLEANUP (Only safe to remove after layers are dead)
-      try {
-        await controller!.removeSource('primary-source');
-      } catch (_) {}
-      try {
-        await controller!.removeSource('connectors-source');
-      } catch (_) {}
+        // 2. SECURE SOURCE CLEANUP (Only safe to remove after layers are dead)
+        try {
+          await controller!.removeSource('primary-source');
+        } catch (_) {}
+        try {
+          await controller!.removeSource('connectors-source');
+        } catch (_) {}
 
-      for (int i = 0; i < 5; i++) {
-        try {
-          await controller!.removeSource('route-source-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('alt-source-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('time-tag-source-$i');
-        } catch (_) {}
-      }
+        for (int i = 0; i < 5; i++) {
+          try {
+            await controller!.removeSource('route-source-$i');
+          } catch (_) {}
+          try {
+            await controller!.removeSource('alt-source-$i');
+          } catch (_) {}
+          try {
+            await controller!.removeSource('time-tag-source-$i');
+          } catch (_) {}
+        }
       }
 
       // Also clear destination pin circle if it exists
@@ -1350,9 +1391,13 @@ class MapProvider extends ChangeNotifier {
       try {
         await controller!.removeSource('selected-destination-source');
       } catch (_) {}
-      
-      try { await controller!.removeLayer('ultimate-pin-layer'); } catch (_) {}
-      try { await controller!.removeSource('ultimate-pin-source'); } catch (_) {}
+
+      try {
+        await controller!.removeLayer('ultimate-pin-layer');
+      } catch (_) {}
+      try {
+        await controller!.removeSource('ultimate-pin-source');
+      } catch (_) {}
 
       // Remove the manual dropped pin or search symbol layer
       if (_droppedPinSymbol != null) {
@@ -1658,11 +1703,14 @@ class MapProvider extends ChangeNotifier {
 
   MapProvider() {
     engine.state.addListener(() {
-      if (engine.isFullyBooted && _locServiceSub == null && engine.locService != null) {
+      if (engine.isFullyBooted &&
+          _locServiceSub == null &&
+          engine.locService != null) {
         _locServiceSub = engine.locService!.engineLocationStream.listen((pos) {
           if (engine.mapUIState.value == MapUIState.navigating ||
               engine.mapUIState.value == MapUIState.routeDrawn) {
-            updateNavigationPuck(LatLng(pos.latitude, pos.longitude), pos.heading);
+            updateNavigationPuck(
+                LatLng(pos.latitude, pos.longitude), pos.heading);
           }
         });
       }
@@ -1812,17 +1860,18 @@ class MapProvider extends ChangeNotifier {
       longitude: latLng.longitude,
       categories: const [],
     );
-    
+
     _tappedPlaceFromMap = temporaryPlace;
     _isDestinationSelected = true;
     targetDestination = latLng;
     engine.setUIState(MapUIState.placeSelected);
-    
+
     // 1. Trigger Bottom Sheet UI Rebuild FIRST
     notifyListeners();
 
     // 2. Ensure native tracking is dead so it doesn't fight the flight
-    await engine.mapController?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+    await engine.mapController
+        ?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
     // 3. Execute the flight to the PIN coordinates (tappedCoordinates), NOT user location instantly!
     await engine.mapController?.animateCamera(
       CameraUpdate.newLatLngZoom(latLng, 16.0),
@@ -1835,13 +1884,13 @@ class MapProvider extends ChangeNotifier {
       _droppedPinSymbol = null;
     }
 
-      if (controller != null && !isDropPinMode) {
+    if (controller != null && !isDropPinMode) {
       // 1. Drop the pin tilted slightly right
       _droppedPinSymbol = await controller!.addSymbol(
         SymbolOptions(
           geometry: latLng,
           iconImage: 'custom_pin',
-          iconSize: 1.0, 
+          iconSize: 1.0,
           iconAnchor: 'bottom',
           iconRotate: 15.0, // Head tilted right
         ),
@@ -1850,21 +1899,24 @@ class MapProvider extends ChangeNotifier {
       // 2. Sway Left
       Future.delayed(const Duration(milliseconds: 150), () async {
         if (_droppedPinSymbol != null && controller != null) {
-          await controller!.updateSymbol(_droppedPinSymbol!, const SymbolOptions(iconRotate: -10.0));
+          await controller!.updateSymbol(
+              _droppedPinSymbol!, const SymbolOptions(iconRotate: -10.0));
         }
       });
 
       // 3. Sway slightly Right
       Future.delayed(const Duration(milliseconds: 300), () async {
         if (_droppedPinSymbol != null && controller != null) {
-          await controller!.updateSymbol(_droppedPinSymbol!, const SymbolOptions(iconRotate: 5.0));
+          await controller!.updateSymbol(
+              _droppedPinSymbol!, const SymbolOptions(iconRotate: 5.0));
         }
       });
 
       // 4. Settle firmly in the center
       Future.delayed(const Duration(milliseconds: 450), () async {
         if (_droppedPinSymbol != null && controller != null) {
-          await controller!.updateSymbol(_droppedPinSymbol!, const SymbolOptions(iconRotate: 0.0));
+          await controller!.updateSymbol(
+              _droppedPinSymbol!, const SymbolOptions(iconRotate: 0.0));
         }
       });
     }
@@ -1872,10 +1924,12 @@ class MapProvider extends ChangeNotifier {
     // Fire-and-forget network call in background, deferred to allow 60FPS camera flight
     Future.delayed(const Duration(milliseconds: 800), () async {
       try {
-        final PlaceModel place = await PlaceEnrichmentService().reverseGeocode(
-          latLng.latitude,
-          latLng.longitude,
-        ).timeout(const Duration(seconds: 8));
+        final PlaceModel place = await PlaceEnrichmentService()
+            .reverseGeocode(
+              latLng.latitude,
+              latLng.longitude,
+            )
+            .timeout(const Duration(seconds: 8));
         setTappedPlace(place);
         saveNewSearch(place);
 
@@ -1901,17 +1955,19 @@ class MapProvider extends ChangeNotifier {
         }
       } catch (e) {
         debugPrint("Tap Handler Reverse Geocode Error: $e");
-        
+
         final context = ToastService.navigatorKey.currentContext;
         if (context != null && context.mounted) {
-          ToastService.showError(context, "Poor internet connection. Pin dropped offline.");
+          ToastService.showError(
+              context, "Poor internet connection. Pin dropped offline.");
         }
 
         // Fallback to coordinates on failure
         final fallback = PlaceModel(
           placeId: temporaryPlace.placeId,
           name: "Dropped Pin",
-          address: "${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}",
+          address:
+              "${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}",
           latitude: latLng.latitude,
           longitude: latLng.longitude,
           categories: const [],
@@ -1920,8 +1976,6 @@ class MapProvider extends ChangeNotifier {
       }
     });
   }
-
-
 
   Future<void> clearSearchSession(BuildContext context) async {
     targetDestination = null;
@@ -2004,7 +2058,9 @@ class MapProvider extends ChangeNotifier {
 
       // Fetch from Routing API
       final waypointsList = intermediateStops.isNotEmpty
-          ? intermediateStops.map((place) => LatLng(place.latitude, place.longitude)).toList()
+          ? intermediateStops
+              .map((place) => LatLng(place.latitude, place.longitude))
+              .toList()
           : null;
 
       final routeData = await _routingService.getRoute(
@@ -2405,7 +2461,8 @@ class MapProvider extends ChangeNotifier {
     final target = LatLng(lat, lng);
     targetDestination = target;
 
-    setAutoTracking(false); // 🚨 CRITICAL FIX: Stops the background GPS from snapping the camera back!
+    setAutoTracking(
+        false); // 🚨 CRITICAL FIX: Stops the background GPS from snapping the camera back!
     notifyListeners();
 
     engine.setUIState(MapUIState.placeSelected);
@@ -2414,7 +2471,8 @@ class MapProvider extends ChangeNotifier {
 
     try {
       // 1. Force native layer to drop tracking immediately
-      await controller?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+      await controller
+          ?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
 
       // 2. CRITICAL FIX: Event loop breaker to safely disengage WebGL tracking lock
       await Future.delayed(const Duration(milliseconds: 150));
@@ -2430,13 +2488,13 @@ class MapProvider extends ChangeNotifier {
         _droppedPinSymbol = null;
       }
 
-        if (controller != null && !isDropPinMode) {
+      if (controller != null && !isDropPinMode) {
         // 1. Drop the pin tilted slightly right
         _droppedPinSymbol = await controller!.addSymbol(
           SymbolOptions(
             geometry: target,
             iconImage: 'custom_pin',
-            iconSize: 1.0, 
+            iconSize: 1.0,
             iconAnchor: 'bottom',
             iconRotate: 15.0, // Head tilted right
           ),
@@ -2445,21 +2503,24 @@ class MapProvider extends ChangeNotifier {
         // 2. Sway Left
         Future.delayed(const Duration(milliseconds: 150), () async {
           if (_droppedPinSymbol != null && controller != null) {
-            await controller!.updateSymbol(_droppedPinSymbol!, const SymbolOptions(iconRotate: -10.0));
+            await controller!.updateSymbol(
+                _droppedPinSymbol!, const SymbolOptions(iconRotate: -10.0));
           }
         });
 
         // 3. Sway slightly Right
         Future.delayed(const Duration(milliseconds: 300), () async {
           if (_droppedPinSymbol != null && controller != null) {
-            await controller!.updateSymbol(_droppedPinSymbol!, const SymbolOptions(iconRotate: 5.0));
+            await controller!.updateSymbol(
+                _droppedPinSymbol!, const SymbolOptions(iconRotate: 5.0));
           }
         });
 
         // 4. Settle firmly in the center
         Future.delayed(const Duration(milliseconds: 450), () async {
           if (_droppedPinSymbol != null && controller != null) {
-            await controller!.updateSymbol(_droppedPinSymbol!, const SymbolOptions(iconRotate: 0.0));
+            await controller!.updateSymbol(
+                _droppedPinSymbol!, const SymbolOptions(iconRotate: 0.0));
           }
         });
       }
@@ -2481,7 +2542,8 @@ class MapProvider extends ChangeNotifier {
     if (!_isMapReady) return;
     try {
       setAutoTracking(false);
-      await controller?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+      await controller
+          ?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
       await controller?.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(target: target, zoom: zoom, tilt: tilt, bearing: 0),
@@ -2574,8 +2636,7 @@ class MapProvider extends ChangeNotifier {
               left: 50,
               right: 50,
               top: 100,
-              bottom:
-                  380, // Prevent route from hiding behind the bottom sheet
+              bottom: 380, // Prevent route from hiding behind the bottom sheet
             ),
             duration: const Duration(milliseconds: 1000),
           );

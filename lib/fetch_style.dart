@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 
 void main() async {
   try {
-    const styleUrl = "https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json?api_key=LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs";
+    const styleUrl = "https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json?api_key={YOUR_API_KEY}";
     final response = await http.get(Uri.parse(styleUrl));
     debugPrint("Status: ${response.statusCode}");
     if (response.statusCode == 200) {
