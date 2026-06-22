@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class RidelServiceCard extends StatefulWidget {
   final IconData icon;
@@ -91,11 +92,10 @@ class _RidelServiceCardState extends State<RidelServiceCard> {
                     ),
                   ),
                   child: widget.isLoading
-                      ? SizedBox(
+                      ? const SizedBox(
                           width: 24,
                           height: 24, // Exact purana size
-                          child: CircularProgressIndicator(
-                              color: widget.accentColor, strokeWidth: 2))
+                          child: BrandedLoader(isFullScreen: false))
                       : Icon(widget.icon, size: 24, color: widget.accentColor),
                 ),
                 const SizedBox(height: 12), // Exact purana spacing

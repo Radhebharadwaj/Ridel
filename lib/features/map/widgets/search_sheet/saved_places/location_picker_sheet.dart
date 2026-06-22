@@ -14,6 +14,7 @@ import 'package:ridel/features/map/models/place_model.dart';
 
 import 'saved_place.dart';
 import 'places_repository.dart' as saved;
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 // ============================================================
 // 🧭 SHEET STATE MACHINE
@@ -410,14 +411,10 @@ class SavedPlacesRow extends StatelessWidget {
                     child: pickerController.isReverseGeocoding
                         ? Row(
                             children: [
-                              SizedBox(
+                              const SizedBox(
                                 width: 14,
                                 height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color:
-                                      isDark ? Colors.white54 : Colors.black38,
-                                ),
+                                child: BrandedLoader(isFullScreen: false),
                               ),
                               const SizedBox(width: 8),
                               Text(

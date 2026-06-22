@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'pin_screen.dart';
 import 'package:flutter/foundation.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class SecuritySheetContent extends StatefulWidget {
   const SecuritySheetContent({super.key});
@@ -192,7 +193,7 @@ class _SecuritySheetContentState extends State<SecuritySheetContent> {
     if (_isLoading) {
       return const SizedBox(
           height: 300,
-          child: Center(child: CircularProgressIndicator(color: Colors.cyan)));
+          child: Center(child: BrandedLoader(isFullScreen: false)));
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;

@@ -153,6 +153,16 @@ class _MapThemePopupState extends State<_MapThemePopup> {
                       widget.onThemeSelected(MapThemeType.light);
                     },
                   ),
+                  const SizedBox(height: 4),
+                  _ThemeOption(
+                    icon: Icons.satellite_alt_rounded,
+                    label: 'Satellite',
+                    isSelected: widget.currentTheme == MapThemeType.satellite,
+                    onTap: () {
+                      AppHaptics.selectionClick();
+                      widget.onThemeSelected(MapThemeType.satellite);
+                    },
+                  ),
                   const SizedBox(height: 8),
                   Divider(
                     color: Theme.of(context).brightness == Brightness.dark

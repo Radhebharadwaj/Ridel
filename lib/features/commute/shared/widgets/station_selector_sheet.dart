@@ -11,6 +11,7 @@ import 'package:ridel/features/commute/shared/services/database_helper.dart';
 // 🚀 IMPORTED FOR UNIFORM RIDEL DESIGN & SEARCH BAR
 import 'package:ridel/core/widgets/ridel_liquid_button.dart';
 import 'package:ridel/core/widgets/ridel_sheet.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class StationSelectorSheet extends StatefulWidget {
   const StationSelectorSheet({
@@ -437,7 +438,7 @@ class _StationSelectorSheetState extends State<StationSelectorSheet> {
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(
-                    child: CircularProgressIndicator(color: Color(0xFFFF9F0A)),
+                    child: BrandedLoader(isFullScreen: false),
                   );
                 }
                 return _buildStationsView(textColor, bgColor, snapshot.data!);
@@ -580,7 +581,7 @@ class _StationSelectorSheetState extends State<StationSelectorSheet> {
         }
         if (!snapshot.hasData) {
           return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF00E5FF)));
+              child: BrandedLoader(isFullScreen: false));
         }
 
         final lines = snapshot.data!;
@@ -726,11 +727,9 @@ class _StationSelectorSheetState extends State<StationSelectorSheet> {
     bool isNearby = false,
   }) {
     if (_isLoadingStations) {
-      return Center(
-        key: const ValueKey('Loader'),
-        child: CircularProgressIndicator(
-          color: _selectedLineColor ?? const Color(0xFF00E5FF),
-        ),
+      return const Center(
+        key: ValueKey('Loader'),
+        child: BrandedLoader(isFullScreen: false),
       );
     }
     if (stations.isEmpty) {

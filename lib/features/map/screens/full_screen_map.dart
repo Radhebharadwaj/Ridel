@@ -22,6 +22,7 @@ import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/main.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class FullScreenMapPage extends StatefulWidget {
   final ValueNotifier<double> searchSheetProgressNotifier;
@@ -47,11 +48,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   MapThemeType? _currentTheme;
   bool _isTilted = false;
 
-  bool _showScaleBar = false;
+  final ValueNotifier<bool> _showScaleBarNotifier = ValueNotifier(false);
   Timer? _scaleBarTimer;
 
-  String _scaleText = '0 m';
-  double _scaleWidth = 60.0;
+  final ValueNotifier<String> _scaleTextNotifier = ValueNotifier('0 m');
+  final ValueNotifier<double> _scaleWidthNotifier = ValueNotifier(60.0);
 
   bool _showPOIs = true;
   final bool _show3D = false;
@@ -104,14 +105,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           ? '${chosenMeters ~/ 1000} km'
           : '$chosenMeters m';
 
-      setState(() {
-        _showScaleBar = true;
-        _scaleText = newText;
-        _scaleWidth = newWidth.clamp(20.0, 150.0);
-      });
+      _showScaleBarNotifier.value = true;
+      _scaleTextNotifier.value = newText;
+      _scaleWidthNotifier.value = newWidth.clamp(20.0, 150.0);
+      
       _scaleBarTimer?.cancel();
       _scaleBarTimer = Timer(const Duration(milliseconds: 1000), () {
-        if (mounted) setState(() => _showScaleBar = false);
+        if (mounted) _showScaleBarNotifier.value = false;
       });
     }
   }
@@ -303,7 +303,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                 selector: (_, provider) => provider.showNativeBlueDot,
                 builder: (context, showNativeBlueDot, child) {
                   return _loadedMapStyle == null
-                      ? const Center(child: CircularProgressIndicator())
+                      ? const Center(child: BrandedLoader())
                       : MapLibreMap(
                           key: const ValueKey('ridel_main_map'),
                           styleString: _loadedMapStyle!,
@@ -848,77 +848,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             ),
           ),
 
-          ValueListenableBuilder<bool>(
-              valueListenable: globalSidebarOpen,
-              builder: (context, isSidebarOpen, _) {
-                final double leftOffset =
-                    isDesktop ? (isSidebarOpen ? 260.0 : 20.0) : 16.0;
 
-                return AnimatedPositioned(
-                  duration: const Duration(milliseconds: 350),
-                  curve: Curves.easeOutCubic,
-                  bottom: isDesktop
-                      ? 32.0
-                      : (MediaQuery.paddingOf(context).bottom + 90),
-                  left: leftOffset,
-                  child: IgnorePointer(
-                    child: AnimatedOpacity(
-                      opacity: _showScaleBar ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 150),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _scaleText,
-                            style: TextStyle(
-                              color: isDark ? Colors.white : Colors.black87,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              shadows: [
-                                Shadow(
-                                    color:
-                                        isDark ? Colors.black87 : Colors.white,
-                                    blurRadius: 3)
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              Container(
-                                height: 4,
-                                width: _scaleWidth / 2,
-                                decoration: BoxDecoration(
-                                  color: isDark ? Colors.white : Colors.black87,
-                                  border: Border.all(
-                                      color: isDark
-                                          ? Colors.black54
-                                          : Colors.white54,
-                                      width: 0.5),
-                                ),
-                              ),
-                              Container(
-                                height: 4,
-                                width: _scaleWidth / 2,
-                                decoration: BoxDecoration(
-                                  color:
-                                      isDark ? Colors.white30 : Colors.black38,
-                                  border: Border.all(
-                                      color: isDark
-                                          ? Colors.black54
-                                          : Colors.white54,
-                                      width: 0.5),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }),
 
           if (MediaQuery.sizeOf(context).width < 800)
             Positioned.fill(
@@ -939,14 +869,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
               ),
             ),
 
-          // 🚀 1. SMOOTH WEATHER WIDGET (Mobile = Left, Desktop = Right)
+          // 🚀 1. SMOOTH WEATHER WIDGET (Mobile = Top Left, Desktop = Top Right)
           ValueListenableBuilder<bool>(
             valueListenable: globalSidebarOpen,
             builder: (context, isSidebarExpanded, _) {
               return AnimatedPositioned(
                   duration: const Duration(milliseconds: 400),
                   curve: Curves.easeOutCubic,
-                  top: 16.0,
+                  top: isDesktop ? 16.0 : MediaQuery.paddingOf(context).top + 16.0,
                   left: isDesktop ? null : 16.0,
                   right: isDesktop ? 16.0 : null,
                   child: ValueListenableBuilder<double>(
@@ -954,12 +884,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                     builder: (context, progress, _) {
                       double opacity = (progress <= 0.45)
                           ? 1.0
-                          : (1.0 - ((progress - 0.45) / (0.90 - 0.45)))
-                              .clamp(0.0, 1.0);
+                          : (1.0 - ((progress - 0.45) / (0.90 - 0.45))).clamp(0.0, 1.0);
 
                       return Selector<MapProvider, bool>(
-                        selector: (context, provider) =>
-                            !provider.isActiveNavigation,
+                        selector: (context, provider) => !provider.isActiveNavigation,
                         builder: (context, showWeather, child) {
                           final finalOpacity = showWeather ? opacity : 0.0;
                           return IgnorePointer(
@@ -970,13 +898,58 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             ),
                           );
                         },
-                        child: WeatherFloatingWidget(
-                            onMapThemeChanged: (isDark) {}),
+                        child: WeatherFloatingWidget(onMapThemeChanged: (isDark) {}),
                       );
                     },
                   ));
             },
           ),
+
+          // 🚀 2. PREMIUM SCALE BAR (Mobile = Top Right, Desktop = Bottom Left)
+          ValueListenableBuilder<bool>(
+              valueListenable: globalSidebarOpen,
+              builder: (context, isSidebarOpen, _) {
+                // Exact placement logic based on device
+                final double? topOffset = isDesktop ? null : MediaQuery.of(context).padding.top + 16.0;
+                final double? bottomOffset = isDesktop ? 32.0 : null;
+                final double? rightOffset = isDesktop ? null : 16.0;
+                final double? leftOffset = isDesktop ? (isSidebarOpen ? 260.0 : 20.0) : null;
+
+                return AnimatedPositioned(
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeOutCubic,
+                  top: topOffset,
+                  bottom: bottomOffset,
+                  left: leftOffset,
+                  right: rightOffset,
+                  child: IgnorePointer(
+                    child: ValueListenableBuilder<bool>(
+                      valueListenable: _showScaleBarNotifier,
+                      builder: (context, showScale, _) {
+                        return ValueListenableBuilder<String>(
+                          valueListenable: _scaleTextNotifier,
+                          builder: (context, scaleText, _) {
+                            return ValueListenableBuilder<double>(
+                              valueListenable: _scaleWidthNotifier,
+                              builder: (context, scaleWidth, _) {
+                                return AnimatedOpacity(
+                                  opacity: showScale ? 1.0 : 0.0,
+                                  duration: const Duration(milliseconds: 250),
+                                  child: PremiumScaleBar(
+                                    width: scaleWidth,
+                                    text: scaleText,
+                                    isDark: isDark,
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                );
+              }),
 
           // 🚀 3. TURN-BY-TURN BANNER
           Positioned(
@@ -1162,41 +1135,48 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         return MapControlsPill(
                           onThemeTap: () {
                             AppHaptics.heavyImpact();
-                            MapThemeSelector.show(
-                              context,
-                              currentTheme: _currentTheme ?? (isDark ? MapThemeType.dark : MapThemeType.light),
-                              showPOIs: _showPOIs,
-                              onPOIsToggled: (val) {
-                                setState(() {
-                                  _showPOIs = val;
-                                  _initMapStyle(updateExisting: true);
-                                });
-                              },
-                              onThemeSelected: (selectedTheme) {
-                                setState(() {
-                                  _currentTheme = selectedTheme;
-                                  _initMapStyle();
-                                });
-                              }
-                            );
+                            MapThemeSelector.show(context,
+                                currentTheme: _currentTheme ??
+                                    (isDark
+                                        ? MapThemeType.dark
+                                        : MapThemeType.light),
+                                showPOIs: _showPOIs, onPOIsToggled: (val) {
+                              setState(() {
+                                _showPOIs = val;
+                                _initMapStyle(updateExisting: true);
+                              });
+                            }, onThemeSelected: (selectedTheme) {
+                              setState(() {
+                                _currentTheme = selectedTheme;
+                                _initMapStyle();
+                              });
+                            });
                           },
                           onLocateTap: () {
                             AppHaptics.selectionClick();
                             Future.microtask(() async {
                               if (!context.mounted) return;
-                              final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                              final mapProvider = Provider.of<MapProvider>(
+                                  context,
+                                  listen: false);
 
-                              if (mapProvider.isActiveNavigation && !mapProvider.isAutoTracking) {
+                              if (mapProvider.isActiveNavigation &&
+                                  !mapProvider.isAutoTracking) {
                                 await mapProvider.recenter3DNavigation();
-                              } else if (mapProvider.isRouteCalculated && !mapProvider.isActiveNavigation) {
+                              } else if (mapProvider.isRouteCalculated &&
+                                  !mapProvider.isActiveNavigation) {
                                 await mapProvider.start3DNavigation();
-                              } else if (mapProvider.targetDestination != null) {
-                                final locService = Provider.of<GlobalLocationService>(context, listen: false);
+                              } else if (mapProvider.targetDestination !=
+                                  null) {
+                                final locService =
+                                    Provider.of<GlobalLocationService>(context,
+                                        listen: false);
                                 if (locService.currentPosition == null) {
                                   await locService.forceRefreshLocation();
                                 }
                                 if (!context.mounted) return;
-                                await mapProvider.calculateAndDrawNativeRoute(context, 'driving');
+                                await mapProvider.calculateAndDrawNativeRoute(
+                                    context, 'driving');
                               } else {
                                 await _handleLocateMeTapped(mapProvider);
                               }
@@ -1368,8 +1348,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       }
     }
   }
-
-
 }
 
 // 🚀 NAYA SMART COMPASS WIDGET (APPLE STYLE) - OPTIMIZED WITH REPAINT BOUNDARY
@@ -1842,4 +1820,71 @@ class AppleCompassDialPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📏 PREMIUM SCALE BAR (Glassmorphism Parity)
+// ═══════════════════════════════════════════════════════════════════════════
+class PremiumScaleBar extends StatelessWidget {
+  final double width;
+  final String text;
+  final bool isDark;
+
+  const PremiumScaleBar({
+    super.key,
+    required this.width,
+    required this.text,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: Text(
+              text,
+              key: ValueKey<String>(text),
+              style: TextStyle(
+                color: isDark ? Colors.white : Colors.black87,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+                shadows: [
+                  Shadow(
+                    color: isDark ? Colors.black.withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.8),
+                    blurRadius: 6,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOutCubic,
+            height: 2.5,
+            width: width,
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white : Colors.black87,
+              borderRadius: BorderRadius.circular(2),
+              boxShadow: [
+                BoxShadow(
+                  color: isDark ? Colors.black.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.6),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

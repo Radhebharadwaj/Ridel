@@ -17,6 +17,7 @@ import 'package:ridel/features/auth/services/auth_service.dart';
 import 'package:ridel/features/profile/services/profile_repository.dart';
 import 'package:ridel/layout/main_layout.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -610,7 +611,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 32),
         if (_isLoading)
-          const CircularProgressIndicator(color: Color(0xFF00BFA5))
+          const BrandedLoader(isFullScreen: false)
         else
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -761,8 +762,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         key: ValueKey('loading'),
                         height: 24,
                         width: 24,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2.5, color: Colors.white),
+                        child: BrandedLoader(isFullScreen: false),
                       )
                     : const Text(
                         'Continue',
@@ -803,8 +803,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         key: ValueKey('loading'),
                         height: 24,
                         width: 24,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2.5, color: Colors.white),
+                        child: BrandedLoader(isFullScreen: false),
                       )
                     : const Text(
                         'Continue',

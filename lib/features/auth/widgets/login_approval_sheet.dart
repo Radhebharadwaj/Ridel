@@ -5,6 +5,7 @@ import 'package:local_auth/local_auth.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/core/widgets/ridel_liquid_button.dart'; // 🌟 Added Premium Button Engine
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class LoginApprovalSheet extends StatefulWidget {
   final Map<String, dynamic> requestData;
@@ -206,7 +207,7 @@ class _LoginApprovalSheetState extends State<LoginApprovalSheet> {
           if (_isProcessing)
             Column(
               children: [
-                const CircularProgressIndicator(color: Colors.cyan),
+                const BrandedLoader(isFullScreen: false),
                 const SizedBox(height: 16),
                 Text("Processing...",
                     style: GoogleFonts.inter(color: subTextColor)),

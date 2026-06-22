@@ -9,6 +9,7 @@ import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/core/widgets/ridel_glass.dart';
 import 'package:ridel/core/widgets/ridel_liquid_button.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class AdminBroadcastScreen extends StatefulWidget {
   const AdminBroadcastScreen({super.key});
@@ -300,10 +301,8 @@ class _AdminBroadcastScreenState extends State<AdminBroadcastScreen> {
 
   Widget _buildBroadcastButton(bool isDark) {
     if (_isLoading) {
-      return Center(
-        child: CircularProgressIndicator(
-          color: isDark ? Colors.white : const Color(0xFF0A84FF),
-        ),
+      return const Center(
+        child: BrandedLoader(isFullScreen: false),
       );
     }
 

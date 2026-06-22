@@ -3,7 +3,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:ui';
-import 'package:flutter/cupertino.dart';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/main.dart';
 import 'package:ridel/core/providers/app_navigation_provider.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 enum ToastType { success, error, info, warning }
 
 class ToastService {
@@ -450,7 +451,7 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                const CupertinoActivityIndicator(radius: 8),
+                                const BrandedLoader(isFullScreen: false),
                                 const SizedBox(width: 8),
                                 Text(
                                   "Finding nearest stop...",

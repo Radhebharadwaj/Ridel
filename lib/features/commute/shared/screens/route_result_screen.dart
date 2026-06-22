@@ -28,6 +28,7 @@ import 'package:ridel/core/widgets/ridel_liquid_button.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/app_shadows.dart';
 import 'package:ridel/features/commute/shared/widgets/facilities_sheet.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class RouteResultScreen extends StatefulWidget {
   final String fromStation;
@@ -796,11 +797,8 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
         border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
         boxShadow: AppShadows.cardFloating,
       ),
-      child: Center(
-        child: CircularProgressIndicator(
-            color: widget.isMetro
-                ? const Color(0xFF00E5FF)
-                : const Color(0xFFFF9F0A)),
+      child: const Center(
+        child: BrandedLoader(isFullScreen: false),
       ),
     );
   }

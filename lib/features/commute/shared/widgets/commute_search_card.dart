@@ -21,6 +21,7 @@ import 'package:ridel/core/widgets/ridel_premium_loader.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/core/providers/app_navigation_provider.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class CommuteSearchCard extends StatefulWidget {
   final bool isDark;
@@ -928,8 +929,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.cyanAccent))
+                          child: BrandedLoader(isFullScreen: false))
                       : Text(_calculatedFare,
                           style: GoogleFonts.inter(
                               fontSize: 18,

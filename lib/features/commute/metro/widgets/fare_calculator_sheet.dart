@@ -6,6 +6,7 @@ import 'package:ridel/core/widgets/ridel_sheet.dart';
 import 'package:ridel/features/commute/shared/widgets/station_selector_sheet.dart';
 import 'package:ridel/features/commute/metro/services/metro_service.dart';
 import 'package:ridel/features/commute/shared/services/database_helper.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class FareCalculatorSheet extends StatefulWidget {
   const FareCalculatorSheet({super.key});
@@ -230,8 +231,7 @@ class _FareCalculatorSheetState extends State<FareCalculatorSheet> {
                   ? const SizedBox(
                       height: 100,
                       child: Center(
-                          child: CircularProgressIndicator(
-                              color: Color(0xFF00E5FF))))
+                          child: BrandedLoader(isFullScreen: false)))
                   : (_normalFare != null
                       ? Container(
                           padding: const EdgeInsets.all(24),

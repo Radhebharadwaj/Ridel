@@ -1360,8 +1360,26 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                   // Lifted to 28.0 to perfectly match the Home Screen Navigation Bar height
                                   final currentBottomMargin =
                                       lerpDouble(28.0, 0.0, progress) ?? 28.0;
-                                  final currentSideMargin =
-                                      lerpDouble(16.0, 0.0, progress) ?? 16.0;
+                                  // 1. Calculate how close the sheet is to the fully collapsed state
+                                  // Added a +0.02 buffer so it snaps into the pill shape cleanly at the bottom
+                                  final double collapseFactor = (progress <= _safeMinSize + 0.02) 
+                                      ? 1.0 
+                                      : (progress >= _safeMidSize) 
+                                          ? 0.0 
+                                          : 1.0 - ((progress - _safeMinSize) / (_safeMidSize - _safeMinSize)).clamp(0.0, 1.0);
+                                          
+                                  // 2. Apply an EaseInOut curve to make the shrink/expand animation buttery smooth
+                                  final double smoothCollapse = Curves.easeInOut.transform(collapseFactor);
+
+                                  // 3. AGGRESSIVE SHRINK: Apple Maps shrinks significantly to form a pill.
+                                  // Adding 22.0 pixels of extra margin on both sides ONLY when collapsed.
+                                  final double extraShrinkMargin = 22.0 * smoothCollapse;
+
+                                  // 4. Base margin (16.0 at half-open, 0.0 at full-screen)
+                                  final double baseSideMargin = lerpDouble(16.0, 0.0, progress) ?? 16.0;
+
+                                  // 5. Final combined margin
+                                  final double finalSideMargin = baseSideMargin + extraShrinkMargin;
 
                                   // Fast transition to 32.0 radius so the half-open state looks like a normal sheet (not a circle).
                                   final sheetRadius = progress < 0.2
@@ -1412,8 +1430,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                             : navCollapsedHeight)
                                                         : constraints.maxHeight,
                                                     margin: EdgeInsets.only(
-                                                      left: currentSideMargin,
-                                                      right: currentSideMargin,
+                                                      left: finalSideMargin,
+                                                      right: finalSideMargin,
                                                       bottom: currentBottomMargin +
                                                           MediaQuery.paddingOf(
                                                                   context)

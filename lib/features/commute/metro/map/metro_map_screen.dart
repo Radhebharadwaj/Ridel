@@ -18,6 +18,7 @@ import 'package:ridel/features/commute/metro/map/metro_data_provider.dart';
 import 'package:ridel/features/commute/metro/map/map_models.dart';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/features/commute/shared/models/route_models.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 const double tileCanvasSize = 16384.0;
 const double tweakX = 0.0;
@@ -578,7 +579,7 @@ class _MetroMapScreenState extends State<MetroMapScreen>
           builder: (context, provider, child) {
             if (provider.mapData == null) {
               return const Center(
-                  child: CircularProgressIndicator(color: Color(0xFF00E5FF)));
+                  child: BrandedLoader(isFullScreen: false));
             }
 
             Marker? activeLocMarker;

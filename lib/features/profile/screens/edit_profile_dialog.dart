@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/features/profile/services/profile_repository.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class EditProfileContent extends StatefulWidget {
   const EditProfileContent({
@@ -350,8 +351,7 @@ class _EditProfileContentState extends State<EditProfileContent> {
                     const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.cyan))
+                        child: BrandedLoader(isFullScreen: false))
                   else if (_isHandleAvailable == true)
                     const Icon(Icons.check_circle_rounded,
                         color: Colors.greenAccent, size: 20)

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import '../services/profile_repository.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class MobileVerificationModal extends StatefulWidget {
   final ProfileRepository repository;
@@ -150,8 +151,7 @@ class _MobileVerificationModalState extends State<MobileVerificationModal> {
                 ? const SizedBox(
                     height: 20,
                     width: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.black))
+                    child: BrandedLoader(isFullScreen: false))
                 : Text("Save Securely",
                     style: GoogleFonts.inter(
                         fontWeight: FontWeight.bold, fontSize: 16)),

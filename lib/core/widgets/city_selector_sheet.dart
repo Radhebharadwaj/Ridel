@@ -13,6 +13,7 @@ import 'package:ridel/features/profile/services/profile_repository.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/features/commute/shared/services/database_helper.dart';
 import 'package:ridel/core/utils/location_guard.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class CitySelectorSheet extends StatefulWidget {
   const CitySelectorSheet({super.key});
@@ -464,7 +465,7 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
           Expanded(
             child: _isLoading
                 ? const Center(
-                    child: CircularProgressIndicator(color: accentColor),
+                    child: BrandedLoader(isFullScreen: false),
                   )
                 : (_selectedRegion == null && _searchResults.isEmpty)
                     ? Center(

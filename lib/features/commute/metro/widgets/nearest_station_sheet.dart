@@ -14,6 +14,7 @@ import 'package:ridel/features/commute/shared/services/database_helper.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class NearestStationSheetContent extends StatefulWidget {
   final bool isBus;
@@ -469,9 +470,8 @@ class _NearestStationSheetContentState
           else
             Expanded(
               child: _isLoading
-                  ? Center(
-                      child: CupertinoActivityIndicator(
-                          radius: 14, color: accentColor))
+                  ? const Center(
+                      child: BrandedLoader(isFullScreen: false))
                   : _displayLocations.isEmpty
                       ? Center(
                           child: Text("No $typeName found",

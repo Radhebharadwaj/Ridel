@@ -23,6 +23,7 @@ import 'package:ridel/features/profile/services/profile_repository.dart';
 import 'package:ridel/features/profile/widgets/permissions_center_sheet.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class ProfileSheetContent extends StatefulWidget {
   const ProfileSheetContent({super.key});
@@ -446,11 +447,8 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
                               ? CachedNetworkImage(
                                   imageUrl: dbAvatar,
                                   fit: BoxFit.cover,
-                                  placeholder: (context, url) => Center(
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
-                                      color: Colors.cyan.withValues(alpha: 0.5),
-                                    ),
+                                  placeholder: (context, url) => const Center(
+                                    child: BrandedLoader(isFullScreen: false),
                                   ),
                                   errorWidget: (context, url, error) => Center(
                                     child: Text(
@@ -728,7 +726,7 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
             ],
           ),
         ),
-        ),
+      ),
       ),
     );
   }

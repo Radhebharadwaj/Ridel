@@ -6,6 +6,7 @@ import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/widgets/ridel_sheet.dart';
 import 'package:ridel/features/commute/shared/widgets/station_selector_sheet.dart';
 import 'package:ridel/features/commute/shared/services/database_helper.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class FirstLastTrainSheet extends StatefulWidget {
   const FirstLastTrainSheet({super.key});
@@ -289,8 +290,7 @@ class _FirstLastTrainSheetState extends State<FirstLastTrainSheet> {
                 ? Container(
                     height: 150,
                     alignment: Alignment.center,
-                    child: const CircularProgressIndicator(
-                        color: Color(0xFF00E5FF)))
+                    child: const BrandedLoader(isFullScreen: false))
                 : (_trainTimings.isNotEmpty
                     ? Padding(
                         padding: const EdgeInsets.only(top: 24),

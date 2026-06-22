@@ -15,6 +15,7 @@ import 'package:ridel/features/map/map_engine/map_engine.dart';
 import 'package:ridel/features/map/models/place_model.dart';
 import 'package:ridel/core/services/saved_places_service.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 class QuickActionButtons extends StatefulWidget {
   final bool isDark;
@@ -202,7 +203,7 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
       duration: const Duration(milliseconds: 300),
       child: _isLoading
           ? const SizedBox(
-              height: 86, child: Center(child: CupertinoActivityIndicator()))
+              height: 86, child: Center(child: BrandedLoader(isFullScreen: false)))
           : Selector<MapProvider, MapUIState>(
               selector: (context, provider) => provider.currentUIState,
               builder: (context, uiState, _) {

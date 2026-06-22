@@ -12,6 +12,7 @@ import 'package:ridel/features/map/services/weather_cache_service.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 import 'package:intl/intl.dart';
+import 'package:ridel/core/widgets/branded_loader.dart';
 
 enum WeatherState { compact, expanded, full }
 
@@ -469,11 +470,7 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                         ),
                         child: Center(
                             child: _isLoading
-                                ? CupertinoActivityIndicator(
-                                    color: isLightMode
-                                        ? Colors.black54
-                                        : Colors.white,
-                                    radius: 10)
+                                ? const BrandedLoader(isFullScreen: false)
                                 : Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
