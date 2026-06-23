@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -18,24 +19,14 @@ class BrandedLoader extends StatefulWidget {
 class _BrandedLoaderState extends State<BrandedLoader>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _opacityAnimation;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
-
-    _scaleAnimation = Tween<double>(begin: 0.95, end: 1.05).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-
-    _opacityAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+      duration: const Duration(milliseconds: 3500),
+    )..repeat();
   }
 
   @override
@@ -53,36 +44,107 @@ class _BrandedLoaderState extends State<BrandedLoader>
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0E17), // Premium Dark Base
+      backgroundColor: const Color(0xFF161E28), // Premium Dark Base
       body: Center(
         child: AnimatedBuilder(
           animation: _controller,
-          builder: (context, child) {
-            return Transform.scale(
-              scale: _scaleAnimation.value,
-              child: Opacity(
-                opacity: _opacityAnimation.value,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.directions_bike,
-                      color: Colors.white,
-                      size: 48,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      "Ridel Maps",
-                      style: GoogleFonts.inter(
+          builder: (context, _) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ShaderMask(
+                  blendMode: BlendMode.srcIn,
+                  shaderCallback: (bounds) {
+                    return LinearGradient(
+                      // Sweeps tightly from left to right
+                      begin: Alignment(-2.0 + (_controller.value * 4), -0.5),
+                      end: Alignment(-1.0 + (_controller.value * 4), 0.5),
+                      colors: [
+                        Colors.white.withValues(alpha: 0.4), // Base dimmed state
+                        Colors.white.withValues(alpha: 0.8), // Shimmer highlight
+                        Colors.white.withValues(alpha: 0.4), // Back to base
+                      ],
+                      stops: const [0.0, 0.5, 1.0],
+                    ).createShader(bounds);
+                  },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.directions_bike,
                         color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.0,
+                        size: 38,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Text(
+                        "Maps",
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.5,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          "BETA",
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.0,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 30.0),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(3, (index) {
+                    final timeSeconds = _controller.value * 3.5;
+                    final delay = index * 0.2;
+                    final cycleTime = (timeSeconds - delay) % 1.4;
+                    
+                    double offset = 0.0;
+                    double opacity = 0.4;
+                    
+                    if (cycleTime > 0 && cycleTime < 0.7) {
+                      final t = cycleTime / 0.7;
+                      final val = sin(t * pi);
+                      offset = val * -8.0;
+                      opacity = 0.4 + (val * 0.6);
+                    }
+                    
+                    return Transform.translate(
+                      offset: Offset(0, offset),
+                      child: Opacity(
+                        opacity: opacity,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                          width: 10,
+                          height: 10,
+                          decoration: const BoxDecoration(
+                            color: Colors.white38,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ],
             );
           },
         ),

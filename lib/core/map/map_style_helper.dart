@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
@@ -62,13 +61,8 @@ class MapStyleHelper {
           // 🚀 THE FIX: Swap Ola's fragile raster for Esri's robust HD imagery
           if (source['type'] == 'raster' &&
               themeType == MapThemeType.satellite) {
-            // 1. YAHAN APNI KEY PASTE KAR 👇
-            const String esriToken =
-                'AAPTal4MsXcfAEbpH6jpRXBHTuQ..UVXJRz0l3cvQ_zawLXOv_0aZXTksPiqOkS_4srJLrLyc9Ekrj8EIqCPrYSH3PhL289z001O22pbnkUSx1nZc88VEt7m4o97odpjP_XJIyy9Swkiop4jEqjqY1UNR9lfpK4srGoLwztzFq7fHpfAjo4ahiNYvNyZvGHcx9bVrbgoh4BdOsD4kH6-QqxP0SnqjSgmXqTLVUX4vIN2KsmKkbXtguJpI7SHarGu_Bxb9FwBpedkfqIQdYCMJ84U7jJehAT1_pc0xfk5x';
-
-            // 2. URL KE END MEIN ?token=$esriToken LAGA DIYA HAI 👇
             source['tiles'] = [
-              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=$esriToken'
+              'https://ridel.ridel.workers.dev/api/satellite/{z}/{y}/{x}'
             ];
             source.remove('url');
             source['tileSize'] = 256;
@@ -114,7 +108,6 @@ class MapStyleHelper {
       String finalJson = jsonEncode(styleJson);
       return 'data:application/json;charset=utf-8,${Uri.encodeComponent(finalJson)}';
     } catch (e) {
-      debugPrint('Error flattening Ola Style: $e');
       return styleUrl; // Fallback to raw URL
     }
   }

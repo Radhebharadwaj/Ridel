@@ -1,9 +1,45 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AppConfig {
-  static String get olaMapsKey => dotenv.env['OLA_MAPS_API_KEY'] ?? '';
-  static String get esriKey => dotenv.env['ESRI_SATELLITE_KEY'] ?? '';
+  static String? _olaKey;
+
+  static String get olaMapsKey {
+    if (_olaKey == null) {
+      throw Exception("CRITICAL ERROR: Ola API Key not fetched yet!");
+    }
+    return _olaKey!;
+  }
+
+  static Future<void> fetchKeys() async {
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session == null || session.accessToken.isEmpty) {
+      throw Exception("CRITICAL ERROR: User is not authenticated. Cannot fetch map keys.");
+    }
+
+    try {
+      final response = await http.get(
+        Uri.parse('https://ridel.ridel.workers.dev/get-map-key'),
+        headers: {'Authorization': 'Bearer ${session.accessToken}'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['ola_key'] != null) {
+          _olaKey = data['ola_key'];
+        } else {
+          throw Exception("Missing ola_key in response payload.");
+        }
+      } else {
+        throw Exception("Failed to fetch map keys (Status ${response.statusCode})");
+      }
+    } catch (e) {
+      throw Exception("CRITICAL ERROR: Map keys could not be fetched. $e");
+    }
+  }
 
   // ☁️ BACKEND & SVELTEKIT
   static String get backendUrl =>

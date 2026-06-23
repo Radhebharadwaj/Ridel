@@ -13,6 +13,7 @@ import 'package:ridel/core/map/map_style_helper.dart';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
+import 'package:ridel/core/config/app_config.dart';
 import 'package:ridel/features/map/widgets/search_sheet/map_search_sheet.dart';
 import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/features/map/widgets/map_theme_selector.dart';
@@ -22,7 +23,6 @@ import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/main.dart';
-import 'package:ridel/core/widgets/branded_loader.dart';
 
 class FullScreenMapPage extends StatefulWidget {
   final ValueNotifier<double> searchSheetProgressNotifier;
@@ -44,6 +44,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   String? _loadedMapStyle;
   bool _isMapFullyLoaded = false;
+  bool _isMapReady = false;
   MapLibreMapController? _tempController;
   MapThemeType? _currentTheme;
   bool _isTilted = false;
@@ -108,7 +109,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       _showScaleBarNotifier.value = true;
       _scaleTextNotifier.value = newText;
       _scaleWidthNotifier.value = newWidth.clamp(20.0, 150.0);
-      
+
       _scaleBarTimer?.cancel();
       _scaleBarTimer = Timer(const Duration(milliseconds: 1000), () {
         if (mounted) _showScaleBarNotifier.value = false;
@@ -131,8 +132,23 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     widget.searchSheetProgressNotifier.addListener(_onProgressChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initMapStyle();
+      _initializeMapData();
     });
+  }
+
+  Future<void> _initializeMapData() async {
+    try {
+      await AppConfig.fetchKeys();
+      await _initMapStyle();
+    } catch (e) {
+      debugPrint("Init map data error: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isMapReady = true;
+        });
+      }
+    }
   }
 
   void _onProgressChanged() {
@@ -302,8 +318,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
               child: Selector<MapProvider, bool>(
                 selector: (_, provider) => provider.showNativeBlueDot,
                 builder: (context, showNativeBlueDot, child) {
-                  return _loadedMapStyle == null
-                      ? const Center(child: BrandedLoader())
+                  return !_isMapReady || _loadedMapStyle == null
+                      ? const Center(child: PremiumMapSkeleton())
                       : MapLibreMap(
                           key: const ValueKey('ridel_main_map'),
                           styleString: _loadedMapStyle!,
@@ -848,8 +864,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             ),
           ),
 
-
-
           if (MediaQuery.sizeOf(context).width < 800)
             Positioned.fill(
               child: MapSearchSheet(
@@ -874,7 +888,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
               return AnimatedPositioned(
                   duration: const Duration(milliseconds: 400),
                   curve: Curves.easeOutCubic,
-                  top: isDesktop ? 16.0 : MediaQuery.paddingOf(context).top + 16.0,
+                  top: isDesktop
+                      ? 16.0
+                      : MediaQuery.paddingOf(context).top + 16.0,
                   left: isDesktop ? null : 16.0,
                   right: isDesktop ? 16.0 : null,
                   child: ValueListenableBuilder<double>(
@@ -882,10 +898,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                     builder: (context, progress, _) {
                       double opacity = (progress <= 0.45)
                           ? 1.0
-                          : (1.0 - ((progress - 0.45) / (0.90 - 0.45))).clamp(0.0, 1.0);
+                          : (1.0 - ((progress - 0.45) / (0.90 - 0.45)))
+                              .clamp(0.0, 1.0);
 
                       return Selector<MapProvider, bool>(
-                        selector: (context, provider) => !provider.isActiveNavigation,
+                        selector: (context, provider) =>
+                            !provider.isActiveNavigation,
                         builder: (context, showWeather, child) {
                           final finalOpacity = showWeather ? opacity : 0.0;
                           return IgnorePointer(
@@ -896,7 +914,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             ),
                           );
                         },
-                        child: WeatherFloatingWidget(onMapThemeChanged: (isDark) {}),
+                        child: WeatherFloatingWidget(
+                            onMapThemeChanged: (isDark) {}),
                       );
                     },
                   ));
@@ -908,10 +927,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
               valueListenable: globalSidebarOpen,
               builder: (context, isSidebarOpen, _) {
                 // Exact placement logic based on device
-                final double? topOffset = isDesktop ? null : MediaQuery.of(context).padding.top + 16.0;
+                final double? topOffset = isDesktop
+                    ? null
+                    : MediaQuery.of(context).padding.top + 16.0;
                 final double? bottomOffset = isDesktop ? 32.0 : null;
                 final double? rightOffset = isDesktop ? null : 16.0;
-                final double? leftOffset = isDesktop ? (isSidebarOpen ? 260.0 : 20.0) : null;
+                final double? leftOffset =
+                    isDesktop ? (isSidebarOpen ? 260.0 : 20.0) : null;
 
                 return AnimatedPositioned(
                   duration: const Duration(milliseconds: 350),
@@ -1073,15 +1095,20 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                 );
               }
               final screenSize = MediaQuery.sizeOf(context);
-              
+
               // 1. Calculate the exact top pixel coordinate of the sheet
-              final double availableHeight = screenSize.height - MediaQuery.paddingOf(context).bottom;
+              final double availableHeight =
+                  screenSize.height - MediaQuery.paddingOf(context).bottom;
               final double sheetPhysicalHeight = progress * availableHeight;
 
-              final double dynamicBottomMargin = lerpDouble(44.0, 0.0, progress) ?? 44.0;
+              final double dynamicBottomMargin =
+                  lerpDouble(44.0, 0.0, progress) ?? 44.0;
 
               // -16.0px gap above the sheet to sit extremely close to the top of the Search Sheet.
-              final double dynamicBottomPosition = sheetPhysicalHeight + dynamicBottomMargin + MediaQuery.paddingOf(context).bottom - 16.0;
+              final double dynamicBottomPosition = sheetPhysicalHeight +
+                  dynamicBottomMargin +
+                  MediaQuery.paddingOf(context).bottom -
+                  16.0;
 
               final opacity = (progress <= 0.45)
                   ? 1.0
@@ -1682,8 +1709,7 @@ class _PremiumMapSkeletonState extends State<PremiumMapSkeleton>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(
-          milliseconds: 2000), // Slightly faster for a snappy shine
+      duration: const Duration(milliseconds: 3500), // Matched to Web's 3.5s
       vsync: this,
     )..repeat();
   }
@@ -1701,67 +1727,110 @@ class _PremiumMapSkeletonState extends State<PremiumMapSkeleton>
       child: Center(
         child: AnimatedBuilder(
           animation: _controller,
-          builder: (context, child) {
-            return ShaderMask(
-              blendMode: BlendMode.srcATop,
-              shaderCallback: (bounds) {
-                return LinearGradient(
-                  // Sweeps tightly from left to right
-                  begin: Alignment(-2.0 + (_controller.value * 4), -0.5),
-                  end: Alignment(-1.0 + (_controller.value * 4), 0.5),
-                  colors: [
-                    Colors.transparent, // Lets the dim base color show
-                    Colors.white
-                        .withValues(alpha: 0.9), // The intense bright shine
-                    Colors.transparent, // Back to dim base
-                  ],
-                  stops: const [0.0, 0.5, 1.0],
-                ).createShader(bounds);
-              },
-              child: child,
-            );
-          },
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // BASE ELEMENTS (Dimmed to 40% so the shine pops)
-              Icon(Icons.directions_bike,
-                  color: Colors.white.withValues(alpha: 0.4), size: 38),
-              const SizedBox(width: 8),
+          builder: (context, _) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ShaderMask(
+                  blendMode: BlendMode.srcIn,
+                  shaderCallback: (bounds) {
+                    return LinearGradient(
+                      // Sweeps tightly from left to right
+                      begin: Alignment(-2.0 + (_controller.value * 4), -0.5),
+                      end: Alignment(-1.0 + (_controller.value * 4), 0.5),
+                      colors: [
+                        Colors.white
+                            .withValues(alpha: 0.4), // Base dimmed state
+                        Colors.white
+                            .withValues(alpha: 0.8), // Shimmer highlight
+                        Colors.white.withValues(alpha: 0.4), // Back to base
+                      ],
+                      stops: const [0.0, 0.5, 1.0],
+                    ).createShader(bounds);
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Solid colors so the ShaderMask srcIn correctly reveals them
+                      const Icon(Icons.directions_bike,
+                          color: Colors.white, size: 38),
+                      const SizedBox(width: 8),
 
-              Text(
-                'Maps',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4), // Dimmed base
-                  fontSize: 32,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: -0.5,
-                  decoration: TextDecoration.none,
-                ),
-              ),
-              const SizedBox(width: 12),
+                      const Text(
+                        'Maps',
+                        style: TextStyle(
+                          color: Colors.white, // Masking layer
+                          fontSize: 32,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: -0.5,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
 
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white
-                      .withValues(alpha: 0.08), // Dimmed pill background
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'BETA',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.4), // Dimmed text
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.0,
-                    decoration: TextDecoration.none,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white
+                              .withValues(alpha: 0.2), // Dimmer background mask
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'BETA',
+                          style: TextStyle(
+                            color: Colors.white, // Masking layer
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.0,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(height: 30.0),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(3, (index) {
+                    // 1.4s cycle within a 3.5s controller
+                    final timeSeconds = _controller.value * 3.5;
+                    final delay = index * 0.2;
+                    final cycleTime = (timeSeconds - delay) % 1.4;
+
+                    double offset = 0.0;
+                    double opacity = 0.4;
+
+                    if (cycleTime > 0 && cycleTime < 0.7) {
+                      final t = cycleTime / 0.7;
+                      final val = sin(t * pi);
+                      offset = val * -8.0;
+                      opacity = 0.4 + (val * 0.6);
+                    }
+
+                    return Transform.translate(
+                      offset: Offset(0, offset),
+                      child: Opacity(
+                        opacity: opacity,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.4),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -1862,7 +1931,9 @@ class PremiumScaleBar extends StatelessWidget {
                 letterSpacing: 0.5,
                 shadows: [
                   Shadow(
-                    color: isDark ? Colors.black.withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.8),
+                    color: isDark
+                        ? Colors.black.withValues(alpha: 0.8)
+                        : Colors.white.withValues(alpha: 0.8),
                     blurRadius: 6,
                     offset: const Offset(0, 1),
                   ),
@@ -1881,7 +1952,9 @@ class PremiumScaleBar extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
               boxShadow: [
                 BoxShadow(
-                  color: isDark ? Colors.black.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.6),
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.6)
+                      : Colors.white.withValues(alpha: 0.6),
                   blurRadius: 4,
                   offset: const Offset(0, 1),
                 ),

@@ -60,10 +60,10 @@ class OlaMapsService {
           return result['name'];
         }
       } else {
-        debugPrint("Ola Maps API Error: ${response.statusCode} - ${response.body}");
+        // Suppress API body logging to prevent accidental key leaks
       }
     } catch (e) {
-      debugPrint("Ola Maps Reverse Geocoding Exception: $e");
+      // Suppress exception logging
     }
     return null;
   }

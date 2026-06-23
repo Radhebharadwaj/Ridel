@@ -291,82 +291,77 @@ class SavedPlacesRow extends StatelessWidget {
 
   Widget _buildIdleRow(
       BuildContext context, SavedPlace? home, SavedPlace? work) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics:
-          const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SavedPlaceChip(
-            icon: CupertinoIcons.house_fill,
-            label: 'Home',
-            subtitle: home?.address,
-            isDark: isDark,
-            iconColor: const Color(0xFF0A84FF),
-            hasValue: home != null,
-            onTap: () async {
-              if (home != null) {
-                // Navigate to saved home
-                final provider =
-                    Provider.of<MapProvider>(context, listen: false);
-                await provider.cancelAndClearRoute(resetCamera: false);
-                provider.flyToPlace(home.lat, home.lng);
-                onPlaceTapped?.call();
-              } else {
-                pickerController.startSelection('home');
-              }
-            },
-            onLongPress: () {
-              if (home != null) {
-                pickerController.startEditing('home');
-              } else {
-                pickerController.startSelection('home');
-              }
-            },
-          ),
-          const SizedBox(width: 16),
-          _SavedPlaceChip(
-            icon: CupertinoIcons.briefcase_fill,
-            label: 'Work',
-            subtitle: work?.address,
-            isDark: isDark,
-            iconColor: const Color(0xFF5856D6),
-            hasValue: work != null,
-            onTap: () async {
-              if (work != null) {
-                final provider =
-                    Provider.of<MapProvider>(context, listen: false);
-                await provider.cancelAndClearRoute(resetCamera: false);
-                provider.flyToPlace(work.lat, work.lng);
-                onPlaceTapped?.call();
-              } else {
-                pickerController.startSelection('work');
-              }
-            },
-            onLongPress: () {
-              if (work != null) {
-                pickerController.startEditing('work');
-              } else {
-                pickerController.startSelection('work');
-              }
-            },
-          ),
-          const SizedBox(width: 16),
-          _SavedPlaceChip(
-            icon: CupertinoIcons.add,
-            label: 'Add Place',
-            isDark: isDark,
-            iconColor: const Color(0xFF34C759),
-            hasValue: false,
-            onTap: () {
-              pickerController.startSelection('custom');
-            },
-            onLongPress: () {},
-          ),
-        ],
-      ),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SavedPlaceChip(
+          icon: CupertinoIcons.house_fill,
+          label: 'Home',
+          subtitle: home?.address,
+          isDark: isDark,
+          iconColor: CupertinoColors.systemBlue,
+          hasValue: home != null,
+          onTap: () async {
+            if (home != null) {
+              // Navigate to saved home
+              final provider =
+                  Provider.of<MapProvider>(context, listen: false);
+              await provider.cancelAndClearRoute(resetCamera: false);
+              provider.flyToPlace(home.lat, home.lng);
+              onPlaceTapped?.call();
+            } else {
+              pickerController.startSelection('home');
+            }
+          },
+          onLongPress: () {
+            if (home != null) {
+              pickerController.startEditing('home');
+            } else {
+              pickerController.startSelection('home');
+            }
+          },
+        ),
+        const SizedBox(width: 24.0),
+        _SavedPlaceChip(
+          icon: CupertinoIcons.briefcase_fill,
+          label: 'Work',
+          subtitle: work?.address,
+          isDark: isDark,
+          iconColor: CupertinoColors.systemBlue,
+          hasValue: work != null,
+          onTap: () async {
+            if (work != null) {
+              final provider =
+                  Provider.of<MapProvider>(context, listen: false);
+              await provider.cancelAndClearRoute(resetCamera: false);
+              provider.flyToPlace(work.lat, work.lng);
+              onPlaceTapped?.call();
+            } else {
+              pickerController.startSelection('work');
+            }
+          },
+          onLongPress: () {
+            if (work != null) {
+              pickerController.startEditing('work');
+            } else {
+              pickerController.startSelection('work');
+            }
+          },
+        ),
+        const SizedBox(width: 24.0),
+        _SavedPlaceChip(
+          icon: CupertinoIcons.add,
+          label: 'Add Place',
+          isDark: isDark,
+          iconColor: CupertinoColors.systemBlue,
+          hasValue: false,
+          onTap: () {
+            pickerController.startSelection('custom');
+          },
+          onLongPress: () {},
+        ),
+      ],
     );
   }
 
@@ -769,44 +764,22 @@ class _SavedPlaceChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 52,
-            height: 52,
+            width: 60.0,
+            height: 60.0,
+            alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  iconColor.withValues(alpha: 0.25),
-                  iconColor.withValues(alpha: 0.12),
-                ],
-              ),
-              border: Border.all(
-                color: hasValue
-                    ? iconColor.withValues(alpha: 0.4)
-                    : Colors.white.withValues(alpha: 0.18),
-                width: hasValue ? 2 : 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: hasValue
-                      ? iconColor.withValues(alpha: 0.2)
-                      : Colors.black.withValues(alpha: 0.35),
-                  blurRadius: 20,
-                  spreadRadius: -2,
-                  offset: const Offset(0, 14),
-                ),
-              ],
+              color: CupertinoColors.systemBlue.withValues(alpha: 0.12),
             ),
-            child: Icon(icon, size: 24, color: iconColor),
+            child: Icon(icon, size: 30.0, color: iconColor),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 8.0),
           Text(
             label,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white70 : Colors.black87,
+              fontWeight: FontWeight.w500, // Medium
+              color: Colors.white,
               letterSpacing: 0.3,
             ),
           ),

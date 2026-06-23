@@ -1187,8 +1187,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                               // forcefully switch the content back to the Idle (Home/Work) state.
                               if (extent <= _safeMidSize + 0.05 &&
                                   _isSearchExpanded) {
-                                if (_searchFocus.hasFocus)
+                                if (_searchFocus.hasFocus) {
                                   _searchFocus.unfocus();
+                                }
                                 rebuildState(() => _isSearchExpanded = false);
                               }
                               // If the user drags it up near the top, ensure it switches to the Expanded content.

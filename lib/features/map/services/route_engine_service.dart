@@ -305,7 +305,7 @@ class RouteEngineService {
         }
       } catch (e) {
         if (attempts == 2) {
-          debugPrint("Ola API failed after 2 attempts: $e");
+          // Suppressed logging to prevent accidental key leaks
           return null; // 🚀 FIX: Return null instead of rethrowing to allow offline fallback
         }
         await Future.delayed(const Duration(seconds: 1));

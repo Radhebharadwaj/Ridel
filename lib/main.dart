@@ -137,7 +137,23 @@ void main() {
         isLoggedIn = true;
         DatabaseHelper.instance.initBackgroundSync();
         AuthService().setupAndSaveDeviceToken();
+        
+        try {
+          await AppConfig.fetchKeys();
+        } catch (e) {
+          debugPrint("❌ Key Fetch Error: $e");
+        }
       }
+      
+      supabaseClient.auth.onAuthStateChange.listen((data) async {
+        if (data.event == AuthChangeEvent.signedIn) {
+          try {
+            await AppConfig.fetchKeys();
+          } catch (e) {
+            debugPrint("❌ Key Fetch Error on Login: $e");
+          }
+        }
+      });
     } catch (e) {
       debugPrint("❌ Supabase Error: $e");
     }

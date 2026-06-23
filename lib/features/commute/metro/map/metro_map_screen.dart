@@ -18,7 +18,7 @@ import 'package:ridel/features/commute/metro/map/metro_data_provider.dart';
 import 'package:ridel/features/commute/metro/map/map_models.dart';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/features/commute/shared/models/route_models.dart';
-import 'package:ridel/core/widgets/branded_loader.dart';
+import 'package:ridel/features/map/screens/full_screen_map.dart';
 
 const double tileCanvasSize = 16384.0;
 const double tweakX = 0.0;
@@ -435,7 +435,6 @@ class _MetroMapScreenState extends State<MetroMapScreen>
     }
   }
 
-
   // 🚀 UPDATED: Premium Diagonal Shine Map Button
   Widget _buildGlassMapButton({
     required IconData icon,
@@ -578,8 +577,7 @@ class _MetroMapScreenState extends State<MetroMapScreen>
         child: Consumer<MetroDataProvider>(
           builder: (context, provider, child) {
             if (provider.mapData == null) {
-              return const Center(
-                  child: BrandedLoader(isFullScreen: false));
+              return const Center(child: PremiumMapSkeleton());
             }
 
             Marker? activeLocMarker;
@@ -643,8 +641,10 @@ class _MetroMapScreenState extends State<MetroMapScreen>
                       // Prevents massive black voids while sitting perfectly under AppBar and above FAB.
                       cameraConstraint: CameraConstraint.contain(
                           bounds: LatLngBounds(
-                              const LatLng(-1.15, -0.08), // Bottom-Left (snug south/west padding)
-                              const LatLng(0.12, 1.08))), // Top-Right (snug north/east padding)
+                              const LatLng(-1.15,
+                                  -0.08), // Bottom-Left (snug south/west padding)
+                              const LatLng(0.12,
+                                  1.08))), // Top-Right (snug north/east padding)
                       interactionOptions: const InteractionOptions(
                           flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
                       onTap: (tapPosition, latlng) => _onMapTapped(
