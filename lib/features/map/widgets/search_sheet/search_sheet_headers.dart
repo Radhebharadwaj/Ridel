@@ -1088,12 +1088,11 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
     final borderColor = Colors.white.withValues(alpha: 0.05);
 
     final horizontalPadding = lerpDouble(8.0, 24.0, progress) ?? 8.0;
-    final dynamicHeight = lerpDouble(44.0, 54.0, progress) ?? 44.0;
     final dynamicRadius = lerpDouble(100.0, 20.0, progress) ?? 100.0;
 
-    // Strictly equal vertical margins
-    final topPadding = lerpDouble(7.0, 18.0, progress) ?? 7.0;
-    final bottomPadding = lerpDouble(9.0, 8.0, progress) ?? 9.0;
+    // Strictly equal vertical margins previously, now reduced bottom by 2.0 to stretch down
+    final topPadding = lerpDouble(7.0, 12.0, progress) ?? 7.0;
+    final bottomPadding = lerpDouble(5.0, 4.0, progress) ?? 5.0;
 
     return SizedBox(
       key: const ValueKey('search_header'),
@@ -1111,7 +1110,6 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
               child: Container(
-                height: dynamicHeight,
                 alignment: Alignment.center,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
@@ -1152,7 +1150,9 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                           if (!_searchFocus.hasFocus) {
                             FocusScope.of(context).requestFocus(_searchFocus);
                           }
-                          rebuildState(() {}); // Trigger UI update for states
+                          rebuildState(() {
+                            _isSearchExpanded = true;
+                          }); // Trigger UI update for states
                         },
                         style: TextStyle(
                           color: isDark ? Colors.white : Colors.black,
@@ -1218,22 +1218,62 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                                 ValueListenableBuilder(
                                   valueListenable: _searchCtrl,
                                   builder: (context, value, child) {
-                                    final isTyping = value.text.isNotEmpty;
-                                    return RidelBounceButton(
+
+                                    return GestureDetector(
                                       onTap: () {
-                                        if (isTyping) {
-                                          _handleSearchExecution(value.text);
-                                        } else {
-                                          _handleCancelTap();
+                                        AppHaptics.selectionClick();
+                                        FocusScope.of(context).unfocus(); // Always kill keyboard
+
+                                        if (_sheetController.isAttached) {
+                                          final currentSize = _sheetController.size;
+
+                                          // STATE 1: If Expanded -> Drop to Half
+                                          if (currentSize > _safeMidSize + 0.05) {
+                                            rebuildState(() {
+                                              _isSearchExpanded = false;
+                                              _searchCtrl.clear();
+                                            });
+                                            _sheetController.animateTo(
+                                              _safeMidSize, 
+                                              duration: const Duration(milliseconds: 400), 
+                                              curve: Curves.easeOutExpo,
+                                            );
+                                          } 
+                                          // STATE 2: If Half-Open -> Drop to Fully Closed
+                                          else if (currentSize > _safeMinSize + 0.05) {
+                                            rebuildState(() {
+                                              _isSearchExpanded = false;
+                                              _searchCtrl.clear();
+                                            });
+                                            _sheetController.animateTo(
+                                              _safeMinSize, 
+                                              duration: const Duration(milliseconds: 400), 
+                                              curve: Curves.easeOutExpo,
+                                            );
+                                          } 
+                                          // STATE 3: Already Closed -> EXIT TO PREVIOUS SCREEN (Back Button)
+                                          else {
+                                            rebuildState(() {
+                                              _isSearchExpanded = false;
+                                              _searchCtrl.clear();
+                                            });
+                                            
+                                            // Reset map search modes
+                                            widget.onSearchModeChanged(false);
+                                            final provider = Provider.of<MapProvider>(context, listen: false);
+                                            provider.clearSearchSession(context);
+                                            
+                                            // Trigger the back/exit callback
+                                            widget.onBackToPreviousTab(); 
+                                          }
                                         }
                                       },
                                       child: Container(
                                         alignment: Alignment.center,
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 4),
-                                        child: Text(
-                                          isTyping ? 'Done' : 'Cancel',
-                                          style: const TextStyle(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                                        child: const Text(
+                                          'Cancel',
+                                          style: TextStyle(
                                             color: Color(0xFF0A84FF),
                                             fontSize: 16,
                                             fontWeight: FontWeight.w500,

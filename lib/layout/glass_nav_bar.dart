@@ -238,73 +238,75 @@ class _GlassNavBarState extends State<GlassNavBar> {
     );
 
     return SafeArea(
-        bottom: true,
-        child: AnimatedSlide(
-          offset: widget.currentIndex == 1 ? const Offset(0, 1.5) : Offset.zero,
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOutCubic,
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 12, left: 16, right: 16),
-                // 🚀 MASTER LIQUID GLASS WITH 20232C TINT
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(100),
-                    boxShadow: [
-                      BoxShadow(
-                        color: isDark
-                            ? Colors.black.withValues(alpha: 0.40)
-                            : Colors.black.withValues(alpha: 0.08),
-                        blurRadius: isDark ? 30 : 32,
-                        spreadRadius: isDark ? -2 : 8,
-                        offset:
-                            isDark ? const Offset(0, 15) : const Offset(0, 12),
-                      ),
-                    ],
+      bottom: true,
+      top: false,
+      child: AnimatedSlide(
+        offset: widget.currentIndex == 1 ? const Offset(0, 1.5) : Offset.zero,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(
+                  bottom: 24.0, left: 28.0, right: 28.0),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(38.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: isDark
+                        ? Colors.black.withValues(alpha: 0.40)
+                        : Colors.black.withValues(alpha: 0.08),
+                    blurRadius: isDark ? 30 : 32,
+                    spreadRadius: isDark ? -2 : 8,
+                    offset:
+                        isDark ? const Offset(0, 15) : const Offset(0, 12),
                   ),
-                  child: RepaintBoundary(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(100),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(100),
-                            color: isDark
-                                ? null
-                                : Colors.white.withValues(alpha: 0.7),
-                            gradient: isDark
-                                ? LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      const Color(0xFF20232C)
-                                          .withValues(alpha: 0.85),
-                                      const Color(0xFF20232C)
-                                          .withValues(alpha: 0.65),
-                                    ],
-                                  )
-                                : null,
-                            border: Border.all(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.1)
-                                  : Colors.black.withValues(alpha: 0.04),
-                              width: 1.0,
-                            ),
-                          ),
-                          child: navBarContent,
+                ],
+              ),
+              child: RepaintBoundary(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(38.0),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+                    child: Container(
+                      height: 56.0,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(38.0),
+                        color: isDark
+                            ? null
+                            : Colors.white.withValues(alpha: 0.7),
+                        gradient: isDark
+                            ? LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  const Color(0xFF20232C)
+                                      .withValues(alpha: 0.85),
+                                  const Color(0xFF20232C)
+                                      .withValues(alpha: 0.65),
+                                ],
+                              )
+                            : null,
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.1)
+                              : Colors.black.withValues(alpha: 0.04),
+                          width: 1.0,
                         ),
                       ),
+                      child: navBarContent,
                     ),
                   ),
                 ),
               ),
             ),
           ),
-        ));
+        ),
+      ),
+    );
   }
 
   // 🚀 CLEAN TEXT STYLE ANIMATION (NO SIZE POP)

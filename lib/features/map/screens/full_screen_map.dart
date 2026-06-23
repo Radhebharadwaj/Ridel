@@ -282,7 +282,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
     final double topMargin =
         isDesktop ? 32.0 : MediaQuery.of(context).padding.top + 24.0;
-    final double sideMargin = isDesktop ? 32.0 : 20.0;
+    final double sideMargin = isDesktop ? 32.0 : 28.0;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -858,9 +858,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                 onSearchModeChanged: (isActive) {},
                 onSearchSubmitted: (query) {},
                 onProgressChanged: (progress) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    widget.searchSheetProgressNotifier.value = progress;
-                  });
+                  widget.searchSheetProgressNotifier.value = progress;
                 },
                 onBackToPreviousTab: () {
                   Provider.of<AppNavigationProvider>(context, listen: false)
@@ -1075,16 +1073,23 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                 );
               }
               final screenSize = MediaQuery.sizeOf(context);
-              final sheetHeight = progress * screenSize.height;
-              final bottomOffset = sheetHeight + 32.0;
+              
+              // 1. Calculate the exact top pixel coordinate of the sheet
+              final double availableHeight = screenSize.height - MediaQuery.paddingOf(context).bottom;
+              final double sheetPhysicalHeight = progress * availableHeight;
+
+              final double dynamicBottomMargin = lerpDouble(44.0, 0.0, progress) ?? 44.0;
+
+              // -16.0px gap above the sheet to sit extremely close to the top of the Search Sheet.
+              final double dynamicBottomPosition = sheetPhysicalHeight + dynamicBottomMargin + MediaQuery.paddingOf(context).bottom - 16.0;
 
               final opacity = (progress <= 0.45)
                   ? 1.0
                   : (1.0 - ((progress - 0.45) / (0.90 - 0.45))).clamp(0.0, 1.0);
 
               return Positioned(
-                bottom: bottomOffset,
-                right: sideMargin,
+                bottom: dynamicBottomPosition,
+                right: 16.0,
                 child: Opacity(
                   opacity: opacity,
                   child: pillChild!,

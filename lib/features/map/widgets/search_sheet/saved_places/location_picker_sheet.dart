@@ -296,6 +296,7 @@ class SavedPlacesRow extends StatelessWidget {
       physics:
           const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _SavedPlaceChip(

@@ -40,7 +40,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
     final showQuickActions =
         !isFocused && isEmpty && (!isSelected || provider.isAddingStopMode);
     final showRecentSearches = (!isSelected || provider.isAddingStopMode) &&
-        (isFocused || provider.isEditingHistory) &&
+        (_isSearchExpanded || isFocused || provider.isEditingHistory) &&
         isEmpty;
 
     final isExpanded = progress > (_safeMinSize + 0.05);
@@ -63,11 +63,19 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
+            child: AnimatedCrossFade(
+        duration: const Duration(milliseconds: 350),
+        firstCurve: Curves.easeOutCubic,
+        secondCurve: Curves.easeInCubic,
+        crossFadeState: _isSearchExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+        firstChild: SizedBox(
+          width: double.infinity,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
           if (showTransportModes || showQuickActions)
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              padding: const EdgeInsets.only(top: 12, bottom: 24),
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 350),
                 switchInCurve:
@@ -113,9 +121,210 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                 const SizedBox(height: 12),
               ],
             ),
-          if (showRecentSearches)
-            buildHiddenExtra(
-              Material(
+          if (!isSelected && !isFocused && isEmpty)
+            Material(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.black.withValues(alpha: 0.03),
+              borderRadius: BorderRadius.circular(24),
+              clipBehavior: Clip.antiAlias,
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.05),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Theme(
+                      data: Theme.of(context).copyWith(
+                        dividerColor: Colors.transparent,
+                        unselectedWidgetColor: iconColor,
+                      ),
+                      child: ExpansionTile(
+                        controller: _nearbyTileCtrl,
+                        collapsedShape: const Border(),
+                        shape: const Border(),
+                        tilePadding: const EdgeInsets.symmetric(
+                            vertical: 4, horizontal: 16),
+                        onExpansionChanged: (expanded) {
+                          AppHaptics.lightImpact();
+                          rebuildState(() {});
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            Future.delayed(const Duration(milliseconds: 50),
+                                () {
+                              if (_sheetController.isAttached) {
+                                unawaited(
+                                  _sheetController.animateTo(
+                                    expanded ? _safeMaxSize : _safeMidSize,
+                                    duration: const Duration(milliseconds: 400),
+                                    curve: Curves.fastLinearToSlowEaseIn,
+                                  ),
+                                );
+                              }
+                            });
+                          });
+                        },
+                        leading: const Icon(Icons.directions_transit_rounded,
+                            color: Color(0xFF0A84FF)),
+                        title: Text(
+                          'Transit Quick Actions',
+                          style: TextStyle(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.9)
+                                : Colors.black87,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 16,
+                          ),
+                        ),
+                        iconColor: iconColor,
+                        collapsedIconColor: iconColor,
+                        children: [
+                          _buildNearbyTile(
+                            Icons.directions_subway_filled_rounded,
+                            const [Color(0xFF5AC8FA), Color(0xFF007AFF)],
+                            'Metro Stations',
+                            isDark,
+                            false,
+                          ),
+                          _buildNearbyTile(
+                            Icons.directions_bus_filled_rounded,
+                            const [Color(0xFF65D57B), Color(0xFF34C759)],
+                            'Bus Stops',
+                            isDark,
+                            false,
+                          ),
+                          _buildNearbyTile(
+                            Icons.train_rounded,
+                            const [Color(0xFF4CABFF), Color(0xFF0A84FF)],
+                            'Railway Stations',
+                            isDark,
+                            true,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (showQuickActions)
+                      Column(
+                        children: [
+                          Divider(
+                            height: 1,
+                            thickness: 0.5,
+                            indent: 52,
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.08),
+                          ),
+                          RidelBounceButton(
+                            onTap: () async {
+                              AppHaptics.lightImpact();
+                              final locService =
+                                  Provider.of<GlobalLocationService>(context,
+                                      listen: false);
+                              if (locService.currentPosition == null) {
+                                await locService.forceRefreshLocation();
+                              }
+                              final pos = locService.currentPosition;
+                              if (pos != null) {
+                                await MapShareService.shareCurrentLocation(
+                                    LatLng(pos.latitude, pos.longitude));
+                              } else {
+                                _showPremiumNotification(
+                                    'Could not get current location.',
+                                    isError: true);
+                              }
+                            },
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              leading: const Icon(CupertinoIcons.share,
+                                  color: Color(0xFF0A84FF), size: 22),
+                              title: Text(
+                                'Share My Location',
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.9)
+                                      : Colors.black87,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              trailing: Icon(
+                                Icons.chevron_right_rounded,
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.3)
+                                    : Colors.black.withValues(alpha: 0.3),
+                              ),
+                            ),
+                          ),
+                          Divider(
+                            height: 1,
+                            thickness: 0.5,
+                            indent: 52,
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.08),
+                          ),
+                          buildHiddenExtra(
+                            RidelBounceButton(
+                              onTap: () async {
+                                AppHaptics.success();
+                                unawaited(
+                                  Provider.of<MapProvider>(
+                                    context,
+                                    listen: false,
+                                  ).markCurrentPosition(context),
+                                );
+                                // 🚀 FIX: Removed ugly SnackBar, using NotificationService
+                                _showPremiumNotification(
+                                  'Your current location has been pinned on the map.',
+                                );
+                              },
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                leading: const Icon(CupertinoIcons.pin,
+                                    color: Color(0xFF0A84FF), size: 22),
+                                title: Text(
+                                  'Mark My Location',
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.9)
+                                        : Colors.black87,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                trailing: Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.3)
+                                      : Colors.black.withValues(alpha: 0.3),
+                                ),
+                              ),
+                            ),
+                          ), // closes buildHiddenExtra(
+                        ],
+                      ), // closes Column(children:
+                  ],
+                ),
+              ),
+            ),
+
+            ],
+          ),
+        ),
+        secondChild: SizedBox(
+          width: double.infinity,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+if (showRecentSearches)
+            Material(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.05)
                     : Colors.black.withValues(alpha: 0.03),
@@ -537,210 +746,18 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                   ),
                 ),
               ),
-            ),
-          if (showRecentSearches && !isSelected) ...[
+            if (showRecentSearches && !isSelected) ...[
             const SizedBox(height: 16),
             _buildFindNearbyList(isDark),
           ],
-          if (!isSelected && !isFocused && isEmpty)
-            Material(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.05)
-                  : Colors.black.withValues(alpha: 0.03),
-              borderRadius: BorderRadius.circular(24),
-              clipBehavior: Clip.antiAlias,
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.05),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Theme(
-                      data: Theme.of(context).copyWith(
-                        dividerColor: Colors.transparent,
-                        unselectedWidgetColor: iconColor,
-                      ),
-                      child: ExpansionTile(
-                        controller: _nearbyTileCtrl,
-                        collapsedShape: const Border(),
-                        shape: const Border(),
-                        tilePadding: const EdgeInsets.symmetric(
-                            vertical: 4, horizontal: 16),
-                        onExpansionChanged: (expanded) {
-                          AppHaptics.lightImpact();
-                          rebuildState(() {});
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            Future.delayed(const Duration(milliseconds: 50),
-                                () {
-                              if (_sheetController.isAttached) {
-                                unawaited(
-                                  _sheetController.animateTo(
-                                    expanded ? _safeMaxSize : _safeMidSize,
-                                    duration: const Duration(milliseconds: 400),
-                                    curve: Curves.fastLinearToSlowEaseIn,
-                                  ),
-                                );
-                              }
-                            });
-                          });
-                        },
-                        leading: const Icon(Icons.directions_transit_rounded,
-                            color: Color(0xFF0A84FF)),
-                        title: Text(
-                          'Transit Quick Actions',
-                          style: TextStyle(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.9)
-                                : Colors.black87,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 16,
-                          ),
-                        ),
-                        iconColor: iconColor,
-                        collapsedIconColor: iconColor,
-                        children: [
-                          _buildNearbyTile(
-                            Icons.directions_subway_filled_rounded,
-                            const [Color(0xFF5AC8FA), Color(0xFF007AFF)],
-                            'Metro Stations',
-                            isDark,
-                            false,
-                          ),
-                          _buildNearbyTile(
-                            Icons.directions_bus_filled_rounded,
-                            const [Color(0xFF65D57B), Color(0xFF34C759)],
-                            'Bus Stops',
-                            isDark,
-                            false,
-                          ),
-                          _buildNearbyTile(
-                            Icons.train_rounded,
-                            const [Color(0xFF4CABFF), Color(0xFF0A84FF)],
-                            'Railway Stations',
-                            isDark,
-                            true,
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (showQuickActions)
-                      Column(
-                        children: [
-                          Divider(
-                            height: 1,
-                            thickness: 0.5,
-                            indent: 52,
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.08)
-                                : Colors.black.withValues(alpha: 0.08),
-                          ),
-                          RidelBounceButton(
-                            onTap: () async {
-                              AppHaptics.lightImpact();
-                              final locService =
-                                  Provider.of<GlobalLocationService>(context,
-                                      listen: false);
-                              if (locService.currentPosition == null) {
-                                await locService.forceRefreshLocation();
-                              }
-                              final pos = locService.currentPosition;
-                              if (pos != null) {
-                                await MapShareService.shareCurrentLocation(
-                                    LatLng(pos.latitude, pos.longitude));
-                              } else {
-                                _showPremiumNotification(
-                                    'Could not get current location.',
-                                    isError: true);
-                              }
-                            },
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              leading: const Icon(CupertinoIcons.share,
-                                  color: Color(0xFF0A84FF), size: 22),
-                              title: Text(
-                                'Share My Location',
-                                style: TextStyle(
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.9)
-                                      : Colors.black87,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              trailing: Icon(
-                                Icons.chevron_right_rounded,
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.3)
-                                    : Colors.black.withValues(alpha: 0.3),
-                              ),
-                            ),
-                          ),
-                          Divider(
-                            height: 1,
-                            thickness: 0.5,
-                            indent: 52,
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.08)
-                                : Colors.black.withValues(alpha: 0.08),
-                          ),
-                          buildHiddenExtra(
-                            RidelBounceButton(
-                              onTap: () async {
-                                AppHaptics.success();
-                                unawaited(
-                                  Provider.of<MapProvider>(
-                                    context,
-                                    listen: false,
-                                  ).markCurrentPosition(context),
-                                );
-                                // 🚀 FIX: Removed ugly SnackBar, using NotificationService
-                                _showPremiumNotification(
-                                  'Your current location has been pinned on the map.',
-                                );
-                              },
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                leading: const Icon(CupertinoIcons.pin,
-                                    color: Color(0xFF0A84FF), size: 22),
-                                title: Text(
-                                  'Mark My Location',
-                                  style: TextStyle(
-                                    color: isDark
-                                        ? Colors.white.withValues(alpha: 0.9)
-                                        : Colors.black87,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                trailing: Icon(
-                                  Icons.chevron_right_rounded,
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.3)
-                                      : Colors.black.withValues(alpha: 0.3),
-                                ),
-                              ),
-                            ),
-                          ), // closes buildHiddenExtra(
-                        ],
-                      ), // closes Column(children:
-                  ],
-                ),
-              ),
-            ),
-        ],
+          
+            ],
+          ),
+        ),
       ),
     );
   }
-
-  Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
+Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
     return SavedPlacesRow(
       key: const ValueKey('default_actions_row'),
       isDark: isDark,

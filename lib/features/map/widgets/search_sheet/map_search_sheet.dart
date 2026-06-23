@@ -13,7 +13,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/features/map/map_engine/map_engine.dart';
 
@@ -124,6 +123,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   bool _isNavSheetExpanded = false;
   bool _wasKeyboardOpen = false;
 
+  bool _isSearchExpanded = false;
+
   // 🏠 Saved Places Location Picker
   late final saved.PlacesRepository _placesRepository;
   late final LocationPickerController _locationPickerController;
@@ -150,10 +151,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   double get _safeMinSize {
     if (!mounted) return 0.15;
-    final screenSize = MediaQuery.sizeOf(context);
-    final safeBottom = MediaQuery.paddingOf(context).bottom;
-    final requiredHeight = 88.0 + safeBottom;
-    return (requiredHeight / screenSize.height).clamp(0.05, 0.40);
+    // The height available inside the SafeArea
+    final availableHeight = MediaQuery.sizeOf(context).height -
+        MediaQuery.paddingOf(context).bottom;
+
+    // 56.0 (Pill Height) + 44.0 (Bottom Margin matching Nav Pill's 20.0 position + 24.0 margin)
+    const requiredPhysicalHeight = 56.0 + 44.0;
+
+    return (requiredPhysicalHeight / availableHeight).clamp(0.05, 0.40);
   }
 
   double get _safeMidSize => 0.45;
@@ -937,111 +942,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     }
   }
 
-  void _handleCancelTap() {
-    AppHaptics.lightImpact();
-
-    Future.microtask(() {
-      if (!mounted) return;
-
-      final provider = Provider.of<MapProvider>(context, listen: false);
-
-      // 1. Check if there's actually a pin/route to cancel
-      if (provider.targetDestination == null) {
-        // If it's just the search bar open without a pin, just close the keyboard/sheet normally.
-        FocusScope.of(context).unfocus();
-
-        bool hasText = _searchCtrl.text.isNotEmpty;
-        bool isExpanded = _sheetController.isAttached &&
-            _sheetController.size > (_safeMinSize + 0.05);
-        bool isActivelySearching = hasText ||
-            provider.engine.mapUIState.value != MapUIState.idle ||
-            isExpanded;
-
-        if (isActivelySearching) {
-          // CONDITION 1: User is searching -> Reset to Idle State
-          _searchCtrl.clear();
-          if (_sheetController.isAttached) {
-            _safeAnimateSheet(_safeMinSize);
-          }
-          if (provider.engine.mapUIState.value != MapUIState.idle) {
-            provider.engine.setUIState(MapUIState.idle);
-          }
-        } else {
-          // CONDITION 2: User is already in Idle state -> Go Back to Dashboard!
-          setState(() => _isSearchMode = false);
-          WidgetsBinding.instance
-              .addPostFrameCallback((_) => widget.onSearchModeChanged(false));
-
-          provider.clearSearchSession(context);
-          Provider.of<AppNavigationProvider>(context, listen: false).setTab(0);
-        }
-        return;
-      }
-
-      // 2. Backup the current state in case the user wants to UNDO
-      final backupCoords = provider.targetDestination!;
-      final bool wasRouteDrawn = provider.isRouteCalculated;
-      final bool wasNavigating = provider.isActiveNavigation;
-
-      // BACKUP UI STATE
-      final backupPlace = _selectedPlace;
-      final backupDestPlace = _destPlace;
-      final backupOriginPlace = _originPlace;
-      final backupSearchText = _searchCtrl.text;
-      final backupActiveField = _activeRoutingField;
-      final backupRoute = _currentRoute;
-      final backupShowSearchList = _showSearchList;
-      final backupShowDirections = _showDirections;
-      final double backupSheetSize =
-          _sheetController.isAttached ? _sheetController.size : _safeMinSize;
-
-      // 3. Clear the Map and internal state
-      provider.clearNativeRoute();
-      provider.clearNativeDestinationPin();
-      provider.setTargetDestination(null);
-      provider.setDestinationSelected(false);
-      FocusScope.of(context).unfocus();
-
-      // 4. Show Premium Custom Toast with Undo Action
-      ToastService.showActionToast(
-        context,
-        message: 'Route cancelled',
-        actionLabel: 'UNDO',
-        onActionTap: () async {
-          // 5. RESTORE LOGIC
-          provider.setTargetDestination(backupCoords);
-          provider.setDestinationSelected(true);
-
-          setState(() {
-            _selectedPlace = backupPlace;
-            _destPlace = backupDestPlace;
-            _originPlace = backupOriginPlace;
-            _searchCtrl.text = backupSearchText;
-            _activeRoutingField = backupActiveField;
-            _currentRoute = backupRoute;
-            _showSearchList = backupShowSearchList;
-            _showDirections = backupShowDirections;
-          });
-
-          await provider.addNativeDestinationPin(backupCoords);
-          if (wasRouteDrawn || wasNavigating) {
-            if (mounted) {
-              await provider.calculateAndDrawNativeRoute(
-                  context, provider.currentNavMode);
-              if (wasNavigating) {
-                await provider.start3DNavigation();
-              }
-            }
-          }
-
-          if (mounted && _sheetController.isAttached) {
-            _safeAnimateSheet(backupSheetSize);
-          }
-        },
-      );
-    });
-  }
-
   // ignore: unused_element
   Map<String, String>? _getBookingInfoForCurrentPlace() {
     if (_selectedPlace == null) return null;
@@ -1282,10 +1182,19 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                               _pokeDash();
 
                               final extent = notification.extent;
-                              // ⌨️ KEYBOARD DISMISS FIX
-                              if (extent < midS - 0.05 &&
-                                  _searchFocus.hasFocus) {
-                                _searchFocus.unfocus();
+
+                              // CRITICAL SYNC: If the user manually drags the sheet down near the half-state,
+                              // forcefully switch the content back to the Idle (Home/Work) state.
+                              if (extent <= _safeMidSize + 0.05 &&
+                                  _isSearchExpanded) {
+                                if (_searchFocus.hasFocus)
+                                  _searchFocus.unfocus();
+                                rebuildState(() => _isSearchExpanded = false);
+                              }
+                              // If the user drags it up near the top, ensure it switches to the Expanded content.
+                              else if (extent >= _safeMaxSize - 0.05 &&
+                                  !_isSearchExpanded) {
+                                rebuildState(() => _isSearchExpanded = true);
                               }
 
                               final isAtSnap = (extent - minS).abs() < 0.01 ||
@@ -1329,290 +1238,305 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                             }
                             return false;
                           },
-                          child: DraggableScrollableSheet(
-                            controller: _sheetController,
-                            initialChildSize:
-                                (isKeyboardOpen && !isNav) ? 1.0 : midS,
-                            minChildSize: minS,
-                            maxChildSize: currentMaxS,
-                            snap: true,
-                            snapAnimationDuration:
-                                const Duration(milliseconds: 350),
-                            snapSizes: snaps,
-                            builder: (context, scrollController) {
-                              return ValueListenableBuilder<double>(
-                                valueListenable: _sheetProgress,
-                                builder: (context, progress, child) {
-                                  final dynamicHeaderHeight = provider
-                                          .isActiveNavigation
-                                      ? (_isNavSheetExpanded
-                                          ? navExpandedHeight - 40
-                                          : navCollapsedHeight)
-                                      : (_showDirections
-                                          ? 190.0
-                                          : (lerpDouble(60.0, 76.0, progress) ??
-                                              60.0));
-                                  // 1. Calculate how far the sheet is dragged beyond half-open
-                                  final double morphFactor = (progress <= 0.45) 
-                                      ? 0.0 
-                                      : ((progress - 0.45) / (0.95 - 0.45)).clamp(0.0, 1.0);
+                          child: SafeArea(
+                            bottom: true,
+                            top: false, // Don't restrict the top
+                            child: DraggableScrollableSheet(
+                              controller: _sheetController,
+                              initialChildSize:
+                                  (isKeyboardOpen && !isNav) ? 1.0 : midS,
+                              minChildSize: minS,
+                              maxChildSize: currentMaxS,
+                              snap: true,
+                              snapAnimationDuration:
+                                  const Duration(milliseconds: 350),
+                              snapSizes: snaps,
+                              builder: (context, scrollController) {
+                                return ValueListenableBuilder<double>(
+                                  valueListenable: _sheetProgress,
+                                  builder: (context, progress, child) {
+                                    final dynamicHeaderHeight =
+                                        provider.isActiveNavigation
+                                            ? (_isNavSheetExpanded
+                                                ? navExpandedHeight - 40
+                                                : navCollapsedHeight)
+                                            : (_showDirections
+                                                ? 190.0
+                                                : (lerpDouble(
+                                                        56.0, 56.0, progress) ??
+                                                    56.0));
+                                    // 1. Calculate how far the sheet is dragged beyond half-open
+                                    final double morphFactor = (progress <=
+                                            0.45)
+                                        ? 0.0
+                                        : ((progress - 0.45) / (0.95 - 0.45))
+                                            .clamp(0.0, 1.0);
 
-                                  // Lifted to 28.0 to perfectly match the Home Screen Navigation Bar height
-                                  final currentBottomMargin =
-                                      lerpDouble(28.0, 0.0, progress) ?? 28.0;
-                                  // 1. Calculate how close the sheet is to the fully collapsed state
-                                  // Added a +0.02 buffer so it snaps into the pill shape cleanly at the bottom
-                                  final double collapseFactor = (progress <= _safeMinSize + 0.02) 
-                                      ? 1.0 
-                                      : (progress >= _safeMidSize) 
-                                          ? 0.0 
-                                          : 1.0 - ((progress - _safeMinSize) / (_safeMidSize - _safeMinSize)).clamp(0.0, 1.0);
-                                          
-                                  // 2. Apply an EaseInOut curve to make the shrink/expand animation buttery smooth
-                                  final double smoothCollapse = Curves.easeInOut.transform(collapseFactor);
+                                    // Side margins morph from 28.0 (closed) to 0.0 (expanded)
+                                    final double currentSideMargin =
+                                        lerpDouble(28.0, 0.0, progress) ?? 28.0;
 
-                                  // 3. AGGRESSIVE SHRINK: Apple Maps shrinks significantly to form a pill.
-                                  // Adding 22.0 pixels of extra margin on both sides ONLY when collapsed.
-                                  final double extraShrinkMargin = 22.0 * smoothCollapse;
+                                    // Bottom margin morphs from 44.0 (closed) to 0.0 (expanded)
+                                    // This perfectly matches Nav Pill's 20 Positioned bottom + 24.0 margin
+                                    final double currentBottomMargin =
+                                        lerpDouble(44.0, 0.0, progress) ?? 44.0;
 
-                                  // 4. Base margin (16.0 at half-open, 0.0 at full-screen)
-                                  final double baseSideMargin = lerpDouble(16.0, 0.0, progress) ?? 16.0;
+                                    // Permanent 38.0 radius on all 4 corners for all states
+                                    final BorderRadius premiumRadius =
+                                        BorderRadius.circular(38.0);
 
-                                  // 5. Final combined margin
-                                  final double finalSideMargin = baseSideMargin + extraShrinkMargin;
+                                    // 2. EXACT Weather Card Alpha (0.65 when idle, 0.95 when fully dragged)
+                                    final double currentAlpha =
+                                        lerpDouble(0.65, 0.95, morphFactor) ??
+                                            0.65;
 
-                                  // Fast transition to 32.0 radius so the half-open state looks like a normal sheet (not a circle).
-                                  final sheetRadius = progress < 0.2
-                                      ? (lerpDouble(
-                                              100.0, 32.0, progress * 5) ??
-                                          100.0)
-                                      : 32.0;
+                                    // 3. EXACT Weather Card Base Colors (0xFF0B0E17 for dark mode)
+                                    final Color sheetBgColor = isDark
+                                        ? const Color(0xFF0B0E17)
+                                            .withValues(alpha: currentAlpha)
+                                        : Colors.white
+                                            .withValues(alpha: currentAlpha);
 
-                                  // 2. EXACT Weather Card Alpha (0.65 when idle, 0.95 when fully dragged)
-                                  final double currentAlpha = lerpDouble(0.65, 0.95, morphFactor) ?? 0.65;
+                                    // 4. EXACT Weather Card Border Color (Blue tint for dark mode)
+                                    final Color sheetBorderColor = isDark
+                                        ? const Color(0xFF7CA1FF)
+                                            .withValues(alpha: 0.15)
+                                        : Colors.white.withValues(alpha: 0.9);
 
-                                  // 3. EXACT Weather Card Base Colors (0xFF0B0E17 for dark mode)
-                                  final Color sheetBgColor = isDark
-                                      ? const Color(0xFF0B0E17).withValues(alpha: currentAlpha)
-                                      : Colors.white.withValues(alpha: currentAlpha);
-                                      
-                                  // 4. EXACT Weather Card Border Color (Blue tint for dark mode)
-                                  final Color sheetBorderColor = isDark
-                                      ? const Color(0xFF7CA1FF).withValues(alpha: 0.15)
-                                      : Colors.white.withValues(alpha: 0.9);
-
-                                  return PointerInterceptor(
-                                    child: Align(
-                                      alignment: Alignment.bottomCenter,
-                                      child: LayoutBuilder(
-                                        builder: (context, constraints) {
-                                          return ConstrainedBox(
-                                            constraints: BoxConstraints(
-                                              maxWidth: isDesktop ? 800 : 450,
-                                            ),
-                                            child: Stack(
-                                              clipBehavior: Clip.none,
-                                              children: [
-                                                // 🎨 PERFORMANCE FIX: RepaintBoundary around Blur
-                                                RepaintBoundary(
-                                                  child: AnimatedContainer(
-                                                    // 🚀 CRITICAL: Disable animation during drag to prevent jitter, but keep it for Navigation mode height changes
-                                                    duration: provider
-                                                            .isActiveNavigation
-                                                        ? const Duration(
-                                                            milliseconds: 200)
-                                                        : Duration.zero,
-                                                    curve: Curves.easeOutCubic,
-                                                    height: provider
-                                                            .isActiveNavigation
-                                                        ? (_isNavSheetExpanded
-                                                            ? navExpandedHeight
-                                                            : navCollapsedHeight)
-                                                        : constraints.maxHeight,
-                                                    margin: EdgeInsets.only(
-                                                      left: finalSideMargin,
-                                                      right: finalSideMargin,
-                                                      bottom: currentBottomMargin +
-                                                          MediaQuery.paddingOf(
-                                                                  context)
-                                                              .bottom,
-                                                    ),
-                                                    // OUTER CONTAINER: SHADOWS ONLY, STRICTLY NO BACKGROUND COLOR
-                                                    decoration: BoxDecoration(
-                                                      borderRadius: BorderRadius.circular(sheetRadius),
-                                                      boxShadow: isDark 
-                                                        ? [
-                                                            // EXACT Weather Card Dual-Shadow
-                                                            BoxShadow(color: Colors.white.withValues(alpha: 0.04), blurRadius: 16, spreadRadius: 1),
-                                                            BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 24, offset: const Offset(0, 8)),
-                                                          ] 
-                                                        : [
-                                                            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 32, offset: const Offset(0, 12))
-                                                          ],
-                                                    ),
-                                                    child: ClipRRect(
-                                                      // CRITICAL: MUST CLIP THE BLUR TO MATCH CORNERS
-                                                      borderRadius: BorderRadius.circular(sheetRadius),
-                                                      child: BackdropFilter(
-                                                        // CRITICAL: THE BLUR ITSELF
-                                                        filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-                                                        child: Container(
-                                                          // INNER CONTAINER: TRANSLUCENT COLOR & BORDER ONLY
-                                                          decoration: BoxDecoration(
-                                                            color: sheetBgColor,
-                                                            borderRadius: BorderRadius.circular(sheetRadius),
-                                                            border: Border.all(color: sheetBorderColor, width: 1.0),
-                                                          ),
-                                                          child: Stack(
-                                                            children: [
-                                                              // Bottom Layer: Scrollable Content
-                                                              Positioned.fill(
-                                                                child:
-                                                                    ScrollConfiguration(
-                                                                  behavior: ScrollConfiguration.of(
-                                                                          context)
-                                                                      .copyWith(
-                                                                    scrollbars:
-                                                                        false,
-                                                                    dragDevices: {
-                                                                      PointerDeviceKind
-                                                                          .touch,
-                                                                      PointerDeviceKind
-                                                                          .mouse
-                                                                    },
-                                                                  ),
-                                                                  child:
-                                                                      CustomScrollView(
-                                                                    controller:
-                                                                        scrollController,
-                                                                    physics: const ClampingScrollPhysics(
-                                                                        parent:
-                                                                            AlwaysScrollableScrollPhysics()),
-                                                                    keyboardDismissBehavior:
-                                                                        ScrollViewKeyboardDismissBehavior
-                                                                            .onDrag,
-                                                                    slivers: [
-                                                                      SliverPadding(
-                                                                        padding:
-                                                                            EdgeInsets.only(top: dynamicHeaderHeight),
-                                                                      ),
-                                                                      SliverToBoxAdapter(
-                                                                        child:
-                                                                            AnimatedOpacity(
-                                                                          duration:
-                                                                              const Duration(milliseconds: 150),
-                                                                          opacity: (!provider.isActiveNavigation && progress > 0.05)
-                                                                              ? 1.0
-                                                                              : 0.0,
-                                                                          child: (!provider.isActiveNavigation && progress > 0.05)
-                                                                              ? _buildSheetContent(isDark, progress, isExpanded: isKeyboardOpen)
-                                                                              : const SizedBox(),
-                                                                        ),
-                                                                      ),
-                                                                      SliverPadding(
-                                                                        padding:
-                                                                            EdgeInsets.only(bottom: keyboardHeight),
-                                                                      ),
-                                                                      SliverFillRemaining(
-                                                                        hasScrollBody:
-                                                                            false,
-                                                                        child: Container(
-                                                                            color:
-                                                                                Colors.transparent),
-                                                                      ),
-                                                                    ],
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                              // Top Layer: Floating Header with Gradient Fade
-                                                              Positioned(
-                                                                top: 0,
-                                                                left: 0,
-                                                                right: 0,
-                                                                child:
-                                                                    Container(
-                                                                  decoration:
-                                                                      BoxDecoration(
-                                                                    gradient:
-                                                                        LinearGradient(
-                                                                      begin: Alignment
-                                                                          .topCenter,
-                                                                      end: Alignment
-                                                                          .bottomCenter,
-                                                                      colors: [
-                                                                        sheetBgColor, // Exact match to the sheet's base color and alpha
-                                                                        sheetBgColor, // Maintain camouflage over the header content
-                                                                        sheetBgColor.withValues(
+                                    return PointerInterceptor(
+                                      child: Align(
+                                        alignment: Alignment.bottomCenter,
+                                        child: LayoutBuilder(
+                                          builder: (context, constraints) {
+                                            return ConstrainedBox(
+                                              constraints: BoxConstraints(
+                                                maxWidth: isDesktop ? 800 : 400,
+                                              ),
+                                              child: Stack(
+                                                clipBehavior: Clip.none,
+                                                children: [
+                                                  // 🎨 PERFORMANCE FIX: RepaintBoundary around Blur
+                                                  RepaintBoundary(
+                                                    child: AnimatedContainer(
+                                                      // 🚀 CRITICAL: Disable animation during drag to prevent jitter, but keep it for Navigation mode height changes
+                                                      duration: provider
+                                                              .isActiveNavigation
+                                                          ? const Duration(
+                                                              milliseconds: 200)
+                                                          : Duration.zero,
+                                                      curve:
+                                                          Curves.easeOutCubic,
+                                                      height: provider
+                                                              .isActiveNavigation
+                                                          ? (_isNavSheetExpanded
+                                                              ? navExpandedHeight
+                                                              : navCollapsedHeight)
+                                                          : constraints
+                                                              .maxHeight,
+                                                      margin: EdgeInsets.only(
+                                                        left: currentSideMargin,
+                                                        right:
+                                                            currentSideMargin,
+                                                        bottom:
+                                                            currentBottomMargin,
+                                                      ),
+                                                      // OUTER CONTAINER: SHADOWS ONLY, STRICTLY NO BACKGROUND COLOR
+                                                      decoration: BoxDecoration(
+                                                        borderRadius:
+                                                            premiumRadius,
+                                                        boxShadow: isDark
+                                                            ? [
+                                                                // EXACT Weather Card Dual-Shadow
+                                                                BoxShadow(
+                                                                    color: Colors
+                                                                        .white
+                                                                        .withValues(
                                                                             alpha:
-                                                                                0.0), // Smoothly fade to transparent
-                                                                      ],
-                                                                      stops: const [
-                                                                        0.0,
-                                                                        0.75,
-                                                                        1.0
-                                                                      ], // Fade occurs only at the bottom 25% edge
-                                                                    ),
-                                                                  ),
-                                                                  height:
-                                                                      dynamicHeaderHeight,
+                                                                                0.04),
+                                                                    blurRadius:
+                                                                        16,
+                                                                    spreadRadius:
+                                                                        1),
+                                                                BoxShadow(
+                                                                    color: Colors
+                                                                        .black
+                                                                        .withValues(
+                                                                            alpha:
+                                                                                0.3),
+                                                                    blurRadius:
+                                                                        24,
+                                                                    offset:
+                                                                        const Offset(
+                                                                            0,
+                                                                            8)),
+                                                              ]
+                                                            : [
+                                                                BoxShadow(
+                                                                    color: Colors
+                                                                        .black
+                                                                        .withValues(
+                                                                            alpha:
+                                                                                0.05),
+                                                                    blurRadius:
+                                                                        32,
+                                                                    offset:
+                                                                        const Offset(
+                                                                            0,
+                                                                            12))
+                                                              ],
+                                                      ),
+                                                      child: ClipRRect(
+                                                        // CRITICAL: MUST CLIP THE BLUR TO MATCH CORNERS
+                                                        borderRadius:
+                                                            premiumRadius,
+                                                        child: BackdropFilter(
+                                                          // CRITICAL: THE BLUR ITSELF
+                                                          filter:
+                                                              ImageFilter.blur(
+                                                                  sigmaX: 12.0,
+                                                                  sigmaY: 12.0),
+                                                          child: Container(
+                                                            // INNER CONTAINER: TRANSLUCENT COLOR & BORDER ONLY
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color:
+                                                                  sheetBgColor,
+                                                              borderRadius:
+                                                                  premiumRadius,
+                                                              border: Border(
+                                                                  top: BorderSide(
+                                                                      color:
+                                                                          sheetBorderColor,
+                                                                      width:
+                                                                          1.0)),
+                                                            ),
+                                                            child: Stack(
+                                                              children: [
+                                                                // Bottom Layer: Scrollable Content
+                                                                Positioned.fill(
                                                                   child:
-                                                                      GestureDetector(
-                                                                    onTap: () {
-                                                                      if (progress <
-                                                                          0.1) {
-                                                                        _expandToFull();
-                                                                      }
-                                                                    },
-                                                                    behavior:
-                                                                        HitTestBehavior
-                                                                            .translucent,
+                                                                      ScrollConfiguration(
+                                                                    behavior: ScrollConfiguration.of(
+                                                                            context)
+                                                                        .copyWith(
+                                                                      scrollbars:
+                                                                          false,
+                                                                      dragDevices: {
+                                                                        PointerDeviceKind
+                                                                            .touch,
+                                                                        PointerDeviceKind
+                                                                            .mouse
+                                                                      },
+                                                                    ),
                                                                     child:
-                                                                        AnimatedSwitcher(
-                                                                      duration: const Duration(
-                                                                          milliseconds:
-                                                                              500),
-                                                                      switchInCurve:
-                                                                          Curves
-                                                                              .easeInCubic,
-                                                                      switchOutCurve:
-                                                                          Curves
-                                                                              .easeOutCubic,
-                                                                      child: (_showDirections
-                                                                          ? _buildDirectionsHeader(
-                                                                              dynamicHeaderHeight,
-                                                                              isDark)
-                                                                          : (_selectedPlace != null
-                                                                              ? _buildSelectedPlaceHeader(dynamicHeaderHeight, progress, isDark)
-                                                                              : _buildSearchHeader(dynamicHeaderHeight, progress, isDark))),
+                                                                        CustomScrollView(
+                                                                      controller:
+                                                                          scrollController,
+                                                                      physics: const ClampingScrollPhysics(
+                                                                          parent:
+                                                                              AlwaysScrollableScrollPhysics()),
+                                                                      keyboardDismissBehavior:
+                                                                          ScrollViewKeyboardDismissBehavior
+                                                                              .onDrag,
+                                                                      slivers: [
+                                                                        SliverPadding(
+                                                                          padding:
+                                                                              EdgeInsets.only(top: dynamicHeaderHeight),
+                                                                        ),
+                                                                        SliverToBoxAdapter(
+                                                                          child:
+                                                                              AnimatedOpacity(
+                                                                            duration:
+                                                                                const Duration(milliseconds: 150),
+                                                                            opacity: (!provider.isActiveNavigation && progress > 0.05)
+                                                                                ? 1.0
+                                                                                : 0.0,
+                                                                            child: (!provider.isActiveNavigation && progress > 0.05)
+                                                                                ? _buildSheetContent(isDark, progress, isExpanded: isKeyboardOpen)
+                                                                                : const SizedBox(),
+                                                                          ),
+                                                                        ),
+                                                                        SliverPadding(
+                                                                          padding:
+                                                                              EdgeInsets.only(bottom: keyboardHeight),
+                                                                        ),
+                                                                        SliverFillRemaining(
+                                                                          hasScrollBody:
+                                                                              false,
+                                                                          child:
+                                                                              Container(color: Colors.transparent),
+                                                                        ),
+                                                                      ],
                                                                     ),
                                                                   ),
                                                                 ),
-                                                              ),
-                                                            ],
+                                                                // Top Layer: Floating Header with Gradient Fade
+                                                                Positioned(
+                                                                  top: 0,
+                                                                  left: 0,
+                                                                  right: 0,
+                                                                  child:
+                                                                      Container(
+                                                                    color: Colors
+                                                                        .transparent,
+                                                                    height:
+                                                                        dynamicHeaderHeight,
+                                                                    child:
+                                                                        GestureDetector(
+                                                                      onTap:
+                                                                          () {
+                                                                        if (progress <
+                                                                            0.1) {
+                                                                          _expandToFull();
+                                                                        }
+                                                                      },
+                                                                      behavior:
+                                                                          HitTestBehavior
+                                                                              .translucent,
+                                                                      child:
+                                                                          AnimatedSwitcher(
+                                                                        duration:
+                                                                            const Duration(milliseconds: 500),
+                                                                        switchInCurve:
+                                                                            Curves.easeInCubic,
+                                                                        switchOutCurve:
+                                                                            Curves.easeOutCubic,
+                                                                        child: (_showDirections
+                                                                            ? _buildDirectionsHeader(dynamicHeaderHeight,
+                                                                                isDark)
+                                                                            : (_selectedPlace != null
+                                                                                ? _buildSelectedPlaceHeader(dynamicHeaderHeight, progress, isDark)
+                                                                                : _buildSearchHeader(dynamicHeaderHeight, progress, isDark))),
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
                                                           ),
                                                         ),
                                                       ),
                                                     ),
                                                   ),
-                                                ),
-                                                Positioned(
-                                                  top: -8,
-                                                  left: 0,
-                                                  right: 0,
-                                                  child:
-                                                      _buildDynamicDragHandle(
-                                                          isDark),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        },
+                                                  Positioned(
+                                                    top: -8,
+                                                    left: 0,
+                                                    right: 0,
+                                                    child:
+                                                        _buildDynamicDragHandle(
+                                                            isDark),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                },
-                              );
-                            },
+                                    );
+                                  },
+                                );
+                              },
+                            ),
                           ),
                         ),
                 ))),

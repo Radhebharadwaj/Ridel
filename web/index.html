@@ -99,82 +99,62 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <style id="splash-screen-style">
-    html {
-      height: 100%
-    }
-
+    /* Native HTML Splash Screen matching Ridel Theme */
     body {
+      background-color: #0B0E17;
       margin: 0;
-      min-height: 100%;
-      /* MAPLIBRE FIX 3: Changed to Dark Grey so we know if the map is actually rendering */
-      background-color: #1E1E1E;
-      background-size: 100% 100%;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
     }
-
-    .center {
-      margin: 0;
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      -ms-transform: translate(-50%, -50%);
-      transform: translate(-50%, -50%);
+    .ridel-native-loader {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      animation: pulseLoader 1.5s infinite alternate ease-in-out;
     }
-
-    .contain {
-      display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
+    .bike-svg {
+      width: 48px;
+      height: 48px;
+      fill: #ffffff;
+      margin-bottom: 16px;
     }
-
-    .stretch {
-      display: block;
-      width: 100%;
-      height: 100%;
+    .brand-text {
+      color: #ffffff;
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 1px;
     }
-
-    .cover {
-      display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .bottom {
-      position: absolute;
-      bottom: 0;
-      left: 50%;
-      -ms-transform: translate(-50%, 0);
-      transform: translate(-50%, 0);
-    }
-
-    .bottomLeft {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-    }
-
-    .bottomRight {
-      position: absolute;
-      bottom: 0;
-      right: 0;
+    @keyframes pulseLoader {
+      0% { transform: scale(0.95); opacity: 0.5; }
+      100% { transform: scale(1.05); opacity: 1.0; }
     }
   </style>
   <script id="splash-screen-script">
     function removeSplashFromWeb() {
-      document.getElementById("splash")?.remove();
-      document.getElementById("splash-branding")?.remove();
+      document.getElementById("native-splash")?.remove();
       document.body.style.background = "transparent";
+      document.body.style.display = "block";
     }
   </script>
 </head>
 
 <body>
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <div id="native-splash" class="ridel-native-loader">
+    <svg class="bike-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM5 12c-2.8 0-5 2.2-5 5s2.2 5 5 5 5-2.2 5-5-2.2-5-5-5zm0 8.5c-1.9 0-3.5-1.6-3.5-3.5s1.6-3.5 3.5-3.5 3.5 1.6 3.5 3.5-1.6 3.5-3.5 3.5zm5.8-10l2.4-2.4.8.8c1.3 1.3 3 2.1 5.1 2.1V9c-1.5 0-2.7-.6-3.6-1.5l-1.9-1.9c-.5-.4-1-.6-1.6-.6s-1.1.2-1.4.6L7.8 8.4c-.4.4-.6.9-.6 1.4 0 .6.2 1.1.6 1.4L11 14v5h2v-6.2l-2.2-2.3zM19 12c-2.8 0-5 2.2-5 5s2.2 5 5 5 5-2.2 5-5-2.2-5-5-5zm0 8.5c-1.9 0-3.5-1.6-3.5-3.5s1.6-3.5 3.5-3.5 3.5 1.6 3.5 3.5-1.6 3.5-3.5 3.5z"/>
+    </svg>
+    <div class="brand-text">Ridel Maps</div>
+  </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js" crossorigin="anonymous"
-    referrerpolicy="no-referrer" integrity="PLACEHOLDER_CROPPER_JS"></script>
-  <script src="flutter_bootstrap.js" async=""></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" integrity="PLACEHOLDER_CROPPER_JS"></script>
+  <script src="flutter_bootstrap.js" async></script>
 </body>
 
 </html>
