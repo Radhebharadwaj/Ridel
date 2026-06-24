@@ -91,49 +91,87 @@ class MapStyleHelper {
             // 🚀 OVERZOOM FIX: Stops 404s on deep zoom (>200m)
             source['maxzoom'] = 16;
 
-            // Inject API Key into Vector URLs
-            if (source['url'] != null) {
+            // 🚀 VECTOR INTEGRITY (THE BULLETPROOF FIX)
+            if (source['type'] == 'vector' && source['url'] != null) {
+              // Extract base URL and prevent engine from fetching the poisoned TileJSON
               String tileJsonUrl = source['url'].toString().split('?').first;
-              source['url'] = '$tileJsonUrl?api_key=$apiKey';
-            }
-
-            // Crucial: Inject into all tile arrays if they exist
-            if (source['tiles'] != null) {
+              
+              // Convert the .json endpoint directly to the PBF tile template
+              String pbfUrl = tileJsonUrl.replaceAll('.json', '/{z}/{x}/{y}.pbf');
+              
+              // Hard-inject our validated API Key from AppConfig
+              source['tiles'] = ['$pbfUrl?api_key=$apiKey'];
+              
+              // CRITICAL: Remove 'url' to FORCE MapLibre to use our 'tiles' array instead
+              source.remove('url');
+            } else if (source['tiles'] != null) {
+              // Crucial: Inject into all tile arrays if they exist
               List tiles = source['tiles'];
               source['tiles'] = tiles.map((t) => "${t.toString().split('?').first}?api_key=$apiKey").toList();
             }
-
-            // 🚀 CLOUDFLARE SATELLITE SWAP (Only for Satellite Theme)
-            if (source['type'] == 'raster' &&
-                themeType == MapThemeType.satellite) {
-              source['tiles'] = [
-                'https://ridel.ridel.workers.dev/api/satellite/{z}/{y}/{x}'
-              ];
-              source.remove('url');
-            }
           }
         });
+        
+        // 🚀 INJECT SATELLITE SOURCE
+        if (themeType == MapThemeType.satellite) {
+          styleData['sources']['ridel-satellite'] = {
+            "type": "raster",
+            "tiles": ["https://ridel.ridel.workers.dev/api/satellite/{z}/{y}/{x}"],
+            "tileSize": 256,
+            "maxzoom": 19 // Prevents blanking on deep zoom
+          };
+        }
       }
 
       // 4. LAYERS: AESTHETICS & FATAL CRASH SANITIZER
       if (styleData['layers'] != null && styleData['layers'] is List) {
+        List<dynamic> layers = styleData['layers'];
+
+        // 🚀 INJECT SATELLITE LAYER AT THE BOTTOM (Index 0)
+        if (themeType == MapThemeType.satellite) {
+          layers.insert(0, {
+            "id": "ridel-satellite-base",
+            "type": "raster",
+            "source": "ridel-satellite"
+          });
+        }
+
         List<dynamic> updatedLayers = [];
         List<dynamic> transitLayers = [];
         List<dynamic> symbolLayers = [];
 
-        for (var layer in styleData['layers']) {
+        for (var layer in layers) {
           if (layer is! Map) continue;
 
           // 🚀 FATAL CRASH SANITIZER: Remove Layer Limits & Broken Icons
           layer.remove('maxzoom'); // Fixes blanking out on deep zoom
-          if (layer['layout'] != null && layer['layout'] is Map) {
+          if (layer.containsKey('layout') && layer['layout'] is Map) {
             var iconImage = layer['layout']['icon-image'];
-            if (iconImage is String &&
-                (iconImage.trim().isEmpty ||
-                    iconImage == 'pedestrian_polygon')) {
+            if (iconImage == "" || iconImage == "pedestrian_polygon" || iconImage == null) {
               layer['layout'].remove('icon-image'); // Kills the WebGL Crash!
             }
           }
+
+          // 🚀 STRICTLY TYPED TRANSPARENCY FOR SATELLITE MODE
+          if (themeType == MapThemeType.satellite) {
+            if (layer['paint'] == null) layer['paint'] = <String, dynamic>{};
+
+            if (layer['type'] == 'fill') {
+              layer['paint']['fill-opacity'] = 0.0;
+              // Ensure we don't accidentally pass 3D props to a 2D layer
+              layer['paint'].remove('fill-extrusion-opacity'); 
+            } 
+            else if (layer['type'] == 'fill-extrusion') {
+              layer['paint']['fill-extrusion-opacity'] = 0.0;
+              // Ensure we don't accidentally pass 2D props to a 3D layer
+              layer['paint'].remove('fill-opacity');
+            } 
+            else if (layer['type'] == 'background') {
+              layer['paint']['background-color'] = 'rgba(0,0,0,0)';
+              layer['paint']['background-opacity'] = 0.0;
+            }
+          }
+
 
           final String id = (layer['id'] as String? ?? '').toLowerCase();
           final String type = (layer['type'] as String? ?? '');
