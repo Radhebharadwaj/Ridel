@@ -103,7 +103,7 @@ class _PermissionsCenterSheetState extends State<PermissionsCenterSheet>
     final isLightMode = Theme.of(context).brightness == Brightness.light;
     final textColor = isLightMode ? Colors.black87 : Colors.white;
     final subColor = isLightMode ? Colors.black54 : Colors.white54;
-    const activeColor = Color(0xFF00E5FF); // Neon Cyan
+    const activeColor = CupertinoColors.systemBlue; // Premium System Blue
 
     return Material(
       color: isLightMode ? Colors.white : const Color(0xFF16181D),
@@ -217,16 +217,16 @@ class _PermissionsCenterSheetState extends State<PermissionsCenterSheet>
                                     horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
                                     color: isGranted
-                                        ? Colors.greenAccent
-                                            .withValues(alpha: 0.1)
+                                        ? CupertinoColors.systemGreen
+                                            .withValues(alpha: 0.15)
                                         : (isLightMode
                                             ? Colors.black
                                                 .withValues(alpha: 0.05)
-                                            : Colors.white.withValues(alpha: 0.05)),
+                                            : Colors.white.withValues(alpha: 0.1)),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
                                         color: isGranted
-                                            ? Colors.greenAccent
+                                            ? CupertinoColors.systemGreen
                                                 .withValues(alpha: 0.2)
                                             : Colors.transparent,
                                         width: 0.5)),
@@ -234,7 +234,7 @@ class _PermissionsCenterSheetState extends State<PermissionsCenterSheet>
                                   isGranted ? "Allowed" : "Denied",
                                   style: GoogleFonts.inter(
                                     color:
-                                        isGranted ? Colors.greenAccent : subColor,
+                                        isGranted ? CupertinoColors.systemGreen : subColor,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
                                   ),

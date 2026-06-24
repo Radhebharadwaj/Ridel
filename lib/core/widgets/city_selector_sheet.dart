@@ -1,6 +1,7 @@
 import 'dart:async';
 
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -219,7 +220,7 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
                           },
                           child: const Text('Check Roadmap',
                               style: TextStyle(
-                                  color: Color(0xFF00E5FF),
+                                  color: CupertinoColors.systemBlue,
                                   fontWeight: FontWeight.bold)),
                         ),
                       ],
@@ -294,7 +295,7 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
-    const accentColor = Color(0xFF00E5FF);
+    const accentColor = CupertinoColors.systemBlue;
 
     return Padding(
       padding: const EdgeInsets.only(top: 90, left: 24, right: 24),

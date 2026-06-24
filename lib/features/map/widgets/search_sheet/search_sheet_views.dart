@@ -491,7 +491,7 @@ if (showRecentSearches)
                               builder: (context) {
                                 final listView = ListView.builder(
                                   padding: EdgeInsets.zero,
-                                  shrinkWrap: !isExpandedList,
+                                  shrinkWrap: true,
                                   physics: const BouncingScrollPhysics(),
                                   itemCount: provider.recentSearches.length,
                                   itemBuilder: (context, index) {
@@ -737,9 +737,7 @@ if (showRecentSearches)
                                     );
                                   },
                                 );
-                                return isExpandedList
-                                    ? Expanded(child: listView)
-                                    : listView;
+                                return listView;
                               },
                             ),
                     ],
@@ -1421,7 +1419,7 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
       child: card,
     );
 
-    return isExpanded ? Expanded(child: content) : content;
+    return content;
   }
 
   Widget _buildSheetContent(bool isDark, double progress,
@@ -1429,10 +1427,16 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
     final provider = Provider.of<MapProvider>(context);
     if (_searchCtrl.text.isNotEmpty &&
         (_selectedPlace == null || provider.isAddingStopMode)) {
-      return _buildSearchResultsView(isDark, isExpanded: isExpanded);
+      return Container(
+        key: const ValueKey('searchResultsView'),
+        child: _buildSearchResultsView(isDark, isExpanded: isExpanded),
+      );
     }
-    return _buildUnifiedExploreView(isDark, progress,
-        isExpandedList: isExpanded);
+    return Container(
+      key: const ValueKey('exploreView'),
+      child: _buildUnifiedExploreView(isDark, progress,
+          isExpandedList: isExpanded),
+    );
   }
 
   Widget _buildNearbyTile(

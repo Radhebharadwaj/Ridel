@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/services/theme_service.dart';
@@ -174,7 +175,7 @@ class _ThemeTab extends StatelessWidget {
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: isSelected
-              ? Border.all(color: const Color(0xFF00E5FF), width: 1.5)
+              ? Border.all(color: CupertinoColors.systemBlue, width: 1.5)
               : null,
           boxShadow: isSelected
               ? [
@@ -188,7 +189,7 @@ class _ThemeTab extends StatelessWidget {
           children: [
             Icon(icon,
                 size: 18,
-                color: isSelected ? const Color(0xFF00E5FF) : Colors.grey),
+                color: isSelected ? CupertinoColors.systemBlue : Colors.grey),
             const SizedBox(width: 8),
             Text(label,
                 style: GoogleFonts.inter(
@@ -232,13 +233,13 @@ class _FontTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected
-              ? (const Color(0xFF00E5FF).withValues(alpha: 0.1))
+              ? (CupertinoColors.systemBlue.withValues(alpha: 0.1))
               : (isDark
                   ? Colors.white.withValues(alpha: 0.05)
                   : Colors.grey.shade100),
           borderRadius: BorderRadius.circular(16),
           border: isSelected
-              ? Border.all(color: const Color(0xFF00E5FF), width: 1.5)
+              ? Border.all(color: CupertinoColors.systemBlue, width: 1.5)
               : Border.all(color: Colors.transparent),
         ),
         child: Row(
@@ -261,7 +262,7 @@ class _FontTile extends StatelessWidget {
             ),
             if (isSelected)
               const Icon(Icons.check_circle_rounded,
-                  color: Color(0xFF00E5FF), size: 22),
+                  color: CupertinoColors.systemBlue, size: 22),
           ],
         ),
       ),

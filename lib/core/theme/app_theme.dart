@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Primary Brand Color
-  static const primaryColor = Color(0xFF00E5FF);
+  static const primaryColor = CupertinoColors.systemBlue;
 
   static const _darkBg = Color(0xFF0B0E17);
   static const _darkCard = Color(0xFF262626);

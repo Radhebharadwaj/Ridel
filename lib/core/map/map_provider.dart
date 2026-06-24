@@ -1087,7 +1087,9 @@ class MapProvider extends ChangeNotifier {
           isPrimary,
         );
         try {
-          await controller!.addImage(imageId, imageBytes);
+          if (imageId.trim().isNotEmpty) {
+            await controller!.addImage(imageId, imageBytes);
+          }
         } catch (_) {}
 
         // 2. Add Point Source

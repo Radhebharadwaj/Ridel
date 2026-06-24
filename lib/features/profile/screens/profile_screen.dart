@@ -289,7 +289,7 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(100),
-                    borderSide: const BorderSide(color: Colors.cyan),
+                    borderSide: const BorderSide(color: CupertinoColors.systemBlue),
                   ),
                 ),
               ),
@@ -419,12 +419,12 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: Colors.cyan.withValues(alpha: 0.5),
+                    color: CupertinoColors.systemBlue.withValues(alpha: 0.5),
                     width: 2,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.cyan.withValues(alpha: 0.15),
+                      color: CupertinoColors.systemBlue.withValues(alpha: 0.15),
                       blurRadius: 20,
                       spreadRadius: 2,
                     ),
@@ -483,7 +483,7 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
                   onPressed: () => Future.microtask(_openEditProfile),
                   child: Text(_isGuest ? 'Log in to Ridel' : 'Edit Profile',
                       style: const TextStyle(
-                          color: Colors.cyan, fontWeight: FontWeight.bold))),
+                          color: CupertinoColors.systemBlue, fontWeight: FontWeight.bold))),
               const SizedBox(height: 30),
               if (!_isGuest) ...[
                 _section('Account'),
@@ -706,9 +706,9 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
                 ListTile(
                   title: Text(_isGuest ? 'Log In' : 'Log Out',
                       style: TextStyle(
-                          color: _isGuest ? Colors.cyan : Colors.red)),
+                          color: _isGuest ? CupertinoColors.systemBlue : Colors.red)),
                   leading: Icon(_isGuest ? Icons.login : Icons.logout,
-                      color: _isGuest ? Colors.cyan : Colors.red),
+                      color: _isGuest ? CupertinoColors.systemBlue : Colors.red),
                   onTap: () {
                     Future.microtask(() async {
                       AppHaptics.warning();
@@ -765,7 +765,7 @@ class _ProfileSheetContentState extends State<ProfileSheetContent> {
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 Text(val,
                     style: TextStyle(
-                        color: isLink ? Colors.cyan : subColor, fontSize: 14)),
+                        color: isLink ? CupertinoColors.systemBlue : subColor, fontSize: 14)),
                 if (isLink) Icon(Icons.chevron_right, color: subColor, size: 16)
               ]),
               onTap: onTap != null ? () => Future.microtask(() { if (ctx.mounted) onTap(ctx); }) : null));

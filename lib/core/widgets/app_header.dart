@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'package:ridel/main.dart';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -299,22 +301,30 @@ class _AppHeaderState extends State<AppHeader> {
                                     Positioned(
                                       top: 2,
                                       right: -2,
-                                      child: Container(
-                                        width: 10,
-                                        height: 10,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF00E5FF),
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                              color: bgColor, width: 2.0),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: const Color(0xFF00E5FF)
-                                                  .withValues(alpha: 0.5),
-                                              blurRadius: 6,
-                                            )
-                                          ],
-                                        ),
+                                      child: ValueListenableBuilder<int>(
+                                        valueListenable: globalTransportMode,
+                                        builder: (context, transportMode, _) {
+                                          final Color activeAccent = transportMode == 1
+                                              ? const Color(0xFFFF9F0A)
+                                              : CupertinoColors.systemBlue;
+                                          return Container(
+                                            width: 10,
+                                            height: 10,
+                                            decoration: BoxDecoration(
+                                              color: activeAccent,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                  color: bgColor, width: 2.0),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: activeAccent
+                                                      .withValues(alpha: 0.5),
+                                                  blurRadius: 6,
+                                                )
+                                              ],
+                                            ),
+                                          );
+                                        },
                                       ),
                                     )
                                 ],

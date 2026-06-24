@@ -2,34 +2,27 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AppConfig {
-  static String? _olaKey;
+  static String? _olaMapsKey;
 
-  static String get olaMapsKey {
-    if (_olaKey == null) {
-      throw Exception("CRITICAL ERROR: Ola API Key not fetched yet!");
-    }
-    return _olaKey!;
+  static String? get olaMapsKey => _olaMapsKey;
+
+  static void clearSession() {
+    _olaMapsKey = null;
   }
 
   static Future<void> fetchKeys() async {
-    final session = Supabase.instance.client.auth.currentSession;
-    if (session == null || session.accessToken.isEmpty) {
-      throw Exception("CRITICAL ERROR: User is not authenticated. Cannot fetch map keys.");
-    }
-
     try {
       final response = await http.get(
         Uri.parse('https://ridel.ridel.workers.dev/get-map-key'),
-        headers: {'Authorization': 'Bearer ${session.accessToken}'},
+        headers: {'Admin-Secret': appSecretPasskey},
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['ola_key'] != null) {
-          _olaKey = data['ola_key'];
+          _olaMapsKey = data['ola_key'];
         } else {
           throw Exception("Missing ola_key in response payload.");
         }

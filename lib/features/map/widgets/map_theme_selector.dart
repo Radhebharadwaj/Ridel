@@ -108,14 +108,14 @@ class _MapThemePopupState extends State<_MapThemePopup> {
         // 🚀 CRITICAL FPS FIX: Cache the blur rasterization during animation
         child: RepaintBoundary(
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+            filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
             child: Container(
               width: 200, // Sleek, constrained width
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                   color: Theme.of(context).brightness == Brightness.dark
-                      ? const Color(0xFF0B0E17).withValues(alpha: 0.75)
-                      : Colors.white.withValues(alpha: 0.75),
+                      ? const Color(0xFF0B0E17).withValues(alpha: 0.85)
+                      : Colors.white.withValues(alpha: 0.85),
                   borderRadius: BorderRadius.circular(24),
                   border: Theme.of(context).brightness == Brightness.dark
                       ? Border.all(

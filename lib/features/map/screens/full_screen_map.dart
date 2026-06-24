@@ -43,8 +43,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   late AnimationController _fadeScaleController;
 
   String? _loadedMapStyle;
-  bool _isMapFullyLoaded = false;
+
   bool _isMapReady = false;
+  bool _hasMapError = false;
   MapLibreMapController? _tempController;
   MapThemeType? _currentTheme;
   bool _isTilted = false;
@@ -106,9 +107,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           ? '${chosenMeters ~/ 1000} km'
           : '$chosenMeters m';
 
-      _showScaleBarNotifier.value = true;
-      _scaleTextNotifier.value = newText;
-      _scaleWidthNotifier.value = newWidth.clamp(20.0, 150.0);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _showScaleBarNotifier.value = true;
+        _scaleTextNotifier.value = newText;
+        _scaleWidthNotifier.value = newWidth.clamp(20.0, 150.0);
+      });
 
       _scaleBarTimer?.cancel();
       _scaleBarTimer = Timer(const Duration(milliseconds: 1000), () {
@@ -139,9 +143,19 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   Future<void> _initializeMapData() async {
     try {
       await AppConfig.fetchKeys();
+    } catch (e) {
+      debugPrint("Init map data auth/fetch error (using fallback): $e");
+    }
+
+    try {
       await _initMapStyle();
     } catch (e) {
-      debugPrint("Init map data error: $e");
+      debugPrint("Init map style error: $e");
+      if (mounted) {
+        setState(() {
+          _hasMapError = true;
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -153,19 +167,26 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   void _onProgressChanged() {
     final progress = widget.searchSheetProgressNotifier.value;
-    if (progress > 0.8 &&
-        _fadeScaleController.status != AnimationStatus.forward &&
-        _fadeScaleController.status != AnimationStatus.completed) {
-      _fadeScaleController.forward();
-    } else if (progress <= 0.8 &&
-        _fadeScaleController.status != AnimationStatus.reverse &&
-        _fadeScaleController.status != AnimationStatus.dismissed) {
-      _fadeScaleController.reverse();
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (progress > 0.8 &&
+          _fadeScaleController.status != AnimationStatus.forward &&
+          _fadeScaleController.status != AnimationStatus.completed) {
+        _fadeScaleController.forward();
+      } else if (progress <= 0.8 &&
+          _fadeScaleController.status != AnimationStatus.reverse &&
+          _fadeScaleController.status != AnimationStatus.dismissed) {
+        _fadeScaleController.reverse();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _tempController?.dispose();
+    _showScaleBarNotifier.dispose();
+    _scaleTextNotifier.dispose();
+    _scaleWidthNotifier.dispose();
     widget.searchSheetProgressNotifier.removeListener(_onProgressChanged);
     _fadeScaleController.dispose();
     _scaleBarTimer?.cancel();
@@ -300,10 +321,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         isDesktop ? 32.0 : MediaQuery.of(context).padding.top + 24.0;
     final double sideMargin = isDesktop ? 32.0 : 28.0;
 
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       resizeToAvoidBottomInset: false,
-      body: Stack(
+      body: (!_isMapReady || _loadedMapStyle == null) 
+          ? const Center(child: PremiumMapSkeleton()) 
+          : Stack(
         children: [
           Positioned.fill(
             child: Listener(
@@ -318,13 +342,23 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
               child: Selector<MapProvider, bool>(
                 selector: (_, provider) => provider.showNativeBlueDot,
                 builder: (context, showNativeBlueDot, child) {
-                  return !_isMapReady || _loadedMapStyle == null
-                      ? const Center(child: PremiumMapSkeleton())
-                      : MapLibreMap(
+                  if (_hasMapError) {
+                    return Center(
+                      child: Text(
+                        "Failed to load map",
+                        style: TextStyle(
+                          color: isDark ? Colors.white54 : Colors.black54,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                    );
+                  }
+                  return MapLibreMap(
                           key: const ValueKey('ridel_main_map'),
                           styleString: _loadedMapStyle!,
                           minMaxZoomPreference:
-                              const MinMaxZoomPreference(4.0, 20.0),
+                              const MinMaxZoomPreference(3.0, 18.5),
                           cameraTargetBounds: CameraTargetBounds(
                             LatLngBounds(
                               southwest: const LatLng(6.5,
@@ -347,246 +381,65 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             final controller = _tempController;
                             if (controller == null) return;
 
+                            Future<void> safeAddImage(String? id, Uint8List bytes) async {
+                              if (id == null || id.trim().isEmpty) return;
+                              try {
+                                await controller.addImage(id, bytes);
+                              } catch (e) {
+                                debugPrint("SafeAddImage error: $e");
+                              }
+                            }
+
                             try {
                               final Uint8List bytes =
                                   await MapProvider.loadAndResizeImage(
                                       'assets/images/custom_pin.png', 36);
-                              await controller.addImage('custom_pin', bytes);
+                              await safeAddImage('custom_pin', bytes);
                             } catch (_) {}
 
                             try {
                               final Uint8List yellowPinBytes =
                                   await MapProvider.loadAndResizeImage(
                                       'assets/images/add_places.png', 32);
-                              await controller.addImage(
-                                  'intermediate_pin', yellowPinBytes);
+                              await safeAddImage('intermediate_pin', yellowPinBytes);
                             } catch (_) {}
                             try {
                               final Uint8List transparentPixel =
                                   Uint8List.fromList([
-                                137,
-                                80,
-                                78,
-                                71,
-                                13,
-                                10,
-                                26,
-                                10,
-                                0,
-                                0,
-                                0,
-                                13,
-                                73,
-                                72,
-                                68,
-                                82,
-                                0,
-                                0,
-                                0,
-                                1,
-                                0,
-                                0,
-                                0,
-                                1,
-                                8,
-                                6,
-                                0,
-                                0,
-                                0,
-                                31,
-                                21,
-                                196,
-                                137,
-                                0,
-                                0,
-                                0,
-                                11,
-                                73,
-                                68,
-                                65,
-                                84,
-                                8,
-                                215,
-                                99,
-                                96,
-                                0,
-                                2,
-                                0,
-                                0,
-                                5,
-                                0,
-                                1,
-                                226,
-                                38,
-                                5,
-                                155,
-                                0,
-                                0,
-                                0,
-                                0,
-                                73,
-                                69,
-                                78,
-                                68,
-                                174,
-                                66,
-                                96,
-                                130
+                                137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13,
+                                73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6,
+                                0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73,
+                                68, 65, 84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0,
+                                1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78,
+                                68, 174, 66, 96, 130
                               ]);
-                              await controller.addImage(
-                                  'Arrow', transparentPixel);
+                              await safeAddImage('Arrow', transparentPixel);
                             } catch (_) {}
 
                             try {
                               final Uint8List transparentPixel =
                                   Uint8List.fromList([
-                                137,
-                                80,
-                                78,
-                                71,
-                                13,
-                                10,
-                                26,
-                                10,
-                                0,
-                                0,
-                                0,
-                                13,
-                                73,
-                                72,
-                                68,
-                                82,
-                                0,
-                                0,
-                                0,
-                                1,
-                                0,
-                                0,
-                                0,
-                                1,
-                                8,
-                                6,
-                                0,
-                                0,
-                                0,
-                                31,
-                                21,
-                                196,
-                                137,
-                                0,
-                                0,
-                                0,
-                                11,
-                                73,
-                                68,
-                                65,
-                                84,
-                                8,
-                                215,
-                                99,
-                                96,
-                                0,
-                                2,
-                                0,
-                                0,
-                                5,
-                                0,
-                                1,
-                                226,
-                                38,
-                                5,
-                                155,
-                                0,
-                                0,
-                                0,
-                                0,
-                                73,
-                                69,
-                                78,
-                                68,
-                                174,
-                                66,
-                                96,
-                                130
+                                137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13,
+                                73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6,
+                                0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73,
+                                68, 65, 84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0,
+                                1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78,
+                                68, 174, 66, 96, 130
                               ]);
-                              await controller.addImage(
-                                  'arrow', transparentPixel);
+                              await safeAddImage('arrow', transparentPixel);
                             } catch (_) {}
 
                             try {
                               final Uint8List transparentPixel =
                                   Uint8List.fromList([
-                                137,
-                                80,
-                                78,
-                                71,
-                                13,
-                                10,
-                                26,
-                                10,
-                                0,
-                                0,
-                                0,
-                                13,
-                                73,
-                                72,
-                                68,
-                                82,
-                                0,
-                                0,
-                                0,
-                                1,
-                                0,
-                                0,
-                                0,
-                                1,
-                                8,
-                                6,
-                                0,
-                                0,
-                                0,
-                                31,
-                                21,
-                                196,
-                                137,
-                                0,
-                                0,
-                                0,
-                                11,
-                                73,
-                                68,
-                                65,
-                                84,
-                                8,
-                                215,
-                                99,
-                                96,
-                                0,
-                                2,
-                                0,
-                                0,
-                                5,
-                                0,
-                                1,
-                                226,
-                                38,
-                                5,
-                                155,
-                                0,
-                                0,
-                                0,
-                                0,
-                                73,
-                                69,
-                                78,
-                                68,
-                                174,
-                                66,
-                                96,
-                                130
+                                137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13,
+                                73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6,
+                                0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73,
+                                68, 65, 84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0,
+                                1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78,
+                                68, 174, 66, 96, 130
                               ]);
-                              await controller.addImage(
-                                  'custom-marker', transparentPixel);
+                              await safeAddImage('custom-marker', transparentPixel);
                             } catch (_) {}
 
                             if (!context.mounted) return;
@@ -600,14 +453,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                     listen: false),
                                 this);
 
-                            Future.delayed(const Duration(milliseconds: 500),
-                                () {
-                              if (mounted) {
-                                setState(() {
-                                  _isMapFullyLoaded = true;
-                                });
-                              }
-                            });
+                            // Intentionally removed _isMapFullyLoaded setState
                           },
                           onMapClick: (point, latLng) async {
                             FocusScope.of(context).unfocus();
@@ -707,10 +553,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           },
                           initialCameraPosition: const CameraPosition(
                               target: LatLng(28.6139, 77.2090),
-                              zoom:
-                                  14.5, // 🚀 Fixed zoom to match custom_map_screen
+                              zoom: 14.5,
                               tilt: 0.0,
-                              bearing: 0),
+                              bearing: 0.0),
 
                           compassEnabled: false,
                           doubleClickZoomEnabled: true,
@@ -806,19 +651,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             ),
           ),
 
-          // 🚀 0.5: SKELETON MAP OVERLAY
-          Positioned.fill(
-            child: IgnorePointer(
-              ignoring: _isMapFullyLoaded,
-              child: AnimatedOpacity(
-                opacity: _isMapFullyLoaded ? 0.0 : 1.0,
-                duration: const Duration(milliseconds: 800),
-                curve: Curves.easeInOut,
-                child: const PremiumMapSkeleton(),
-              ),
-            ),
-          ),
-
           // 🚀 0. SIRI-STYLE EDGE GLOW FOR TTS
           Positioned.fill(
             child: IgnorePointer(
@@ -872,7 +704,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                 onSearchModeChanged: (isActive) {},
                 onSearchSubmitted: (query) {},
                 onProgressChanged: (progress) {
-                  widget.searchSheetProgressNotifier.value = progress;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      widget.searchSheetProgressNotifier.value = progress;
+                    }
+                  });
                 },
                 onBackToPreviousTab: () {
                   Provider.of<AppNavigationProvider>(context, listen: false)
@@ -1039,14 +875,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       child: RepaintBoundary(
                         child: BackdropFilter(
                           filter: ImageFilter.blur(
-                              sigmaX: kIsWeb ? 4.0 : 24.0,
-                              sigmaY: kIsWeb ? 4.0 : 24.0),
+                              sigmaX: kIsWeb ? 4.0 : 35.0,
+                              sigmaY: kIsWeb ? 4.0 : 35.0),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 20, vertical: 14),
                             decoration: BoxDecoration(
                               color: const Color(0xFF0B0E17)
-                                  .withValues(alpha: 0.75),
+                                  .withValues(alpha: 0.85),
                               borderRadius: BorderRadius.circular(36),
                               border: Border.all(
                                 color: Colors.white.withValues(alpha: 0.08),
@@ -1412,7 +1248,9 @@ class _AppleStyleCompassState extends State<AppleStyleCompass> {
   void _onCameraMove() {
     final newBearing = widget.controller?.cameraPosition?.bearing ?? 0.0;
     if ((_bearingNotifier.value - newBearing).abs() > 0.5) {
-      _bearingNotifier.value = newBearing;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _bearingNotifier.value = newBearing;
+      });
     }
   }
 
@@ -1448,15 +1286,15 @@ class _AppleStyleCompassState extends State<AppleStyleCompass> {
                   child: RepaintBoundary(
                     child: BackdropFilter(
                       filter: ImageFilter.blur(
-                          sigmaX: kIsWeb ? 4.0 : 20.0,
-                          sigmaY: kIsWeb ? 4.0 : 20.0),
+                          sigmaX: kIsWeb ? 4.0 : 35.0,
+                          sigmaY: kIsWeb ? 4.0 : 35.0),
                       child: Container(
                         width: 48,
                         height: 48,
                         decoration: BoxDecoration(
                           color: !isDark
-                              ? Colors.white.withValues(alpha: 0.75)
-                              : const Color(0xFF0B0E17).withValues(alpha: 0.75),
+                              ? Colors.white.withValues(alpha: 0.85)
+                              : const Color(0xFF0B0E17).withValues(alpha: 0.85),
                           shape: BoxShape.circle,
                           border: !isDark
                               ? Border.all(

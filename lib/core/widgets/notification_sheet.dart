@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -193,7 +194,7 @@ class _NotificationSheetContentState extends State<NotificationSheetContent> {
 
   Widget _buildFilterChip(String label, int index, IconData icon, bool isDark) {
     final isSelected = _selectedFilter == index;
-    const activeColor = Color(0xFF00E5FF);
+    const activeColor = CupertinoColors.systemBlue;
 
     return GestureDetector(
       onTap: () {
@@ -292,7 +293,7 @@ class _ExpandableNotificationPillState
         break;
       case NotificationType.system:
         icon = Icons.info_outline_rounded;
-        iconColor = const Color(0xFF00E5FF);
+        iconColor = CupertinoColors.systemBlue;
         break;
     }
 
@@ -373,11 +374,11 @@ class _ExpandableNotificationPillState
                                       width: 8,
                                       height: 8,
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF00E5FF),
+                                        color: CupertinoColors.systemBlue,
                                         shape: BoxShape.circle,
                                         boxShadow: [
                                           BoxShadow(
-                                            color: const Color(0xFF00E5FF)
+                                            color: CupertinoColors.systemBlue
                                                 .withValues(alpha: 0.5),
                                             blurRadius: 6,
                                           )
@@ -473,7 +474,7 @@ class _ExpandableNotificationPillState
                                         key: ValueKey(widget.notif.isSaved),
                                         size: 24,
                                         color: widget.notif.isSaved
-                                            ? const Color(0xFF00E5FF)
+                                            ? CupertinoColors.systemBlue
                                             : widget.subColor
                                                 .withValues(alpha: 0.5),
                                       ),

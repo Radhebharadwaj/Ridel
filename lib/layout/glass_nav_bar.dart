@@ -73,8 +73,7 @@ class _GlassNavBarState extends State<GlassNavBar> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const double elementHeight = 42.0;
 
-    const Color metroColor = Color(0xFF00D1FF);
-    const Color busColor = Color(0xFFFF9F0A);
+    const Color systemBlue = CupertinoColors.systemBlue;
     final Color inactiveColor = Colors.white.withValues(alpha: 0.45);
 
     // Core Interior Content (Buttons & Sliders)
@@ -188,14 +187,14 @@ class _GlassNavBarState extends State<GlassNavBar> {
                                 title: "Metro",
                                 active: _activeSlabIndex == 0,
                                 activeColor:
-                                    isDark ? metroColor : Colors.black87,
+                                    isDark ? systemBlue : Colors.black87,
                                 isDark: isDark,
                                 onTap: () => _onSegmentTapped(0),
                               ),
                               _buildToggleTab(
                                 title: "Bus",
                                 active: _activeSlabIndex == 1,
-                                activeColor: isDark ? busColor : Colors.black87,
+                                activeColor: isDark ? const Color(0xFFFF9F0A) : Colors.black87,
                                 isDark: isDark,
                                 onTap: () => _onSegmentTapped(1),
                               ),
@@ -228,7 +227,7 @@ class _GlassNavBarState extends State<GlassNavBar> {
             size: elementHeight,
             icon: CupertinoIcons.search,
             iconColor: widget.currentIndex == 1
-                ? (isDark ? metroColor : Colors.black87)
+                ? (isDark ? systemBlue : Colors.black87)
                 : (isDark ? inactiveColor : Colors.grey.shade800),
             isActive: widget.currentIndex == 1,
             onTabSelected: widget.onTabSelected,

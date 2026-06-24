@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:ui'; // 🌟 Added for ImageFilter
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -91,8 +92,8 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
   OverlayEntry? _overlayEntry;
 
   Color get _accentColor => widget.selectedMode == 0
-      ? (widget.isDark ? const Color(0xFF00E5FF) : Colors.cyan.shade600)
-      : (widget.isDark ? const Color(0xFFFF9F0A) : Colors.orange.shade700);
+      ? CupertinoColors.systemBlue
+      : const Color(0xFFFF9F0A);
   String get _locationTerm => widget.selectedMode == 0 ? "Station" : "Stop";
 
   String _toTitleCase(String text) {
@@ -629,8 +630,8 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
         customTint, // 🌟 Safe fallback: Only uses Color, perfectly compatible!
   }) {
     final defaultTint = isReady
-        ? const Color(0xFF00E5FF).withValues(alpha: 0.18) // Deep Neon Cyan
-        : const Color(0xFFFFFFFF).withValues(alpha: 0.75); // Premium white
+        ? CupertinoColors.systemBlue.withValues(alpha: 0.15)
+        : Colors.white.withValues(alpha: 0.08); // Premium translucent dark grey
 
     return RidelLiquidButton(
       width: double.infinity,
@@ -670,9 +671,9 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
                     child: Text(
                       label,
                       style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                         fontSize: 16,
-                        color: isReady ? Colors.white : const Color(0xFF121419),
+                        color: Colors.white,
                         letterSpacing: -0.3,
                       ),
                       maxLines: 1,
@@ -683,7 +684,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
                   Icon(
                     icon,
                     size: 20,
-                    color: isReady ? Colors.white : const Color(0xFF121419),
+                    color: Colors.white,
                   ),
                 ],
               ),
@@ -1141,14 +1142,8 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
                                                             0xFF1C1F26),
                                                     shape: BoxShape.circle,
                                                     border: Border.all(
-                                                      color: isLightMode
-                                                          ? Colors.black
-                                                              .withValues(
-                                                                  alpha: 0.04)
-                                                          : Colors.white
-                                                              .withValues(
-                                                                  alpha: 0.15),
-                                                      width: 1,
+                                                      color: glassColor,
+                                                      width: 4.0,
                                                     ),
                                                     boxShadow: isLightMode
                                                         ? [

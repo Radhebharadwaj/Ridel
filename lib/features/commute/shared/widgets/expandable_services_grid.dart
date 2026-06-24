@@ -2,6 +2,7 @@
 
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 
@@ -16,7 +17,7 @@ class ServiceCardShadows {
     ),
     BoxShadow(
       color:
-          const Color(0xFF00E5FF).withValues(alpha: 0.05), // Subtle accent tint
+          CupertinoColors.systemBlue.withValues(alpha: 0.05), // Subtle accent tint
       blurRadius: 15,
       offset: const Offset(0, 10),
     ),
@@ -45,10 +46,9 @@ class _ExpandableServicesGridState extends State<ExpandableServicesGrid> {
   bool _isExpanded = false;
   double _lastHapticOffset = 0.0;
 
-  final Color _accentColor = const Color(0xFF00E5FF);
-
   @override
   Widget build(BuildContext context) {
+
     final textColor = widget.isDark ? Colors.white : Colors.black87;
     final hintColor = widget.isDark ? Colors.grey : Colors.grey.shade600;
 
@@ -206,11 +206,14 @@ class _ExpandableServicesGridState extends State<ExpandableServicesGrid> {
 
   Widget _buildServiceCard(
       Map<String, dynamic> service, Color textColor, Color hintColor) {
+    final bool isBusMode = widget.title.toLowerCase().contains('bus');
+    final Color activeAccent = isBusMode ? const Color(0xFFFF9F0A) : CupertinoColors.systemBlue;
     return _ServiceCardItem(
       service: service,
       textColor: textColor,
       hintColor: hintColor,
-      accentColor: _accentColor,
+      accentColor: activeAccent,
+      isBusMode: isBusMode,
       onTap: () => widget.onServiceTap(service['id']),
     );
   }
@@ -222,6 +225,7 @@ class _ServiceCardItem extends StatefulWidget {
   final Color textColor;
   final Color hintColor;
   final Color accentColor;
+  final bool isBusMode;
   final VoidCallback onTap;
 
   const _ServiceCardItem({
@@ -229,6 +233,7 @@ class _ServiceCardItem extends StatefulWidget {
     required this.textColor,
     required this.hintColor,
     required this.accentColor,
+    required this.isBusMode,
     required this.onTap,
   });
 
@@ -348,14 +353,27 @@ class _ServiceCardItemState extends State<_ServiceCardItem> {
                                     padding: const EdgeInsets.all(9),
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
-                                      color: isLightMode
-                                          ? Colors.black.withValues(alpha: 0.05)
-                                          : Colors.white
-                                              .withValues(alpha: 0.02),
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          widget.isBusMode ? const Color(0xFFFF9F0A).withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.15),
+                                          widget.isBusMode ? const Color(0xFFFF9F0A).withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.05),
+                                        ],
+                                      ),
                                     ),
-                                    child: Icon(widget.service['icon'],
-                                        color: const Color(0xFF00E5FF),
-                                        size: 19), // Refined Icon
+                                    child: Icon(
+                                      widget.service['icon'],
+                                      color: widget.accentColor,
+                                      size: 19,
+                                      shadows: const [
+                                        Shadow(
+                                          color: Colors.black45,
+                                          blurRadius: 4.0,
+                                          offset: Offset(0, 2),
+                                        ),
+                                      ],
+                                    ), // Refined Icon
                                   ),
                                   Icon(Icons.arrow_forward_ios_rounded,
                                       color: isLightMode

@@ -59,6 +59,7 @@ dependencies:
   device_info_plus: ^12.4.0
   package_info_plus: ^8.3.0
   flutter_native_splash: any
+  shimmer: ^3.0.0
   
   # --- 8. EXTRAS ---
   speech_to_text: ^7.3.0

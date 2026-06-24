@@ -9,9 +9,9 @@ extension _PremiumDetailsExt on _MapSearchSheetState {
     const sheetRadius = 32.0; // Slightly smaller radius for shrink-wrapped look
 
     final Color sheetBgColor = isDark
-        ? const Color(0xFF0B0E17).withValues(alpha: 0.80)
-        : Colors.white.withValues(alpha: 0.65);
-    const double blurAmount = 30.0;
+        ? const Color(0xFF0B0E17).withValues(alpha: 0.85)
+        : Colors.white.withValues(alpha: 0.85);
+    const double blurAmount = 35.0;
 
     return PointerInterceptor(
       child: Align(

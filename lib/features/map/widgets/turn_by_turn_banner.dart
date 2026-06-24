@@ -60,8 +60,8 @@ class _TurnByTurnBannerState extends State<TurnByTurnBanner> {
 
     // Frosted glass — exact WeatherFloatingWidget match
     final glassColor = isLight
-        ? Colors.white.withValues(alpha: 0.65)
-        : const Color(0xFF0B0E17).withValues(alpha: 0.75);
+        ? Colors.white.withValues(alpha: 0.85)
+        : const Color(0xFF0B0E17).withValues(alpha: 0.85);
 
     final borderColor = isLight
         ? Colors.white.withValues(alpha: 0.9)
@@ -145,7 +145,7 @@ class _TurnByTurnBannerState extends State<TurnByTurnBanner> {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(42),
                           child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                            filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
                             child: PointerInterceptor(
                               child: Container(
                                 decoration: BoxDecoration(

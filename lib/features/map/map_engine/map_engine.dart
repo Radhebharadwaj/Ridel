@@ -137,20 +137,28 @@ class MapEngine {
     };
 
     try {
-      // 🚀 Load and Add Custom Navigation Puck and Pin Images
+      Future<void> safeAddEngineImage(String? id, Uint8List bytes) async {
+        if (id == null || id.trim().isEmpty) return;
+        try {
+          await controller.addImage(id, bytes);
+        } catch (e) {
+          debugPrint("SafeAddImage error: $e");
+        }
+      }
+
       try {
         final Uint8List puckBytes = await MapProvider.loadAndResizeImage('assets/images/nav_puck.png', 36);
-        await controller.addImage('nav_puck', puckBytes);
+        await safeAddEngineImage('nav_puck', puckBytes);
       } catch (_) {}
 
       try {
         final Uint8List pinBytes = await MapProvider.loadAndResizeImage('assets/images/custom_pin.png', 36);
-        await controller.addImage('custom_pin', pinBytes);
+        await safeAddEngineImage('custom_pin', pinBytes);
       } catch (_) {}
 
       try {
         final Uint8List yellowPinBytes = await MapProvider.loadAndResizeImage('assets/images/add_places.png', 32);
-        await controller.addImage('intermediate_pin', yellowPinBytes);
+        await safeAddEngineImage('intermediate_pin', yellowPinBytes);
       } catch (_) {}
 
       try {
@@ -160,7 +168,7 @@ class MapEngine {
           84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73,
           69, 78, 68, 174, 66, 96, 130
         ]);
-        await controller.addImage('Arrow', transparentPixel);
+        await safeAddEngineImage('Arrow', transparentPixel);
       } catch (_) {}
 
       // 🚀 Init GeoJsonSource and SymbolLayer for 3D Puck

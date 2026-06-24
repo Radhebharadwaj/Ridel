@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:ridel/core/widgets/ridel_glass.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
@@ -103,7 +104,7 @@ class RidelGlassDropdown {
                                       ),
                                       if (isSelected)
                                         const Icon(Icons.check_circle_rounded,
-                                            color: Colors.cyan, size: 18),
+                                            color: CupertinoColors.systemBlue, size: 18),
                                     ],
                                   ),
                                 ),

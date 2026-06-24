@@ -155,8 +155,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     final availableHeight = MediaQuery.sizeOf(context).height -
         MediaQuery.paddingOf(context).bottom;
 
-    // 56.0 (Pill Height) + 44.0 (Bottom Margin matching Nav Pill's 20.0 position + 24.0 margin)
-    const requiredPhysicalHeight = 56.0 + 44.0;
+    // 70.0 (Pill Height) + 44.0 (Bottom Margin matching Nav Pill's 20.0 position + 24.0 margin)
+    const requiredPhysicalHeight = 70.0 + 44.0;
 
     return (requiredPhysicalHeight / availableHeight).clamp(0.05, 0.40);
   }
@@ -1090,10 +1090,10 @@ class _MapSearchSheetState extends State<MapSearchSheet>
               _selectedPlace == null &&
               !_showDirections &&
               _searchCtrl.text.isEmpty) {
-            _sheetController.jumpTo(_safeMinSize);
+            _sheetController.animateTo(_safeMinSize, duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
           } else if (!_searchFocus.hasFocus) {
             // Only jump if NOT focused. If focused, let the 500ms focus listener animateTo handle it smoothly!
-            _sheetController.jumpTo(_safeMaxSize.clamp(_safeMinSize, 1.0));
+            _sheetController.animateTo(_safeMaxSize.clamp(_safeMinSize, 1.0), duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
           }
         }
       });
@@ -1264,8 +1264,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                             : (_showDirections
                                                 ? 190.0
                                                 : (lerpDouble(
-                                                        56.0, 56.0, progress) ??
-                                                    56.0));
+                                                        70.0, 76.0, progress) ??
+                                                    70.0));
                                     // 1. Calculate how far the sheet is dragged beyond half-open
                                     final double morphFactor = (progress <=
                                             0.45)
@@ -1282,14 +1282,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                     final double currentBottomMargin =
                                         lerpDouble(44.0, 0.0, progress) ?? 44.0;
 
-                                    // Permanent 38.0 radius on all 4 corners for all states
+                                    // Permanent 35.0 radius on all 4 corners for all states
                                     final BorderRadius premiumRadius =
-                                        BorderRadius.circular(38.0);
+                                        BorderRadius.circular(35.0);
 
-                                    // 2. EXACT Weather Card Alpha (0.65 when idle, 0.95 when fully dragged)
+                                    // 2. EXACT Weather Card Alpha (0.85 when idle, 0.95 when fully dragged)
                                     final double currentAlpha =
-                                        lerpDouble(0.65, 0.95, morphFactor) ??
-                                            0.65;
+                                        lerpDouble(0.85, 0.95, morphFactor) ??
+                                            0.85;
 
                                     // 3. EXACT Weather Card Base Colors (0xFF0B0E17 for dark mode)
                                     final Color sheetBgColor = isDark
@@ -1394,8 +1394,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                           // CRITICAL: THE BLUR ITSELF
                                                           filter:
                                                               ImageFilter.blur(
-                                                                  sigmaX: 12.0,
-                                                                  sigmaY: 12.0),
+                                                                  sigmaX: 35.0,
+                                                                  sigmaY: 35.0),
                                                           child: Container(
                                                             // INNER CONTAINER: TRANSLUCENT COLOR & BORDER ONLY
                                                             decoration:
@@ -1452,9 +1452,24 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                             opacity: (!provider.isActiveNavigation && progress > 0.05)
                                                                                 ? 1.0
                                                                                 : 0.0,
-                                                                            child: (!provider.isActiveNavigation && progress > 0.05)
-                                                                                ? _buildSheetContent(isDark, progress, isExpanded: isKeyboardOpen)
-                                                                                : const SizedBox(),
+                                                                            child: AnimatedSwitcher(
+                                                                              duration: const Duration(milliseconds: 300),
+                                                                              transitionBuilder: (Widget child, Animation<double> animation) {
+                                                                                return FadeTransition(
+                                                                                  opacity: animation,
+                                                                                  child: SlideTransition(
+                                                                                    position: Tween<Offset>(
+                                                                                      begin: const Offset(0.0, 0.05),
+                                                                                      end: Offset.zero,
+                                                                                    ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+                                                                                    child: child,
+                                                                                  ),
+                                                                                );
+                                                                              },
+                                                                              child: (!provider.isActiveNavigation && progress > 0.05)
+                                                                                  ? _buildSheetContent(isDark, progress, isExpanded: isKeyboardOpen)
+                                                                                  : const SizedBox.shrink(),
+                                                                            ),
                                                                           ),
                                                                         ),
                                                                         SliverPadding(
@@ -1520,7 +1535,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                     ),
                                                   ),
                                                   Positioned(
-                                                    top: -8,
+                                                    top: -7.5,
                                                     left: 0,
                                                     right: 0,
                                                     child:

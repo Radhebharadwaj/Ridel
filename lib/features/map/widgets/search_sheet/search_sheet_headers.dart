@@ -63,8 +63,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
         : Colors.black.withValues(alpha: 0.06);
 
     final Color sheetBgColor = isDark
-        ? const Color(0xFF0B0E17).withValues(alpha: 0.80)
-        : Colors.white.withValues(alpha: 0.65);
+        ? const Color(0xFF0B0E17).withValues(alpha: 0.85)
+        : Colors.white.withValues(alpha: 0.85);
 
     return PointerInterceptor(
       child: SafeArea(
@@ -77,7 +77,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(36),
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 30.0, sigmaY: 30.0),
+                  filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
                   child: Container(
                     width: MediaQuery.sizeOf(context).width - 32,
                     constraints: BoxConstraints(
@@ -1083,32 +1083,27 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
   Widget _buildSearchHeader(double headerHeight, double progress, bool isDark) {
     final isDesktop = MediaQuery.of(context).size.width > 600;
     final pillBaseColor = isDark
-        ? Colors.black.withValues(alpha: 0.4)
-        : Colors.white.withValues(alpha: 0.9);
+        ? Colors.black.withValues(alpha: 0.85)
+        : Colors.white.withValues(alpha: 0.85);
     final borderColor = Colors.white.withValues(alpha: 0.05);
 
-    final horizontalPadding = lerpDouble(8.0, 24.0, progress) ?? 8.0;
     final dynamicRadius = lerpDouble(100.0, 20.0, progress) ?? 100.0;
+    // MATHEMATICALLY EQUAL RIM: 11px padding on all 4 sides ensures the 48px inner pill is perfectly centered in the 70px outer capsule
+    const uniformPadding = 11.0;
 
-    // Strictly equal vertical margins previously, now reduced bottom by 2.0 to stretch down
-    final topPadding = lerpDouble(7.0, 12.0, progress) ?? 7.0;
-    final bottomPadding = lerpDouble(5.0, 4.0, progress) ?? 5.0;
-
-    return SizedBox(
+    return ConstrainedBox(
       key: const ValueKey('search_header'),
-      height: headerHeight,
-      child: Padding(
-        padding: EdgeInsets.only(
-            top: topPadding,
-            bottom: bottomPadding,
-            left: horizontalPadding,
-            right: horizontalPadding),
+      constraints: const BoxConstraints(minHeight: 70.0),
+      child: SizedBox(
+        height: headerHeight,
+        child: Padding(
+        padding: const EdgeInsets.all(uniformPadding),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(dynamicRadius),
           // 🚀 FIX: Wrapped BackdropFilter in RepaintBoundary to prevent extreme frame drops during animations
           child: RepaintBoundary(
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+              filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
               child: Container(
                 alignment: Alignment.center,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1325,6 +1320,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

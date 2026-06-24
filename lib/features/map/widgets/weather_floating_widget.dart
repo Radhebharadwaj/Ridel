@@ -12,7 +12,7 @@ import 'package:ridel/features/map/services/weather_cache_service.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 import 'package:intl/intl.dart';
-import 'package:ridel/core/widgets/branded_loader.dart';
+import 'package:shimmer/shimmer.dart';
 
 enum WeatherState { compact, expanded, full }
 
@@ -398,8 +398,8 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
     final bool isDragging = _dragHeight != null;
     final glassColor = isLightMode
-        ? Colors.white.withValues(alpha: isDragging ? 0.95 : 0.65)
-        : const Color(0xFF0B0E17).withValues(alpha: isDragging ? 0.95 : 0.65);
+        ? Colors.white.withValues(alpha: isDragging ? 0.95 : 0.85)
+        : const Color(0xFF0B0E17).withValues(alpha: isDragging ? 0.95 : 0.85);
 
     final borderColor = isLightMode
         ? Colors.white.withValues(alpha: 0.9)
@@ -461,7 +461,7 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(24),
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                      filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
                       child: Container(
                         decoration: BoxDecoration(
                           color: glassColor,
@@ -470,7 +470,36 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                         ),
                         child: Center(
                             child: _isLoading
-                                ? const BrandedLoader(isFullScreen: false)
+                                ? Shimmer.fromColors(
+                                    baseColor: isLightMode
+                                        ? Colors.black12
+                                        : Colors.white.withValues(alpha: 0.2),
+                                    highlightColor: isLightMode
+                                        ? Colors.black26
+                                        : Colors.white.withValues(alpha: 0.4),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Container(
+                                          width: 24,
+                                          height: 24,
+                                          decoration: const BoxDecoration(
+                                            color: Colors.white,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          width: 40,
+                                          height: 12,
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
                                 : Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
@@ -547,7 +576,7 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(currentRadius),
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                      filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
                       child: Container(
                         decoration: BoxDecoration(
                           color: glassColor,

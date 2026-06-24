@@ -769,9 +769,27 @@ class _SavedPlaceChip extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: CupertinoColors.systemBlue.withValues(alpha: 0.12),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.15),
+                  Colors.white.withValues(alpha: 0.05),
+                ],
+              ),
             ),
-            child: Icon(icon, size: 30.0, color: iconColor),
+            child: Icon(
+              icon, 
+              size: 30.0, 
+              color: iconColor,
+              shadows: const [
+                Shadow(
+                  color: Colors.black45,
+                  blurRadius: 4.0,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 8.0),
           Text(
