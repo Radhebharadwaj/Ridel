@@ -9,8 +9,9 @@ import 'package:ridel/core/utils/ridel_bounce_button.dart';
 
 class FacilitiesSheetContent extends StatefulWidget {
   final RouteResult routeData;
+  final String? initialStationId;
 
-  const FacilitiesSheetContent({super.key, required this.routeData});
+  const FacilitiesSheetContent({super.key, required this.routeData, this.initialStationId});
 
   @override
   State<FacilitiesSheetContent> createState() => _FacilitiesSheetContentState();
@@ -31,6 +32,11 @@ class _FacilitiesSheetContentState extends State<FacilitiesSheetContent>
   void initState() {
     super.initState();
     _extractKeyStations();
+    
+    if (widget.initialStationId != null) {
+      _selectedStationId = widget.initialStationId!;
+    }
+    
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
@@ -151,14 +157,12 @@ class _FacilitiesSheetContentState extends State<FacilitiesSheetContent>
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.transparent, // Keeps the empty area draggable
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(height: 16), // Extra breathing room from the header
-          _buildCustomPillSwitcher(),
-          const SizedBox(height: 10),
+          const SizedBox(height: 85), // Header Overlap Fix - matched RidelSheet header height
           _buildCategoryTabs(),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
@@ -200,84 +204,6 @@ class _FacilitiesSheetContentState extends State<FacilitiesSheetContent>
     }
   }
 
-  // 🚀 CUSTOM PILL SWITCHER: 100% Perfect Rounded Capsule Shape
-  Widget _buildCustomPillSwitcher() {
-    final isLightMode = Theme.of(context).brightness == Brightness.light;
-    if (_keyStations.isEmpty) return const SizedBox.shrink();
-    final isFirstSelected = _selectedStationId == _keyStations.first['id'];
-
-    return Container(
-      height: 46,
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: BoxDecoration(
-        color: isLightMode ? Colors.black.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.04), // Matte outer body
-        borderRadius: BorderRadius.circular(100), // Perfect Pill
-        border: Border.all(color: isLightMode ? Colors.black.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.05)),
-      ),
-      child: Stack(
-        children: [
-          // Animated inner thumb (Pill Shape)
-          AnimatedAlign(
-            alignment:
-                isFirstSelected ? Alignment.centerLeft : Alignment.centerRight,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-            child: FractionallySizedBox(
-              widthFactor: 0.5,
-              child: Container(
-                margin: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: isLightMode ? Colors.white : Colors.white.withValues(alpha: 0.12), // Sleek active background
-                  borderRadius: BorderRadius.circular(100), // Perfect Pill Thumb
-                  boxShadow: [
-                    BoxShadow(
-                        color: isLightMode ? Colors.black.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2))
-                  ],
-                ),
-              ),
-            ),
-          ),
-          // Interactive Text
-          Row(
-            children: _keyStations.map((station) {
-              final isSelected = _selectedStationId == station['id'];
-              return Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    if (!isSelected) {
-                      AppHaptics.selectionClick();
-                      _loadDataForStation(station['id']);
-                    }
-                  },
-                  child: Center(
-                    child: AnimatedDefaultTextStyle(
-                      duration: const Duration(milliseconds: 200),
-                      style: GoogleFonts.inter(
-                        color: isSelected 
-                            ? (isLightMode ? Colors.black87 : Colors.white) 
-                            : (isLightMode ? Colors.black54 : Colors.white54),
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                        fontSize: 13,
-                        letterSpacing: -0.2,
-                      ),
-                      child: Text(
-                        _toTitleCase(station['name']),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildCategoryTabs() {
     final isLightMode = Theme.of(context).brightness == Brightness.light;

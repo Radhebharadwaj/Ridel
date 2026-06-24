@@ -567,8 +567,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
           if (!mounted) return;
 
           if (result != null && result.path.isNotEmpty) {
-            Navigator.push(
-                context,
+            Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(
                     builder: (context) => RouteResultScreen(
                         fromStation: _fromCtrl.text,
@@ -584,8 +583,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
           if (!mounted) return;
 
           if (result != null && result.path.isNotEmpty) {
-            Navigator.push(
-                context,
+            Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(
                     builder: (context) => RouteResultScreen(
                           fromStation: _fromCtrl.text,

@@ -21,15 +21,21 @@ import 'package:ridel/core/utils/ridel_bounce_button.dart';
 import 'package:ridel/core/widgets/ridel_liquid_button.dart';
 
 class AppHeader extends StatefulWidget {
+  final Widget? leadingWidget;
   final Widget? actionWidget;
   final bool showProfile;
   final bool isScrolled;
+  final bool isRouteMode;
+  final VoidCallback? onBack;
 
   const AppHeader({
     super.key,
+    this.leadingWidget,
     this.actionWidget,
     this.showProfile = true,
     this.isScrolled = false,
+    this.isRouteMode = false,
+    this.onBack,
   });
 
   @override
@@ -46,12 +52,50 @@ class _AppHeaderState extends State<AppHeader> {
     'Turn Off'
   ];
 
+  double _headerScale = 1.0;
+  bool _isRouteModeActive = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initLocation();
+      if (widget.isRouteMode) {
+        setState(() => _isRouteModeActive = true);
+        _triggerSqueezeAnimation();
+      }
     });
+  }
+
+  @override
+  void didUpdateWidget(AppHeader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isRouteMode != oldWidget.isRouteMode) {
+      setState(() => _isRouteModeActive = widget.isRouteMode);
+      _triggerSqueezeAnimation();
+    }
+  }
+
+  void _triggerSqueezeAnimation() {
+    setState(() => _headerScale = 0.92); // Thoda soft squeeze 0.9 ki jagah
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) {
+        setState(() => _headerScale = 1.0);
+      }
+    });
+  }
+
+  void _handleBackTap() {
+    if (widget.isRouteMode && widget.onBack != null) {
+      AppHaptics.lightImpact();
+      _triggerSqueezeAnimation();
+      setState(() => _isRouteModeActive = false);
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          widget.onBack!();
+        }
+      });
+    }
   }
 
   Future<void> _initLocation() async {
@@ -146,20 +190,20 @@ class _AppHeaderState extends State<AppHeader> {
               ]
             : null,
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: SizedBox(
+        height: 60.0,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
             child: ValueListenableBuilder<String>(
               valueListenable:
                   context.read<GlobalLocationService>().currentCityName,
               builder: (context, cityName, child) {
-                // Determine the primary display city from GlobalLocationService
                 String displayCity =
                     cityName.isNotEmpty ? cityName : "Detecting...";
 
-                // Title Case
                 displayCity = displayCity.split(' ').map((word) {
                   return word.isEmpty
                       ? ""
@@ -215,35 +259,69 @@ class _AppHeaderState extends State<AppHeader> {
                             ),
                           ),
                         )
-                      : Align(
-                          alignment: Alignment.centerLeft,
+                      : Row(
                           key: const ValueKey("normal_title"),
-                          child: GestureDetector(
-                            onTap: _openCitySelector,
-                            onLongPress: () {
-                              AppHaptics.heavyImpact();
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const AdminBroadcastScreen(),
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          children: [
+                            // Back Button (Choreographed via Width & Opacity)
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 500),
+                              curve: Curves.fastOutSlowIn,
+                              width: _isRouteModeActive ? 45.0 : 0.0,
+                              clipBehavior: Clip.hardEdge,
+                              decoration: const BoxDecoration(), // Required to enable clipping
+                              child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 400),
+                                curve: Curves.fastOutSlowIn,
+                                opacity: _isRouteModeActive ? 1.0 : 0.0,
+                                child: GestureDetector(
+                                  onTap: _handleBackTap,
+                                  behavior: HitTestBehavior.opaque,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    widthFactor: 1.0,
+                                    child: SizedBox(
+                                      width: 45.0,
+                                      height: 60.0,
+                                      child: Icon(
+                                        Icons.arrow_back_ios_new_rounded,
+                                        size: 26,
+                                        color: textColor,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              );
-                            },
-                            behavior: HitTestBehavior.opaque,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Flexible(
+                              ),
+                            ),
+                            // Text (Pushed naturally by the Back Button)
+                            Flexible(
+                              child: AnimatedScale(
+                                duration: const Duration(milliseconds: 500),
+                                scale: _headerScale,
+                                curve: Curves.fastOutSlowIn,
+                                alignment: Alignment.centerLeft,
+                                child: GestureDetector(
+                                  onTap: _openCitySelector,
+                                  onLongPress: () {
+                                    AppHaptics.heavyImpact();
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            const AdminBroadcastScreen(),
+                                      ),
+                                    );
+                                  },
+                                  behavior: HitTestBehavior.opaque,
                                   child: Text(
                                     displayTitle,
                                     textAlign: TextAlign.left,
                                     style: GoogleFonts.inter(
                                       fontSize: isFake ? 22 : 32,
                                       fontWeight: FontWeight.w800,
-                                      color:
-                                          isFake ? Colors.redAccent : textColor,
+                                      color: isFake
+                                          ? Colors.redAccent
+                                          : textColor,
                                       letterSpacing: -1.0,
                                       height: 1.0,
                                     ),
@@ -251,23 +329,31 @@ class _AppHeaderState extends State<AppHeader> {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                 );
               },
             ),
           ),
-          Flexible(
+          Align(
+            alignment: Alignment.centerRight,
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-
-                  if (widget.actionWidget != null) widget.actionWidget!,
-                  if (widget.showProfile && widget.actionWidget == null)
+                  if (widget.actionWidget != null) ...[
+                    AnimatedOpacity(
+                      duration: const Duration(milliseconds: 500),
+                      curve: Curves.fastOutSlowIn,
+                      opacity: _isRouteModeActive ? 1.0 : 0.0,
+                      child: widget.actionWidget!,
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  if (widget.showProfile)
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onLongPress: _showNotificationSettings,
@@ -304,9 +390,10 @@ class _AppHeaderState extends State<AppHeader> {
                                       child: ValueListenableBuilder<int>(
                                         valueListenable: globalTransportMode,
                                         builder: (context, transportMode, _) {
-                                          final Color activeAccent = transportMode == 1
-                                              ? const Color(0xFFFF9F0A)
-                                              : CupertinoColors.systemBlue;
+                                          final Color activeAccent =
+                                              transportMode == 1
+                                                  ? const Color(0xFFFF9F0A)
+                                                  : CupertinoColors.systemBlue;
                                           return Container(
                                             width: 10,
                                             height: 10,
@@ -339,6 +426,7 @@ class _AppHeaderState extends State<AppHeader> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

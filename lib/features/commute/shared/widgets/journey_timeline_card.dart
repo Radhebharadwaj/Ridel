@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
-import 'package:ridel/core/utils/ridel_bounce_button.dart';
+import 'package:ridel/core/utils/app_shadows.dart';
+import 'package:ridel/core/widgets/ridel_liquid_button.dart';
 import 'package:ridel/features/commute/shared/models/route_models.dart';
 
 import 'package:ridel/features/commute/shared/widgets/smart_ticketing_overlay.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 
 class JourneyTimelineCard extends StatefulWidget {
@@ -69,22 +72,32 @@ class _JourneyTimelineCardState extends State<JourneyTimelineCard> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: isLightMode ? Colors.white : const Color(0xFF151517), // True dark premium matte background
-        borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: isLightMode ? Colors.black.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.05)),
-        boxShadow: [
-          isLightMode 
-            ? BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              )
-            : BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 30,
-                offset: const Offset(0, 10),
-              ),
-        ],
+        color: isLightMode
+            ? Colors.white.withValues(alpha: 0.90)
+            : const Color(0xFF161A25).withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(35),
+        border: Border.all(
+          color: isLightMode
+              ? Colors.black.withValues(alpha: 0.04)
+              : Colors.white.withValues(alpha: 0.12),
+          width: 1.0,
+        ),
+        boxShadow: isLightMode
+            ? [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8))
+              ]
+            : [
+                ...AppShadows.cardFloating,
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.8),
+                  blurRadius: 40,
+                  spreadRadius: 8,
+                  offset: const Offset(0, 15),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -127,6 +140,8 @@ class _JourneyTimelineCardState extends State<JourneyTimelineCard> {
           // Timeline
           _buildTimeline(),
           
+
+
           // CTA Button
           const SizedBox(height: 12),
           _buildBookTicketCTA(),
@@ -260,23 +275,28 @@ class _JourneyTimelineCardState extends State<JourneyTimelineCard> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Glowing Dot
-        Container(
-          width: 16,
-          height: 16,
-          decoration: BoxDecoration(
-            color: isInterchange ? Colors.white : (isLightMode ? Colors.white : const Color(0xFF151517)),
-            shape: BoxShape.circle,
-            border: Border.all(color: color, width: isInterchange ? 4 : 2), // Thin border for regular stops
-            boxShadow: [
-              BoxShadow(
-                color: color.withValues(alpha: 0.4), // Muted shadow to avoid screaming neon
-                blurRadius: 8,
-              )
-            ],
+        // Glowing Dot (Perfectly centered in 24px column)
+        SizedBox(
+          width: 24,
+          child: Center(
+            child: Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                color: isInterchange ? Colors.white : (isLightMode ? Colors.white : const Color(0xFF151517)),
+                shape: BoxShape.circle,
+                border: Border.all(color: color, width: isInterchange ? 4 : 2), // Thin border for regular stops
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.4), // Muted shadow to avoid screaming neon
+                    blurRadius: 8,
+                  )
+                ],
+              ),
+            ),
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 8),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,39 +334,42 @@ class _JourneyTimelineCardState extends State<JourneyTimelineCard> {
     final isExpanded = _expandedSegments.contains(id);
     final isZeroStops = intermediates.isEmpty;
 
-    return Container(
-      // 16px dot width / 2 = 8px center.
-      // 7px margin + 2px border width / 2 = 8px center. Perfectly aligned continuous line!
-      margin: const EdgeInsets.only(left: 7),
-      padding: const EdgeInsets.only(left: 23, top: 12, bottom: 12),
-      decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(color: color, width: 2), // Thin 2px continuous line
-        ),
-      ),
-      child: isZeroStops
-          ? Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(width: 24), // 16px icon + 8px spacing
-                  Flexible(
-                    child: Text(
-                      'Next station on $lineName',
-                      style: GoogleFonts.inter(
-                        color: color,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 24,
+            child: Center(
+              child: Container(
+                width: 2,
+                color: color,
               ),
-            )
-          : Column(
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: isZeroStops
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Next station on $lineName',
+                            style: GoogleFonts.inter(
+                              color: color,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // NAKED INLINE TEXT (No heavy background wrappers)
@@ -433,8 +456,12 @@ class _JourneyTimelineCardState extends State<JourneyTimelineCard> {
                 ),
               ],
             ),
-    );
-  }
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildMicroBadge(String text, Color color) {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
@@ -462,16 +489,16 @@ class _JourneyTimelineCardState extends State<JourneyTimelineCard> {
     );
   }
 
-  Widget _buildBookTicketCTA() {
-    final isLightMode = Theme.of(context).brightness == Brightness.light;
 
+
+  Widget _buildBookTicketCTA() {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(top: 24),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: RidelBounceButton(
-          scaleFactor: 0.95,
+      child: SizedBox(
+        height: 56,
+        child: RidelLiquidButton(
+          glassTint: CupertinoColors.systemBlue.withValues(alpha: 0.15),
           onTap: () async {
             AppHaptics.selectionClick();
             final result = await showSmartTicketingOverlay(context, isBus: !widget.isMetro);
@@ -487,35 +514,21 @@ class _JourneyTimelineCardState extends State<JourneyTimelineCard> {
               }
             }
           },
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 32),
-            decoration: BoxDecoration(
-              color: isLightMode ? Colors.cyan.withValues(alpha: 0.1) : const Color(0xFF00E5FF).withValues(alpha: 0.1), // Translucent cyan background
-              borderRadius: BorderRadius.circular(100),
-              border: Border.all(color: isLightMode ? Colors.cyan.withValues(alpha: 0.4) : const Color(0xFF00E5FF).withValues(alpha: 0.4), width: 1.5), 
-              boxShadow: [
-                BoxShadow(
-                  color: isLightMode ? Colors.cyan.withValues(alpha: 0.05) : const Color(0xFF00E5FF).withValues(alpha: 0.05),
-                  blurRadius: 20,
-                )
-              ]
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.qr_code_scanner_rounded, color: isLightMode ? Colors.cyan.shade600 : const Color(0xFF00E5FF), size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Book Ticket • ₹${widget.routeData.totalFare}',
-                  style: GoogleFonts.inter(
-                    color: isLightMode ? Colors.cyan.shade700 : const Color(0xFF00E5FF),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.2,
-                  ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.qr_code_scanner_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Book Ticket • ₹${widget.routeData.totalFare}',
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

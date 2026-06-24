@@ -182,13 +182,14 @@ class MapStyleHelper {
               id.contains('food') ||
               id.contains('restaurant') ||
               id.contains('atm');
-          if (isClutter && type != 'symbol' && !id.contains('transit'))
+          if (isClutter && type != 'symbol' && !id.contains('transit')) {
             continue;
+          }
 
           if (layer['paint'] == null || layer['paint'] is! Map) {
-            if (type == 'symbol')
+            if (type == 'symbol') {
               layer['paint'] = <String, dynamic>{};
-            else {
+            } else {
               updatedLayers.add(layer);
               continue;
             }

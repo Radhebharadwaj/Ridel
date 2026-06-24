@@ -14,6 +14,7 @@ class RidelSheet extends StatefulWidget {
   final bool showFullScreenButton;
   final bool customHeader;
   final Color? sheetColor;
+  final bool isDynamicHeight;
 
   const RidelSheet({
     super.key,
@@ -24,6 +25,7 @@ class RidelSheet extends StatefulWidget {
     this.showFullScreenButton = false,
     this.customHeader = false,
     this.sheetColor,
+    this.isDynamicHeight = false,
   });
 
   static Future<T?> show<T>(BuildContext context,
@@ -34,6 +36,8 @@ class RidelSheet extends StatefulWidget {
       bool showFullScreenButton = false,
       bool customHeader = false,
       bool enableDrag = true,
+      bool useRootNavigator = false,
+      bool isDynamicHeight = false,
       Color? sheetColor}) {
     final isDesktop = MediaQuery.of(context).size.width >= 800;
 
@@ -167,6 +171,7 @@ class RidelSheet extends StatefulWidget {
         context: context,
         isScrollControlled: true,
         useSafeArea: false,
+        useRootNavigator: useRootNavigator,
         backgroundColor: Colors.transparent,
         elevation: 0,
         enableDrag: enableDrag,
@@ -181,6 +186,7 @@ class RidelSheet extends StatefulWidget {
             showFullScreenButton: showFullScreenButton,
             customHeader: customHeader,
             sheetColor: sheetColor,
+            isDynamicHeight: isDynamicHeight,
             child: child),
       );
     }
@@ -200,7 +206,7 @@ class _RidelSheetState extends State<RidelSheet> {
 
     final double screenHeight = MediaQuery.of(context).size.height;
     final double currentHeight =
-        _isFullScreen ? screenHeight : (screenHeight * 0.85);
+        _isFullScreen ? screenHeight : (screenHeight * 0.90);
 
     final finalBgColor =
         widget.sheetColor ?? Theme.of(context).scaffoldBackgroundColor;
@@ -219,7 +225,8 @@ class _RidelSheetState extends State<RidelSheet> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 850),
       curve: Curves.easeInOutQuart,
-      height: currentHeight,
+      height: widget.isDynamicHeight ? null : currentHeight,
+      constraints: widget.isDynamicHeight ? BoxConstraints(maxHeight: screenHeight * 0.90) : null,
       decoration: BoxDecoration(
         color: finalBgColor,
         borderRadius:

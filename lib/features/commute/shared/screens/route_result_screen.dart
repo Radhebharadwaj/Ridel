@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:ridel/core/widgets/ridel_sheet.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as maplibre;
@@ -22,7 +22,7 @@ import 'package:ridel/features/commute/shared/widgets/route_header.dart';
 import 'package:ridel/features/commute/shared/widgets/schematic_route_map.dart';
 import 'package:ridel/main.dart';
 import 'package:url_launcher/url_launcher.dart';
-
+import 'package:ridel/core/widgets/app_header.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
 import 'package:ridel/core/widgets/ridel_liquid_button.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
@@ -58,7 +58,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
   String? _trackingError;
   StreamSubscription<Position>? _locationSubscription;
   bool _hasNotifiedArrival = false;
-  double _sheetFocusOpacity = 0.0;
+  bool _hasShownFarToast = false;
 
   bool _isPanelOpen = true;
   double _railWidth = 80.0;
@@ -95,18 +95,20 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
           closestIndex = i;
         }
       }
-      String? newError;
       double distanceFromStart = Geolocator.distanceBetween(
           userPos.latitude, userPos.longitude, path.first.lat, path.first.lon);
 
       if (_activeStationIndex == null && distanceFromStart > 3000) {
-        newError =
-            "You are too far from the starting station (${path.first.name}).";
+        if (!_hasShownFarToast) {
+          _hasShownFarToast = true;
+          if (mounted) {
+            ToastService.showInfo(context, "Navigate to starting station", title: "Route Alert");
+          }
+        }
       }
 
       if (distanceFromStart <= 200 && !_hasNotifiedArrival) {
         _hasNotifiedArrival = true;
-        newError = null;
         if (mounted) {
           Provider.of<NotificationProvider>(context, listen: false)
               .pushLocalNotification(
@@ -118,25 +120,12 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
         }
       }
 
-      if (newError == null && minDistance > 3000) {
-        newError = "You seem to have strayed off the planned route.";
-      }
-
       if (mounted) {
-        if (newError != null) {
-          if (_trackingError != newError || _activeStationIndex != null) {
-            setState(() {
-              _trackingError = newError;
-              _activeStationIndex = null;
-            });
-          }
-        } else {
-          if (_trackingError != null || _activeStationIndex != closestIndex) {
-            setState(() {
-              _trackingError = null;
-              _activeStationIndex = closestIndex;
-            });
-          }
+        if (_trackingError != null || _activeStationIndex != closestIndex) {
+          setState(() {
+            _trackingError = null;
+            _activeStationIndex = closestIndex;
+          });
         }
       }
     });
@@ -330,29 +319,51 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
     );
 
     // ==================== MOBILE CONTENT ====================
-    final double safeTopPadding = MediaQuery.of(context).padding.top;
-    final double headerClearance = safeTopPadding + 80.0;
 
-    Widget mobileContent = Stack(
-      children: [
-        // Layer 1: Background Content
-        ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Column(
-              children: [
-                SizedBox(height: headerClearance),
+    Widget mobileContent = SafeArea(
+      bottom: false,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AppHeader(
+                    showProfile: true,
+                    isRouteMode: true,
+                    onBack: () => Navigator.pop(context),
+                    actionWidget: RidelBounceButton(
+                      scaleFactor: 0.88,
+                      onTap: () {
+                        AppHaptics.lightImpact();
+                        _openDeviceMap();
+                      },
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        alignment: Alignment.centerRight,
+                        color: Colors.transparent,
+                        child: Icon(
+                          Icons.near_me_rounded,
+                          color: isDark ? Colors.white70 : Colors.black87,
+                          size: 28,
+                        ),
+                      ),
+                    ),
+                  ),
+                      const SizedBox(height: 20),
 
-                if (!widget.isMetro)
-                  Padding(
-                      padding: const EdgeInsets.only(
-                          bottom: 20, left: 20, right: 20),
-                      child: _buildPreferenceToggle()),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    children: [
+                      if (!widget.isMetro)
+                        Padding(
+                            padding: const EdgeInsets.only(bottom: 20),
+                            child: _buildPreferenceToggle()),
+                      
                       _isLoading
                           ? _buildLoadingState()
                           : _currentRouteData != null
@@ -373,175 +384,18 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
                           onOpenRidelMap: _openRidelMap,
                           onOpenDeviceMap: _openDeviceMap,
                         ),
+                        if (widget.isMetro) ...[
+                          const SizedBox(height: 20),
+                          _buildStationFacilitiesCard(),
+                        ],
                       ],
-                    ],
-                  ),
-                ),
-                const SizedBox(
-                    height: 320), // Extra space for scrubber and bottom sheet
-              ],
-            ),
-          ),
-        ),
-
-        // Layer 2: Floating Header
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: RouteHeader(
-            fromStation: _currentFrom,
-            toStation: _currentTo,
-            topPadding: safeTopPadding,
-            isScrolled: false,
-            onBack: () => Navigator.pop(context),
-            onSwap: _handleSwap,
-          ),
-        ),
-
-        // Layer 2.8: Dynamic Background Focus Blur Overlay
-        if (!_isLoading && _currentRouteData != null && widget.isMetro)
-          Positioned.fill(
-            child: IgnorePointer(
-              ignoring: _sheetFocusOpacity == 0.0,
-              child: ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(
-                    sigmaX: 10 * _sheetFocusOpacity,
-                    sigmaY: 10 * _sheetFocusOpacity,
-                  ),
-                  child: Container(
-                    color: Colors.black
-                        .withValues(alpha: _sheetFocusOpacity * 0.7),
-                  ),
+                  ],
                 ),
               ),
             ),
           ),
-
-        // Layer 3: Google Maps Style Bottom Sheet
-        if (!_isLoading && _currentRouteData != null && widget.isMetro)
-          NotificationListener<DraggableScrollableNotification>(
-            onNotification: (notification) {
-              final extent = notification.extent;
-              double newOpacity = 0.0;
-              if (extent > 0.35) {
-                newOpacity = ((extent - 0.35) / (0.90 - 0.35)).clamp(0.0, 1.0);
-              }
-              if (newOpacity != _sheetFocusOpacity) {
-                setState(() {
-                  _sheetFocusOpacity = newOpacity;
-                });
-              }
-              return true;
-            },
-            child: DraggableScrollableSheet(
-              initialChildSize: 0.35,
-              minChildSize: 0.08,
-              maxChildSize: 0.90,
-              snap: true,
-              snapSizes: const [0.08, 0.35, 0.90],
-              builder: (context, scrollController) {
-                final isDark = Theme.of(context).brightness == Brightness.dark;
-                return Container(
-                  decoration: BoxDecoration(
-                    borderRadius:
-                        const BorderRadius.vertical(top: Radius.circular(24)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 40,
-                        spreadRadius: 0,
-                        offset: const Offset(0, -10),
-                      )
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius:
-                        const BorderRadius.vertical(top: Radius.circular(24)),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.black.withValues(alpha: 0.55)
-                              : Colors.white.withValues(alpha: 0.65),
-                          borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(24)),
-                          border: Border(
-                            top: BorderSide(
-                              color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
-                              width: 1,
-                            ),
-                          ),
-                        ),
-                        child: ScrollConfiguration(
-                          behavior: ScrollConfiguration.of(context)
-                              .copyWith(scrollbars: false),
-                          child: CustomScrollView(
-                            controller: scrollController,
-                            physics: const ClampingScrollPhysics(),
-                            slivers: [
-                              SliverToBoxAdapter(
-                                child: Column(
-                                  children: [
-                                    // Drag Handle
-                                    Center(
-                                      child: Container(
-                                        margin: const EdgeInsets.only(
-                                            top: 12, bottom: 8),
-                                        width: 36,
-                                        height: 5,
-                                        decoration: BoxDecoration(
-                                          color: isDark
-                                              ? Colors.white
-                                                  .withValues(alpha: 0.3)
-                                              : Colors.black
-                                                  .withValues(alpha: 0.2),
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                        ),
-                                      ),
-                                    ),
-                                    // Peek Area Header
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 24, vertical: 8),
-                                      child: Text(
-                                        "Station Facilities",
-                                        textAlign: TextAlign.center,
-                                        style: GoogleFonts.inter(
-                                          color: isDark
-                                              ? Colors.white
-                                              : Colors.black87,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: -0.2,
-                                        ),
-                                      ),
-                                    ),
-                                    FacilitiesSheetContent(
-                                      routeData: _currentRouteData!,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SliverFillRemaining(
-                                hasScrollBody: false,
-                                child: SizedBox.shrink(),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-      ],
-    );
+        ),
+      );
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -823,6 +677,123 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
                   style: TextStyle(color: isDark ? Colors.white70 : Colors.black87))),
         ],
       ),
+    );
+  }
+  Widget _buildStationFacilitiesCard() {
+    final isLightMode = Theme.of(context).brightness == Brightness.light;
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isLightMode
+            ? Colors.white.withValues(alpha: 0.90)
+            : const Color(0xFF161A25).withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(35),
+        border: Border.all(
+          color: isLightMode
+              ? Colors.black.withValues(alpha: 0.04)
+              : Colors.white.withValues(alpha: 0.12),
+          width: 1.0,
+        ),
+        boxShadow: isLightMode
+            ? [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8))
+              ]
+            : [
+                ...AppShadows.cardFloating,
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.8),
+                  blurRadius: 40,
+                  spreadRadius: 8,
+                  offset: const Offset(0, 15),
+                ),
+              ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.elevator_rounded, color: isLightMode ? Colors.black87 : Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Station Facilities',
+                style: GoogleFonts.inter(
+                  color: isLightMode ? Colors.black87 : Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => _openFacilitiesSheet(isOrigin: true),
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: isLightMode ? Colors.black.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: isLightMode ? Colors.black.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.05)),
+                    ),
+                    child: Column(
+                      children: [
+                        Text("Origin", style: GoogleFonts.inter(fontSize: 11, color: isLightMode ? Colors.black54 : Colors.white54, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        Text(_currentFrom.split(' ').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: isLightMode ? Colors.black87 : Colors.white)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => _openFacilitiesSheet(isOrigin: false),
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: isLightMode ? Colors.black.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: isLightMode ? Colors.black.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.05)),
+                    ),
+                    child: Column(
+                      children: [
+                        Text("Destination", style: GoogleFonts.inter(fontSize: 11, color: isLightMode ? Colors.black54 : Colors.white54, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        Text(_currentTo.split(' ').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: isLightMode ? Colors.black87 : Colors.white)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          )
+        ],
+      ),
+    );
+  }
+
+  void _openFacilitiesSheet({required bool isOrigin}) {
+    AppHaptics.selectionClick();
+    if (_currentRouteData == null || _currentRouteData!.path.isEmpty) return;
+    final path = _currentRouteData!.path;
+    final stationId = isOrigin ? path.first.id : path.last.id;
+    RidelSheet.show(
+      context,
+      title: "Station Facilities",
+      showCloseButton: true,
+      useRootNavigator: true,
+      isDynamicHeight: true,
+      child: FacilitiesSheetContent(routeData: _currentRouteData!, initialStationId: stationId),
     );
   }
 }

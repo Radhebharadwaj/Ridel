@@ -1,10 +1,9 @@
-import 'dart:async';
-import 'dart:ui';
-
-import 'package:flutter/cupertino.dart'; // 🚀 Added for Compass Icon
+import 'package:flutter/cupertino.dart';
+import 'package:ridel/core/widgets/ridel_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:ridel/core/utils/app_haptics.dart'; // 🚀 Added for button feedback
+import 'package:ridel/core/utils/app_shadows.dart'; // 🚀 Import app_shadows
 import 'package:ridel/features/commute/shared/models/route_models.dart';
 
 class SchematicRouteMap extends StatefulWidget {
@@ -30,15 +29,10 @@ class SchematicRouteMap extends StatefulWidget {
   State<SchematicRouteMap> createState() => _SchematicRouteMapState();
 }
 
+
+
 class _SchematicRouteMapState extends State<SchematicRouteMap>
     with SingleTickerProviderStateMixin {
-  static const double _mapHeight = 180;
-  static const double _centerY = 80;
-  static const double _iconSize = 48;
-  static const double _iconTop = _centerY - (_iconSize / 2);
-  static const double _lineHeight = 6;
-  static const double _lineTop = _centerY - (_lineHeight / 2);
-
   late AnimationController _pulseController;
 
   @override
@@ -48,7 +42,16 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     );
-    unawaited(_pulseController.repeat(reverse: true));
+    _pulseController.repeat(reverse: true);
+  }
+
+  // 🚀 Premium Title Case Formatter
+  String _toTitleCase(String text) {
+    if (text.isEmpty) return text;
+    return text.toLowerCase().split(' ').map((word) {
+      if (word.isEmpty) return word;
+      return word[0].toUpperCase() + word.substring(1);
+    }).join(' ');
   }
 
   @override
@@ -57,145 +60,490 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
     super.dispose();
   }
 
+  void _showTimelineSheet(BuildContext context, int currentIdx, bool isLightMode) {
+    AppHaptics.mediumImpact();
+    
+    final ScrollController scrollController = ScrollController();
+    
+    // We use showModalBottomSheet with our RidelSheet directly to enforce exactly 90%
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Wrap(
+          children: [
+            RidelSheet(
+              title: "Journey Details",
+              showCloseButton: true,
+              child: RawScrollbar(
+                controller: scrollController,
+                thickness: 3.0,
+                radius: const Radius.circular(10),
+                thumbColor: isLightMode ? Colors.black26 : Colors.white24,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  controller: scrollController,
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.only(top: 90.0, left: 32, right: 32, bottom: 32),
+                  itemCount: widget.routeData.path.length,
+                itemBuilder: (context, index) {
+                  final station = widget.routeData.path[index];
+                  final isPassed = currentIdx > index;
+                  final isCurrent = currentIdx == index;
+                  final isLast = index == widget.routeData.path.length - 1;
+
+                  final textColor = isPassed 
+                      ? (isLightMode ? Colors.black38 : Colors.white38)
+                      : (isLightMode ? Colors.black87 : Colors.white);
+
+                  // Line specific color
+                  final stationColor = widget.isMetro ? station.lineColor : const Color(0xFFFF9F0A);
+
+                  // Determine Interchange
+                  bool isInterchange = false;
+                  if (index > 0 && widget.routeData.path[index].lineCode != widget.routeData.path[index - 1].lineCode) {
+                    isInterchange = true;
+                  }
+                  if (index < widget.routeData.path.length - 1 && widget.routeData.path[index].lineCode != widget.routeData.path[index + 1].lineCode) {
+                    isInterchange = true;
+                  }
+
+                  return IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Column(
+                          children: [
+                            // Node
+                            if (isCurrent)
+                              _buildPulseNode(size: 20)
+                            else if (isInterchange)
+                              Container(
+                                width: 16,
+                                height: 16,
+                                margin: const EdgeInsets.symmetric(vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isLightMode ? Colors.white : const Color(0xFF1C1C1E),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: stationColor,
+                                    width: 3,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: stationColor.withValues(alpha: 0.5),
+                                      blurRadius: 6,
+                                    )
+                                  ]
+                                ),
+                              )
+                            else
+                              Container(
+                                width: 16,
+                                height: 16,
+                                margin: const EdgeInsets.symmetric(vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isPassed ? Colors.transparent : stationColor,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isPassed ? Colors.white24 : (isLightMode ? Colors.white : const Color(0xFF1C1C1E)),
+                                    width: isPassed ? 1 : 2,
+                                  ),
+                                ),
+                              ),
+                            // Line
+                            if (!isLast)
+                              Expanded(
+                                child: Container(
+                                  width: 3,
+                                  color: isPassed ? (isLightMode ? Colors.black12 : Colors.white12) : stationColor.withValues(alpha: 0.5),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(width: 24),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 32.0, top: 0),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    _toTitleCase(station.name),
+                                    style: GoogleFonts.inter(
+                                      color: textColor,
+                                      fontSize: 16,
+                                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                if (isInterchange)
+                                  Container(
+                                    margin: const EdgeInsets.only(left: 8, top: 2),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isLightMode ? Colors.black.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      "Interchange",
+                                      style: GoogleFonts.inter(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: isLightMode ? Colors.black54 : Colors.white70,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
     if (widget.routeData.path.isEmpty) return const SizedBox();
 
-    final mapNodes = _buildSchematicNodes();
     final hasError = widget.trackingError != null;
+    final path = widget.routeData.path;
+    final originName = _toTitleCase(path.first.name);
+    final destinationName = _toTitleCase(path.last.name);
+    
+    // Calculate progress
+    final int currentIdx = widget.activeStationIndex ?? -1;
+    final double progress = path.isEmpty ? 0.0 : (currentIdx >= 0 ? currentIdx / (path.length - 1) : 0.0).clamp(0.0, 1.0);
+    
+    final activeColor = widget.isMetro ? path.first.lineColor : const Color(0xFFFF9F0A);
+    
+    // Dynamic Context Text
+    String floatingText = "";
+    if (currentIdx == -1) {
+      floatingText = "Starting Journey...";
+    } else if (currentIdx >= path.length - 1) {
+      floatingText = "Arrived at Destination";
+    } else {
+      floatingText = "Next: ${_toTitleCase(path[currentIdx + 1].name)}";
+    }
 
     return Container(
       width: double.infinity,
+      height: 140, // Fixed height for the new dynamic island layout
       decoration: BoxDecoration(
-        color: hasError ? const Color(0xFF2A0808) : (isLightMode ? Colors.white : const Color(0xFF0B0D12)),
-        borderRadius: BorderRadius.circular(32),
+        color: hasError 
+            ? const Color(0xFF2A0808) 
+            : (isLightMode
+                ? Colors.white.withValues(alpha: 0.90)
+                : const Color(0xFF161A25).withValues(alpha: 0.75)),
+        borderRadius: BorderRadius.circular(35),
         border: Border.all(
           color: hasError
               ? Colors.redAccent.withValues(alpha: 0.5)
-              : (isLightMode ? Colors.black.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.05)),
+              : (isLightMode
+                  ? Colors.black.withValues(alpha: 0.04)
+                  : Colors.white.withValues(alpha: 0.12)),
+          width: 1.0,
         ),
-        boxShadow: isLightMode
+        boxShadow: hasError 
             ? [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 12,
-                ),
-              ]
-            : [
-                BoxShadow(
-                  color: hasError
-                      ? Colors.redAccent.withValues(alpha: 0.2)
-                      : Colors.black.withValues(alpha: 0.5),
+                  color: Colors.redAccent.withValues(alpha: 0.2),
                   blurRadius: 30,
                   offset: const Offset(0, 15),
-                ),
-              ],
+                )
+              ]
+            : (isLightMode
+                ? [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8))
+                  ]
+                : [
+                    ...AppShadows.cardFloating,
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.8),
+                      blurRadius: 40,
+                      spreadRadius: 8,
+                      offset: const Offset(0, 15),
+                    ),
+                  ]),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(32),
-        child: Stack(
-          children: [
-            if (!isLightMode)
-              Positioned(
-                top: -60,
-                left: -40,
-                child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
-                  child: Container(
-                    width: 180,
-                    height: 180,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: (widget.isMetro
-                              ? widget.routeData.path.first.lineColor
-                              : const Color(0xFFFF9F0A))
-                          .withValues(alpha: 0.25),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(35),
+          onTap: () {
+            if (!hasError) {
+              _showTimelineSheet(context, currentIdx, isLightMode);
+            }
+          },
+          splashColor: isLightMode ? Colors.black.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.05),
+          highlightColor: Colors.transparent,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Tap-to-Expand Pill
+              if (!hasError)
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Container(
+                      width: 32,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isLightMode ? Colors.black26 : Colors.white24,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),
+              // Main Content
+              Padding(
+                padding: const EdgeInsets.only(left: 24, right: 24, bottom: 24, top: 16),
+                child: hasError
+                    ? _buildErrorOverlay()
+                    : _buildLiveTrackerLayout(progress, activeColor, floatingText, originName, destinationName, isLightMode, path.length),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-            Center(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Opacity(
-                  opacity: hasError ? 0.2 : 1.0,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: mapNodes,
+  Widget _buildLiveTrackerLayout(double progress, Color activeColor, String floatingText, String originName, String destinationName, bool isLightMode, int totalStations) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        // Floating Context Text
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Align(
+                    alignment: Alignment.topCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 0.0), // Center at top
+                      child: Text(
+                        floatingText,
+                        style: GoogleFonts.inter(
+                          color: isLightMode ? Colors.black87 : Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        
+        // Dynamic Track
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final trackWidth = constraints.maxWidth;
+            final activeWidth = trackWidth * progress;
+            
+            return Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.centerLeft,
+              children: [
+                // Background Track
+                Container(
+                  height: 6,
+                  width: trackWidth,
+                  decoration: BoxDecoration(
+                    color: isLightMode ? Colors.black12 : Colors.white24,
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-              ),
-            ),
-
-            // 🚨 DETAILED ERROR WARNING OVERLAY WITH 2 BUTTONS
-            if (hasError)
-              Container(
-                width: double.infinity,
-                color: Colors.black.withValues(
-                  alpha: 0.4,
-                ), // Darken background to make buttons pop
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
+                
+                // Intermediate Station Dots
+                if (totalStations > 2)
+                  ...List.generate(totalStations - 2, (index) {
+                    final dotProgress = (index + 1) / (totalStations - 1);
+                    final dotPosition = trackWidth * dotProgress;
+                    final isDotPassed = progress >= dotProgress;
+                    
+                    return Positioned(
+                      left: dotPosition - 2, // center the 4px dot
+                      child: Container(
+                        width: 4,
+                        height: 4,
                         decoration: BoxDecoration(
-                          color: Colors.redAccent.withValues(alpha: 0.2),
+                          color: isDotPassed ? Colors.transparent : (isLightMode ? Colors.black26 : Colors.white),
+                          border: isDotPassed ? Border.all(color: Colors.white24, width: 1) : null,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
-                          Icons.location_off_rounded,
-                          color: Colors.redAccent,
-                          size: 28,
-                        ),
                       ),
-                      const SizedBox(height: 10),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Text(
-                          widget.trackingError!,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.inter(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            height: 1.4,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      // 🚀 NEW: Two sleek buttons for map options wrapped in FittedBox
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _buildMapButton(
-                              title: 'Ridel Maps',
-                              icon: Icons.map_rounded,
-                              onTap: widget.onOpenRidelMap,
-                            ),
-                            const SizedBox(width: 12),
-                            _buildMapButton(
-                              title: 'Device Map',
-                              icon: CupertinoIcons.compass,
-                              onTap: widget.onOpenDeviceMap,
-                            ),
-                          ],
-                        ),
-                      ),
+                    );
+                  }),
+
+                // Active Progress Track
+                Container(
+                  height: 6,
+                  width: activeWidth,
+                  decoration: BoxDecoration(
+                    color: activeColor,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: activeColor.withValues(alpha: 0.5),
+                        blurRadius: 8,
+                      )
                     ],
                   ),
                 ),
+                
+                // Live Pulsing Indicator at the tip
+                Positioned(
+                  left: activeWidth - 16, // Center the 32x32 pulse circle
+                  child: _buildPulseNode(),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 16),
+        // Origin and Destination texts
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                originName,
+                style: GoogleFonts.inter(
+                  color: isLightMode ? Colors.black54 : Colors.white54,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.left,
               ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                destinationName,
+                style: GoogleFonts.inter(
+                  color: isLightMode ? Colors.black54 : Colors.white54,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+              ),
+            ),
           ],
         ),
+      ],
+    );
+  }
+
+  Widget _buildPulseNode({double size = 32}) {
+    return AnimatedBuilder(
+      animation: _pulseController,
+      builder: (context, child) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            Opacity(
+              opacity: 0.15 + (_pulseController.value * 0.4),
+              child: Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            Container(
+              width: 8.0,
+              height: 8.0,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: Colors.white.withValues(alpha: 0.8), blurRadius: 4),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildErrorOverlay() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.redAccent.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.location_off_rounded,
+              color: Colors.redAccent,
+              size: 28,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            widget.trackingError!,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildMapButton(
+                  title: 'Ridel Maps',
+                  icon: Icons.map_rounded,
+                  onTap: widget.onOpenRidelMap,
+                ),
+                const SizedBox(width: 12),
+                _buildMapButton(
+                  title: 'Device Map',
+                  icon: CupertinoIcons.compass,
+                  onTap: widget.onOpenDeviceMap,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -232,489 +580,6 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _buildSchematicNodes() {
-    final widgets = <Widget>[];
-    final path = widget.routeData.path;
-    final currentIdx = widget.activeStationIndex ?? -1;
-
-    final startColor =
-        widget.isMetro ? path.first.lineColor : const Color(0xFFFF9F0A);
-    widgets.add(
-      _buildSourceNode(
-        path.first.name,
-        startColor,
-        nodeIndex: 0,
-        currentIdx: currentIdx,
-      ),
-    );
-
-    var i = 0;
-    while (i < path.length) {
-      final currentLine = path[i].lineCode;
-      final segmentColor =
-          widget.isMetro ? path[i].lineColor : const Color(0xFFFF9F0A);
-      var j = i + 1;
-      while (j < path.length && path[j].lineCode == currentLine) {
-        j++;
-      }
-      final isLastSegment = (j == path.length);
-
-      var intermediates = <RouteStation>[];
-      final intermediateIndices = <int>[];
-
-      if (isLastSegment) {
-        if (j - 1 > i + 1) {
-          intermediates = path.sublist(i + 1, j - 1);
-          for (var k = i + 1; k < j - 1; k++) {
-            intermediateIndices.add(k);
-          }
-        }
-      } else {
-        if (j > i + 1) {
-          intermediates = path.sublist(i + 1, j);
-          for (var k = i + 1; k < j; k++) {
-            intermediateIndices.add(k);
-          }
-        }
-      }
-
-      if (intermediates.isNotEmpty) {
-        for (var k = 0; k < intermediates.length; k++) {
-          widgets.add(
-            _buildIntermediateNode(
-              intermediates[k].name,
-              segmentColor,
-              isTop: k % 2 == 0,
-              nodeIndex: intermediateIndices[k],
-              currentIdx: currentIdx,
-            ),
-          );
-        }
-      } else {
-        final isPassed = currentIdx > i;
-        widgets.add(
-          _buildEmptyLine(
-            isPassed ? Colors.white.withValues(alpha: 0.15) : segmentColor,
-          ),
-        );
-      }
-
-      if (isLastSegment) {
-        widgets.add(
-          _buildDestinationNode(
-            path.last.name,
-            segmentColor,
-            nodeIndex: path.length - 1,
-            currentIdx: currentIdx,
-          ),
-        );
-      } else {
-        final nextColor =
-            widget.isMetro ? path[j].lineColor : const Color(0xFFFF9F0A);
-        widgets.add(
-          _buildInterchangeNode(
-            path[j].name,
-            segmentColor,
-            nextColor,
-            nodeIndex: j,
-            currentIdx: currentIdx,
-          ),
-        );
-      }
-      i = j;
-    }
-    return widgets;
-  }
-
-  // ==================== 📍 UI BUILDERS ====================
-  Widget _buildSourceNode(
-    String name,
-    Color color, {
-    required int nodeIndex,
-    required int currentIdx,
-  }) {
-    final isPassed = currentIdx > nodeIndex;
-    final isCurrent = currentIdx == nodeIndex;
-    final nodeColor = isPassed ? Colors.white.withValues(alpha: 0.2) : color;
-    return SizedBox(
-      width: 90,
-      height: _mapHeight,
-      child: Stack(
-        children: [
-          Positioned(
-            top: _lineTop,
-            left: 45,
-            right: 0,
-            child: _glowLine(nodeColor),
-          ),
-          Positioned(
-            top: _iconTop,
-            left: 21,
-            child:
-                isCurrent ? _buildLiveTracker() : _buildNeonTarget(nodeColor),
-          ),
-          Positioned(
-            top: 115,
-            left: 0,
-            right: 0,
-            child: _buildNodeText(name, isMain: true, isPassed: isPassed),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInterchangeNode(
-    String name,
-    Color incomingColor,
-    Color outgoingColor, {
-    required int nodeIndex,
-    required int currentIdx,
-  }) {
-    final isPassed = currentIdx > nodeIndex;
-    final isCurrent = currentIdx == nodeIndex;
-
-    final inColor = isPassed || isCurrent
-        ? Colors.white.withValues(alpha: 0.15)
-        : incomingColor;
-    final outColor =
-        isPassed ? Colors.white.withValues(alpha: 0.15) : outgoingColor;
-    return SizedBox(
-      width: 90,
-      height: _mapHeight,
-      child: Stack(
-        children: [
-          Positioned(
-            top: _lineTop,
-            left: 0,
-            right: 45,
-            child: _glowLine(inColor),
-          ),
-          Positioned(
-            top: _lineTop,
-            left: 45,
-            right: 0,
-            child: _glowLine(outColor),
-          ),
-          Positioned(
-            top: _iconTop,
-            left: 21,
-            child: isCurrent
-                ? _buildLiveTracker()
-                : _buildHollowRing(isPassed: isPassed),
-          ),
-          Positioned(
-            top: 115,
-            left: 0,
-            right: 0,
-            child: _buildNodeText(name, isMain: true, isPassed: isPassed),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDestinationNode(
-    String name,
-    Color incomingColor, {
-    required int nodeIndex,
-    required int currentIdx,
-  }) {
-    final isPassed = currentIdx > nodeIndex;
-    final isCurrent = currentIdx == nodeIndex;
-    final destColor = isPassed
-        ? Colors.white.withValues(alpha: 0.2)
-        : const Color(0xFFFF3B30);
-    final inColor = isPassed || isCurrent
-        ? Colors.white.withValues(alpha: 0.15)
-        : incomingColor;
-    return SizedBox(
-      width: 90,
-      height: _mapHeight,
-      child: Stack(
-        children: [
-          Positioned(
-            top: _lineTop,
-            left: 0,
-            right: 45,
-            child: _glowLine(inColor),
-          ),
-          Positioned(
-            top: _iconTop,
-            left: 21,
-            child:
-                isCurrent ? _buildLiveTracker() : _buildNeonTarget(destColor),
-          ),
-          Positioned(
-            top: 115,
-            left: 0,
-            right: 0,
-            child: _buildNodeText(name, isMain: true, isPassed: isPassed),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildIntermediateNode(
-    String name,
-    Color color, {
-    required bool isTop,
-    required int nodeIndex,
-    required int currentIdx,
-  }) {
-    final isPassed = currentIdx > nodeIndex;
-    final isCurrent = currentIdx == nodeIndex;
-    final isLightMode = Theme.of(context).brightness == Brightness.light;
-    final lineColor =
-        isPassed || isCurrent ? Colors.white.withValues(alpha: 0.15) : color;
-    return SizedBox(
-      width: 80,
-      height: _mapHeight,
-      child: Stack(
-        children: [
-          Positioned(
-            top: _lineTop,
-            left: 0,
-            right: 0,
-            child: _glowLine(lineColor),
-          ),
-          Positioned(
-            top: _centerY - (isCurrent ? 8 : 6),
-            left: isCurrent ? 32 : 34,
-            child: isCurrent
-                ? _buildSmallLiveTracker()
-                : Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: isLightMode ? Colors.white : const Color(0xFF0B0D12),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isLightMode 
-                            ? (isPassed ? Colors.black26 : Colors.black87)
-                            : (isPassed ? Colors.white24 : Colors.white),
-                        width: 2.5,
-                      ),
-                    ),
-                  ),
-          ),
-          if (isTop)
-            Positioned(
-              bottom: 110,
-              left: 0,
-              right: 0,
-              child: _buildNodeText(name, isMain: false, isPassed: isPassed),
-            ),
-          if (!isTop)
-            Positioned(
-              top: 100,
-              left: 0,
-              right: 0,
-              child: _buildNodeText(name, isMain: false, isPassed: isPassed),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyLine(Color color) {
-    return SizedBox(
-      width: 50,
-      height: _mapHeight,
-      child: Stack(
-        children: [
-          Positioned(top: _lineTop, left: 0, right: 0, child: _glowLine(color)),
-        ],
-      ),
-    );
-  }
-
-  // ==================== 📡 LIVE TRACKER WIDGETS ====================
-  Widget _buildLiveTracker() {
-    return SizedBox(
-      width: _iconSize,
-      height: _iconSize,
-      child: AnimatedBuilder(
-        animation: _pulseController,
-        builder: (context, child) {
-          return Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: _iconSize * (0.5 + (_pulseController.value * 0.5)),
-                height: _iconSize * (0.5 + (_pulseController.value * 0.5)),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.blueAccent
-                      .withValues(alpha: 1.0 - _pulseController.value),
-                ),
-              ),
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: Colors.blueAccent,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 4),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.blue.withValues(alpha: 0.8),
-                      blurRadius: 12,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildSmallLiveTracker() {
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) {
-        return Container(
-          width: 16,
-          height: 16,
-          decoration: BoxDecoration(
-            color: Colors.blueAccent,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 3),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.blue
-                    .withValues(alpha: 0.6 + (_pulseController.value * 0.4)),
-                blurRadius: 8,
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // ==================== 🎨 STYLING HELPERS ====================
-  Widget _glowLine(Color color) {
-    return Container(
-      height: _lineHeight,
-      decoration: BoxDecoration(
-        color: color,
-        boxShadow: color.a > 0.3
-            ? [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.5),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ]
-            : null,
-      ),
-    );
-  }
-
-  Widget _buildNeonTarget(Color color) {
-    return SizedBox(
-      width: _iconSize,
-      height: _iconSize,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color.withValues(alpha: 0.15),
-            ),
-          ),
-          Container(
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: color, width: 3.5),
-              boxShadow: color.a > 0.3
-                  ? [
-                      BoxShadow(
-                        color: color.withValues(alpha: 0.5),
-                        blurRadius: 10,
-                      ),
-                    ]
-                  : null,
-            ),
-          ),
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHollowRing({required bool isPassed}) {
-    final isLightMode = Theme.of(context).brightness == Brightness.light;
-    return SizedBox(
-      width: _iconSize,
-      height: _iconSize,
-      child: Center(
-        child: Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: isLightMode ? Colors.white : const Color(0xFF0B0D12),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: isLightMode
-                  ? (isPassed ? Colors.black26 : Colors.black87)
-                  : (isPassed ? Colors.white24 : Colors.white),
-              width: 4,
-            ),
-            boxShadow: isPassed
-                ? null
-                : [
-                    BoxShadow(
-                      color: Colors.white.withValues(alpha: 0.4),
-                      blurRadius: 10,
-                    ),
-                  ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNodeText(
-    String name, {
-    required bool isMain,
-    required bool isPassed,
-  }) {
-    final isLightMode = Theme.of(context).brightness == Brightness.light;
-    final textColor = isLightMode
-        ? (isPassed ? Colors.black38 : Colors.black87)
-        : (isMain ? (isPassed ? Colors.white38 : Colors.white.withValues(alpha: 0.95)) : (isPassed ? Colors.white24 : Colors.white.withValues(alpha: 0.6)));
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Text(
-        name.toUpperCase(),
-        textAlign: TextAlign.center,
-        maxLines: isMain ? 3 : 2,
-        overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.inter(
-          color: textColor,
-          fontSize: isMain ? 10 : 8.5,
-          letterSpacing: 0.5,
-          fontWeight: isMain ? FontWeight.bold : FontWeight.w600,
-          height: 1.2,
         ),
       ),
     );

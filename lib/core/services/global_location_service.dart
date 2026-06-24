@@ -248,7 +248,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     String? newCity;
     try {
       final apiKey = AppConfig.olaMapsKey;
-      if (apiKey == null || apiKey.isEmpty) throw Exception("Ola Maps API Key missing");
+      if (apiKey.isEmpty) throw Exception("Ola Maps API Key missing");
 
       final url = Uri.parse('https://api.olamaps.io/places/v1/reverse-geocode?latlng=$currentLat,$currentLng&api_key=$apiKey');
       final response = await http.get(url, headers: {'Accept': 'application/json'}).timeout(const Duration(seconds: 5));
@@ -404,7 +404,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
 
     try {
       final apiKey = AppConfig.olaMapsKey;
-      if (apiKey == null || apiKey.isEmpty) throw Exception("Ola Maps API Key missing");
+      if (apiKey.isEmpty) throw Exception("Ola Maps API Key missing");
 
       final url = Uri.parse(
           'https://api.olamaps.io/places/v1/reverse-geocode?latlng=${currentLoc.latitude},${currentLoc.longitude}&api_key=$apiKey');

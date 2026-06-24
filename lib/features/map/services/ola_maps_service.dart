@@ -7,7 +7,7 @@ class OlaMapsService {
   Future<String?> fetchCityFromOla(double lat, double lng) async {
     try {
       final apiKey = AppConfig.olaMapsKey;
-      if (apiKey == null || apiKey.isEmpty) {
+      if (apiKey.isEmpty) {
         debugPrint("Ola Maps API Key is missing");
         return null;
       }
