@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 class AppConfig {
   static String? _olaMapsKey;
 
-  static String? get olaMapsKey => _olaMapsKey;
+  static String get olaMapsKey => _olaMapsKey ?? "";
 
   static void clearSession() {
     _olaMapsKey = null;
@@ -14,23 +14,34 @@ class AppConfig {
 
   static Future<void> fetchKeys() async {
     try {
+      // ⚠️ Yahan apni ASLI secret key daal (Bina braces ke!)
+      const String secret = "{@*##!/*--GiT*@}{@*##!/*pAsSkEy*@}"; 
+      
       final response = await http.get(
         Uri.parse('https://ridel.ridel.workers.dev/get-map-key'),
-        headers: {'Admin-Secret': appSecretPasskey},
+        headers: {
+          'Admin-Secret': secret,
+          'Content-Type': 'application/json',
+        },
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data['ola_key'] != null) {
-          _olaMapsKey = data['ola_key'];
+        String fetchedKey = data['ola_key'].toString();
+        
+        // 🔥 Yahan check lagao
+        if (fetchedKey != "2" && fetchedKey.length > 5) {
+           _olaMapsKey = fetchedKey;
+           debugPrint("✅ Map Keys Fetched: $_olaMapsKey");
         } else {
-          throw Exception("Missing ola_key in response payload.");
+           _olaMapsKey = ""; // Galti se "2" load nahi hoga
+           debugPrint("❌ Invalid Key Format Received: $fetchedKey");
         }
       } else {
-        throw Exception("Failed to fetch map keys (Status ${response.statusCode})");
+        debugPrint("❌ Map Key Fetch Failed: ${response.statusCode} - ${response.body}");
       }
     } catch (e) {
-      throw Exception("CRITICAL ERROR: Map keys could not be fetched. $e");
+      debugPrint("❌ Network Exception: $e");
     }
   }
 

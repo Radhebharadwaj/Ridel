@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/core/map/map_style_helper.dart';
 import 'package:ridel/core/services/global_location_service.dart';
@@ -194,6 +195,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   }
 
   Future<void> _initMapStyle({bool updateExisting = false}) async {
+    // 🔥 Sabse pehle cache delete kar taaki naya fetch ho
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+
     if (!mounted) return;
     if (!updateExisting) {
       // Intentionally left blank, state update removed as variable was unused

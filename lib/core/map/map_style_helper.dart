@@ -37,12 +37,16 @@ class MapStyleHelper {
       {MapThemeType? themeType,
       bool showPOIs = true,
       bool show3D = false}) async {
-    final String? apiKey = AppConfig.olaMapsKey;
-
-    // 1. SECURITY & FALLBACK
-    if (apiKey == null || apiKey.trim().isEmpty) {
-      debugPrint(
-          "NETWORK FAILURE: Ola Key Missing. Rendering Fallback Esri Proxy.");
+    // Wait, kya key load hui?
+    if (AppConfig.olaMapsKey.isEmpty || AppConfig.olaMapsKey == "2") {
+       debugPrint("WAITING: Key not ready or invalid...");
+       await Future.delayed(const Duration(seconds: 1)); // Wait, retry
+    }
+    
+    final String apiKey = AppConfig.olaMapsKey;
+    // 🔥 VALIDATION: Agar key "2" hai ya khali hai, toh mat chala
+    if (apiKey.isEmpty || apiKey == "2") {
+      debugPrint("CRITICAL: Invalid API Key detected: $apiKey");
       return _getEsriFallbackStyle();
     }
 
@@ -54,12 +58,17 @@ class MapStyleHelper {
     final String styleId =
         useDark ? "default-dark-standard" : "default-light-standard";
     final String styleUrl =
-        "https://api.olamaps.io/tiles/vector/v1/styles/$styleId/style.json?api_key=$apiKey";
+        "https://api.olamaps.io/tiles/vector/v1/styles/$styleId/style.json";
+
+    // 2. Build URL manually to ensure NO "?key=" remains
+    // Split on '?' to remove any previous bad query parameters
+    final String cleanBaseUrl = styleUrl.split('?').first; 
+    final String finalUrl = "$cleanBaseUrl?api_key=$apiKey";
+    
+    debugPrint("🚀 Final Map Request URL: $finalUrl");
 
     try {
-      final response = await http
-          .get(Uri.parse(styleUrl))
-          .timeout(const Duration(seconds: 15));
+      final response = await http.get(Uri.parse(finalUrl)).timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) return _getEsriFallbackStyle();
 
       Map<String, dynamic> styleData = json.decode(response.body);
@@ -83,9 +92,15 @@ class MapStyleHelper {
             source['maxzoom'] = 16;
 
             // Inject API Key into Vector URLs
-            if (source['type'] == 'vector' && source['url'] != null) {
+            if (source['url'] != null) {
               String tileJsonUrl = source['url'].toString().split('?').first;
               source['url'] = '$tileJsonUrl?api_key=$apiKey';
+            }
+
+            // Crucial: Inject into all tile arrays if they exist
+            if (source['tiles'] != null) {
+              List tiles = source['tiles'];
+              source['tiles'] = tiles.map((t) => "${t.toString().split('?').first}?api_key=$apiKey").toList();
             }
 
             // 🚀 CLOUDFLARE SATELLITE SWAP (Only for Satellite Theme)
@@ -255,10 +270,6 @@ class MapStyleHelper {
       }
 
       String finalStyleString = json.encode(styleData);
-
-      // Ensure API keys are properly appended to all tile requests
-      finalStyleString = finalStyleString.replaceAll(
-          RegExp(r'(key|api_key)=[^&"]+'), 'api_key=$apiKey');
 
       return kIsWeb
           ? "data:application/json;charset=utf-8,${Uri.encodeComponent(finalStyleString)}"
