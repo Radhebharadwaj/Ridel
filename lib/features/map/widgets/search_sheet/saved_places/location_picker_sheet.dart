@@ -172,7 +172,7 @@ class LocationPickerController extends ChangeNotifier {
   void onCameraMove(LatLng center) {
     _pickedCoordinates = center;
     _geocodeDebounce?.cancel();
-    _geocodeDebounce = Timer(const Duration(milliseconds: 500), () {
+    _geocodeDebounce = Timer(const Duration(milliseconds: 1500), () {
       _performReverseGeocode(center);
     });
   }

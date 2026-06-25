@@ -207,55 +207,73 @@ class _FacilitiesSheetContentState extends State<FacilitiesSheetContent>
 
   Widget _buildCategoryTabs() {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
-    return SizedBox(
-      height: 50,
-      child: ShaderMask(
-        shaderCallback: (Rect bounds) {
-          return const LinearGradient(
-            colors: [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
-            stops: [0.0, 0.05, 0.95, 1.0],
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-          ).createShader(bounds);
-        },
-        blendMode: BlendMode.dstIn,
-        child: ListView.separated(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          itemCount: _availableCategories.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 24),
-          itemBuilder: (context, index) {
-            final isSelected = _activeCategoryIndex == index;
-            final category = _availableCategories[index];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (details) {
+              if (_availableCategories.isEmpty) return;
+              AppHaptics.lightImpact();
+              // Adjust dx based on the Container width, but since it takes full width of LayoutBuilder, dx is fine
+              final tabWidth = constraints.maxWidth / _availableCategories.length;
+              final index = (details.localPosition.dx / tabWidth).floor().clamp(0, _availableCategories.length - 1);
+              setState(() => _activeCategoryIndex = index);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0), // Inflate hit area
+              child: Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isLightMode ? Colors.black.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Row(
+                  children: _availableCategories.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final category = entry.value;
+                    final isSelected = _activeCategoryIndex == index;
 
-            return GestureDetector(
-              onTap: () {
-                AppHaptics.lightImpact();
-                setState(() => _activeCategoryIndex = index);
-              },
-              behavior: HitTestBehavior.translucent,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOutCubic,
-                    style: GoogleFonts.inter(
-                      color: isSelected
-                          ? (isLightMode ? Colors.black87 : Colors.white)
-                          : (isLightMode ? Colors.black38 : Colors.white.withValues(alpha: 0.35)),
-                      fontSize: isSelected ? 16 : 15,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                      letterSpacing: -0.3,
-                    ),
-                    child: Text(_toTitleCase(category['title'])),
-                  ),
-                ],
+                    return Expanded(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: isSelected 
+                              ? (isLightMode ? Colors.white : Colors.white.withValues(alpha: 0.15))
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: isSelected && isLightMode
+                              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))]
+                              : null,
+                        ),
+                        child: AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOutCubic,
+                          style: GoogleFonts.inter(
+                            color: isSelected
+                                ? (isLightMode ? Colors.black87 : Colors.white)
+                                : (isLightMode ? Colors.black54 : Colors.white54),
+                            fontSize: isSelected ? 14 : 13,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                            letterSpacing: -0.2,
+                          ),
+                          child: Text(
+                            _toTitleCase(category['title']),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
               ),
-            );
-          },
-        ),
+            ),
+          );
+        }
       ),
     );
   }
@@ -441,12 +459,12 @@ class _FacilitiesSheetContentState extends State<FacilitiesSheetContent>
   Widget _infoRow(String label, String sub, bool isOpen) {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 24),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-              margin: const EdgeInsets.only(top: 5),
+              margin: const EdgeInsets.only(top: 6),
               width: 8,
               height: 8,
               decoration: BoxDecoration(
@@ -460,15 +478,15 @@ class _FacilitiesSheetContentState extends State<FacilitiesSheetContent>
                 Text(label,
                     style: GoogleFonts.inter(
                         color: isLightMode ? Colors.black87 : Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.2)),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3)),
                 if (sub.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(sub,
                       style: GoogleFonts.inter(
-                          color: isLightMode ? Colors.black54 : Colors.white54,
-                          fontSize: 12,
+                          color: isLightMode ? Colors.black54 : Colors.white70,
+                          fontSize: 14,
                           fontWeight: FontWeight.w400,
                           height: 1.4)),
                 ]
@@ -496,13 +514,18 @@ class _FacilitiesSheetContentState extends State<FacilitiesSheetContent>
   Widget _simpleRow(String title, String sub) {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 24),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 6.0),
-            child: Icon(Icons.circle, color: isLightMode ? Colors.black26 : Colors.white24, size: 6),
+          Container(
+            margin: const EdgeInsets.only(top: 6),
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: isLightMode ? Colors.black26 : Colors.white24,
+              shape: BoxShape.circle,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -512,15 +535,15 @@ class _FacilitiesSheetContentState extends State<FacilitiesSheetContent>
                 Text(title,
                     style: GoogleFonts.inter(
                         color: isLightMode ? Colors.black87 : Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.2)),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3)),
                 if (sub.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(sub,
                       style: GoogleFonts.inter(
-                          color: isLightMode ? Colors.black54 : Colors.white54,
-                          fontSize: 12,
+                          color: isLightMode ? Colors.black54 : Colors.white70,
+                          fontSize: 14,
                           fontWeight: FontWeight.w400,
                           height: 1.4)),
                 ]

@@ -18,7 +18,6 @@ import 'package:ridel/features/commute/shared/screens/route_result_screen.dart';
 import 'package:ridel/features/commute/shared/services/database_helper.dart';
 import 'package:ridel/features/commute/shared/widgets/station_selector_sheet.dart';
 import 'package:ridel/core/widgets/ridel_liquid_button.dart'; // 🚀 MASTER BUTTON IMPORT
-import 'package:ridel/core/widgets/ridel_premium_loader.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/core/providers/app_navigation_provider.dart';
@@ -738,8 +737,14 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              RidelPremiumLoader(
-                  size: 28, isDark: widget.isDark, primaryColor: _accentColor),
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: _accentColor,
+                ),
+              ),
               const SizedBox(width: 16),
               Flexible(
                 child: Text(

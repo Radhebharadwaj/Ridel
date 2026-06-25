@@ -211,8 +211,8 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     debugPrint("Refreshing global city...");
+    _lastCityGeocodedPosition = newPos; // 🚀 FIX: Assign IMMEDIATELY to prevent overlap queues
     await resolveCityName(newPos.latitude, newPos.longitude);
-    _lastCityGeocodedPosition = newPos;
   }
 
   String _sanitizeCityName(String rawName) {
@@ -387,9 +387,11 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
   // ==========================================
   // 🚀 EFFICIENT ADDRESS CACHING FOR ORIGIN
   // ==========================================
+  bool _isFetchingAddress = false;
+
   Future<void> fetchCurrentAddressIfNeeded() async {
     final Position? currentLoc = currentPositionNotifier.value;
-    if (currentLoc == null) return;
+    if (currentLoc == null || _isFetchingAddress) return;
 
     // If we already have an address AND the user hasn't moved more than 50 meters, skip API call!
     if (_currentAddressName != null && _lastAddressGeocodedPosition != null) {
@@ -401,6 +403,9 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
         return; // Use cached address
       }
     }
+
+    _isFetchingAddress = true;
+    _lastAddressGeocodedPosition = currentLoc; // Assign early to avoid queue overlapping
 
     try {
       final apiKey = AppConfig.olaMapsKey;
@@ -419,7 +424,6 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           final result = data['results'][0];
           
           _currentAddressName = result['formatted_address'] ?? result['name'] ?? _currentCity;
-          _lastAddressGeocodedPosition = currentLoc;
           notifyListeners();
         } else {
           throw Exception("Empty results in Ola Maps response");
@@ -431,8 +435,9 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
       debugPrint("Ola Maps Geocoding Failed: $e");
       // 🚨 FALLBACK: Show exact coordinates if API fails
       _currentAddressName = "${currentLoc.latitude.toStringAsFixed(5)}, ${currentLoc.longitude.toStringAsFixed(5)}";
-      _lastAddressGeocodedPosition = currentLoc;
       notifyListeners();
+    } finally {
+      _isFetchingAddress = false;
     }
   }
 

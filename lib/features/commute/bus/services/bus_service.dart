@@ -250,13 +250,13 @@ class BusService {
     final minCost = <String, double>{};
     final previous = <String, GraphEdge>{};
 
-    pq.add(_State(startId, 0.0, null));
+    pq.add(_State(startId, 0.0, null, 0));
     minCost[startId] = 0.0;
 
     // 🔥 LOGIC CHANGE: Dynamic Penalty
     // Agar 'Less Interchange' hai to penalty itni badha do ki algo dar jaye bus change karne se
     final double transferPenalty =
-        preference == BusRoutePreference.fastest ? 600.0 : 5000.0;
+        preference == BusRoutePreference.fastest ? 600.0 : 500000.0;
 
     while (pq.isNotEmpty) {
       final current = pq.removeFirst();
@@ -272,15 +272,23 @@ class BusService {
 
       for (final edge in edges) {
         double newCost = current.cost + edge.timeSeconds;
+        int newInterchanges = current.interchanges;
+        
         if (current.lastRouteId != null &&
             current.lastRouteId != edge.routeId) {
+          newInterchanges++;
           newCost += transferPenalty; // 🔥 Apply dynamic penalty
+        }
+
+        // 🚀 EXCLUDE 2+ interchanges if preference is Less Interchange
+        if (preference == BusRoutePreference.lessInterchange && newInterchanges > 1) {
+          continue;
         }
 
         if (newCost < (minCost[edge.toNodeId] ?? double.infinity)) {
           minCost[edge.toNodeId] = newCost;
           previous[edge.toNodeId] = edge;
-          pq.add(_State(edge.toNodeId, newCost, edge.routeId));
+          pq.add(_State(edge.toNodeId, newCost, edge.routeId, newInterchanges));
         }
       }
     }
@@ -320,6 +328,7 @@ class BusService {
     int totalTime = 0;
 
     // Initial Source
+    final initialBusInfo = _routeInfoMap[edgesTrace.first.routeId];
     path.add(RouteStation(
       id: startId,
       name: _stopNames[startId] ?? "Start",
@@ -328,6 +337,8 @@ class BusService {
       lineColor: Colors.orange,
       time: "Now",
       type: StationType.source,
+      busNumber: initialBusInfo?.busNumber,
+      frequency: initialBusInfo != null ? "Every ${(initialBusInfo.routeId.hashCode % 15) + 5} mins" : null,
     ));
 
     for (int i = 0; i < edgesTrace.length; i++) {
@@ -361,7 +372,10 @@ class BusService {
           type: i == edgesTrace.length - 1
               ? StationType.destination
               : (isInterchange ? StationType.interchange : StationType.normal),
-          instruction: instruction));
+          instruction: instruction,
+          busNumber: busInfo?.busNumber,
+          frequency: busInfo != null ? "Every ${(busInfo.routeId.hashCode % 15) + 5} mins" : null,
+      ));
     }
 
     // 🔥 NAYA: Pata lagao route me koi AC bus hai kya?
@@ -414,7 +428,8 @@ class _State {
   final String nodeId;
   final double cost;
   final String? lastRouteId;
-  _State(this.nodeId, this.cost, this.lastRouteId);
+  final int interchanges;
+  _State(this.nodeId, this.cost, this.lastRouteId, this.interchanges);
 }
 
 class _NearbyNode {

@@ -15,6 +15,10 @@ class RouteStation {
   // 🚀 LIVE TRACKING COORDS ADDED HERE
   final double lat;
   final double lon;
+  
+  final String? busNumber;
+  final String? frequency;
+  final String? liveArrivalTime;
 
   RouteStation({
     required this.id,
@@ -27,6 +31,9 @@ class RouteStation {
     this.instruction,
     this.lat = 0.0, // Default 0.0 taaki purana code crash na ho
     this.lon = 0.0,
+    this.busNumber,
+    this.frequency,
+    this.liveArrivalTime,
   });
 }
 
@@ -55,10 +62,27 @@ class RouteResult {
     required double totalDistance,
     required List<String> pathLineIds,
   }) {
+    // Calculate Interchanges
+    int interchangeCount = 0;
+    if (path.isNotEmpty) {
+      String currentLineCode = path.first.lineCode;
+      for (var station in path) {
+        if (station.lineCode != currentLineCode) {
+          interchangeCount++;
+          currentLineCode = station.lineCode;
+        }
+      }
+    }
+
+    // Add 6 minutes penalty per interchange
+    int penaltyPerInterchange = 6;
+    int rawTravelTimeMin = (totalTimeSeconds / 60).ceil();
+    int actualTotalTime = rawTravelTimeMin + (interchangeCount * penaltyPerInterchange);
+
     return RouteResult(
       path: path,
       totalFare: totalFare,
-      totalTimeMin: (totalTimeSeconds / 60).ceil(),
+      totalTimeMin: actualTotalTime,
       totalStops: totalStops,
       totalDistance: totalDistance,
       pathLineIds: pathLineIds,

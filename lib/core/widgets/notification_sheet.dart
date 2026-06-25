@@ -31,12 +31,10 @@ class _NotificationSheetContentState extends State<NotificationSheetContent> {
     final textColor = isDark ? Colors.white : Colors.black;
     final subTextColor = isDark ? Colors.white54 : Colors.black54;
 
-    return Padding(
-      // 🚀 PERFECT SPACING: Top shadow hata diya aur 85 padding lock kar di
-      padding: const EdgeInsets.only(top: 85.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16.0),
           // 🚀 DYNAMIC FILTERS: Scroll par gayab honge, rukne par aayenge
           AnimatedSize(
             duration: const Duration(milliseconds: 300),
@@ -187,8 +185,7 @@ class _NotificationSheetContentState extends State<NotificationSheetContent> {
               ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -197,6 +194,7 @@ class _NotificationSheetContentState extends State<NotificationSheetContent> {
     const activeColor = CupertinoColors.systemBlue;
 
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () {
         AppHaptics.selectionClick();
         setState(() {

@@ -164,7 +164,7 @@ class _FareCalculatorSheetState extends State<FareCalculatorSheet> {
   Widget build(BuildContext context) {
     // 🚀 TOP PADDING: RidelSheet ke header (85px) ko clear karne ke liye 95px diya hai
     return Padding(
-      padding: const EdgeInsets.only(top: 95, left: 20, right: 20, bottom: 30),
+      padding: const EdgeInsets.only(left: 20, right: 20, bottom: 30),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

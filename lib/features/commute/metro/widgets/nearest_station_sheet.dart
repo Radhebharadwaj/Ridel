@@ -318,12 +318,11 @@ class _NearestStationSheetContentState
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black;
     final accentColor =
-        widget.isBus ? const Color(0xFFFF9F0A) : const Color(0xFF00E5FF);
+        widget.isBus ? const Color(0xFFFF9F0A) : CupertinoColors.systemBlue;
     final typeName = widget.isBus ? "Stop" : "Station";
 
     return Padding(
-      // 🚀 FIX: Clear the RidelSheet glass header with top padding of 95
-      padding: const EdgeInsets.only(top: 95),
+      padding: EdgeInsets.zero,
       child: Column(
         children: [
           // 🚀 SEARCH BAR

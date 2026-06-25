@@ -14,7 +14,6 @@ import 'package:ridel/core/map/map_style_helper.dart';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
-import 'package:ridel/core/config/app_config.dart';
 import 'package:ridel/features/map/widgets/search_sheet/map_search_sheet.dart';
 import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/features/map/widgets/map_theme_selector.dart';
@@ -142,12 +141,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   }
 
   Future<void> _initializeMapData() async {
-    try {
-      await AppConfig.fetchKeys();
-    } catch (e) {
-      debugPrint("Init map data auth/fetch error (using fallback): $e");
-    }
-
     try {
       await _initMapStyle();
     } catch (e) {

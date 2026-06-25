@@ -119,6 +119,7 @@ class MapProvider extends ChangeNotifier {
   Circle? _originMarker;
   Symbol? _droppedPinSymbol;
 
+  Timer? _geocodeDebounceTimer; // 🚀 FIX: Timer for debouncing API calls
   AnimationController? _pinAnimController;
 
   // 1. User ka current coordinate track karne ke liye
@@ -1923,8 +1924,9 @@ class MapProvider extends ChangeNotifier {
       });
     }
 
-    // Fire-and-forget network call in background, deferred to allow 60FPS camera flight
-    Future.delayed(const Duration(milliseconds: 800), () async {
+    // 🚀 FIX: Robust Debounce to prevent API hemorrhage
+    _geocodeDebounceTimer?.cancel();
+    _geocodeDebounceTimer = Timer(const Duration(milliseconds: 1500), () async {
       try {
         final PlaceModel place = await PlaceEnrichmentService()
             .reverseGeocode(

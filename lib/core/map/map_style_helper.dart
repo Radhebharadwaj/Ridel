@@ -3,10 +3,10 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
 
+// 🚀 NATIVE THEMES ONLY
 enum MapThemeType { light, dark, satellite }
 
 class MapStyleHelper {
-  // 🚀 FALLBACK: Esri Satellite for Unauthenticated/Network Failure
   static String _getEsriFallbackStyle() {
     final fallbackStyle = {
       "version": 8,
@@ -18,7 +18,7 @@ class MapStyleHelper {
             "https://ridel.ridel.workers.dev/api/satellite/{z}/{y}/{x}"
           ],
           "tileSize": 256,
-          "maxzoom": 16 // Force overzooming for fallback too
+          "maxzoom": 19
         }
       },
       "layers": [
@@ -29,106 +29,95 @@ class MapStyleHelper {
         }
       ]
     };
-    String encodedJson = jsonEncode(fallbackStyle);
-    return 'data:application/json;charset=utf-8,${Uri.encodeComponent(encodedJson)}';
+    return 'data:application/json;charset=utf-8,${Uri.encodeComponent(jsonEncode(fallbackStyle))}';
   }
 
   static Future<String> getOlaStyle(bool isSystemDark,
       {MapThemeType? themeType,
       bool showPOIs = true,
       bool show3D = false}) async {
-    // Wait, kya key load hui?
-    if (AppConfig.olaMapsKey.isEmpty || AppConfig.olaMapsKey == "2") {
-       debugPrint("WAITING: Key not ready or invalid...");
-       await Future.delayed(const Duration(seconds: 1)); // Wait, retry
-    }
-    
-    final String apiKey = AppConfig.olaMapsKey;
-    // 🔥 VALIDATION: Agar key "2" hai ya khali hai, toh mat chala
-    if (apiKey.isEmpty || apiKey == "2") {
-      debugPrint("CRITICAL: Invalid API Key detected: $apiKey");
+    final apiKey = AppConfig.olaMapsKey;
+
+    // 1. FALLBACK: Invalid or missing API keys
+    if (apiKey.trim().isEmpty || apiKey == "2") {
+      debugPrint(
+          "NETWORK FAILURE: Ola Key Missing or Invalid. Rendering Fallback.");
       return _getEsriFallbackStyle();
     }
 
-    final bool useDark = themeType != null
-        ? (themeType == MapThemeType.dark ||
-            themeType == MapThemeType.satellite)
-        : isSystemDark;
+    final MapThemeType resolvedTheme =
+        themeType ?? (isSystemDark ? MapThemeType.dark : MapThemeType.light);
 
-    final String styleId =
-        useDark ? "default-dark-standard" : "default-light-standard";
-    final String styleUrl =
-        "https://api.olamaps.io/tiles/vector/v1/styles/$styleId/style.json";
+    // Base Ola style is always light or dark (Satellite uses dark as a base)
+    String styleId = 'default-light-standard';
+    if (resolvedTheme == MapThemeType.dark ||
+        resolvedTheme == MapThemeType.satellite) {
+      styleId = 'default-dark-standard';
+    }
 
-    // 2. Build URL manually to ensure NO "?key=" remains
-    // Split on '?' to remove any previous bad query parameters
-    final String cleanBaseUrl = styleUrl.split('?').first; 
-    final String finalUrl = "$cleanBaseUrl?api_key=$apiKey";
-    
-    debugPrint("🚀 Final Map Request URL: $finalUrl");
+    final styleUrl =
+        'https://api.olamaps.io/tiles/vector/v1/styles/$styleId/style.json?api_key=$apiKey';
 
     try {
-      final response = await http.get(Uri.parse(finalUrl)).timeout(const Duration(seconds: 15));
+      final response = await http
+          .get(Uri.parse(styleUrl))
+          .timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) return _getEsriFallbackStyle();
 
-      Map<String, dynamic> styleData = json.decode(response.body);
+      Map<String, dynamic> styleData = jsonDecode(response.body);
 
-      // 2. SPRITES & GLYPHS FIX
-      if (styleData['sprite'] != null) {
-        styleData['sprite'] =
-            "${styleData['sprite'].toString().split('?').first}?api_key=$apiKey";
-      }
+      // 2. SPRITES & GLYPHS INJECTION
       if (styleData['glyphs'] != null) {
         styleData['glyphs'] =
             "${styleData['glyphs'].toString().split('?').first}?api_key=$apiKey";
       }
+      if (styleData['sprite'] != null) {
+        styleData['sprite'] =
+            "${styleData['sprite'].toString().split('?').first}?api_key=$apiKey";
+      }
 
-      // 3. SOURCES: OVERZOOM FIX & RASTER SWAP
-      if (styleData['sources'] != null && styleData['sources'] is Map) {
-        final Map<String, dynamic> sources = styleData['sources'];
-        sources.forEach((key, source) {
-          if (source is Map) {
-            // 🚀 OVERZOOM FIX: Stops 404s on deep zoom (>200m)
-            source['maxzoom'] = 16;
+      // 3. SOURCES MODIFICATION
+      if (styleData['sources'] == null) {
+        styleData['sources'] = <String, dynamic>{};
+      }
+      Map<String, dynamic> sources = styleData['sources'];
 
-            // 🚀 VECTOR INTEGRITY (THE BULLETPROOF FIX)
-            if (source['type'] == 'vector' && source['url'] != null) {
-              // Extract base URL and prevent engine from fetching the poisoned TileJSON
-              String tileJsonUrl = source['url'].toString().split('?').first;
-              
-              // Convert the .json endpoint directly to the PBF tile template
-              String pbfUrl = tileJsonUrl.replaceAll('.json', '/{z}/{x}/{y}.pbf');
-              
-              // Hard-inject our validated API Key from AppConfig
-              source['tiles'] = ['$pbfUrl?api_key=$apiKey'];
-              
-              // CRITICAL: Remove 'url' to FORCE MapLibre to use our 'tiles' array instead
-              source.remove('url');
-            } else if (source['tiles'] != null) {
-              // Crucial: Inject into all tile arrays if they exist
-              List tiles = source['tiles'];
-              source['tiles'] = tiles.map((t) => "${t.toString().split('?').first}?api_key=$apiKey").toList();
-            }
+      // 🚀 VECTOR INTEGRITY (Kills the 900+ Tile Loop & Deep Zoom Blanking)
+      final keys = sources.keys.toList();
+      for (String sourceKey in keys) {
+        final source = sources[sourceKey];
+        if (source is Map) {
+          source['maxzoom'] = 16; // STRICT Limit: Prevents deep zoom 404 loops
+
+          if (source['type'] == 'vector' && source['url'] != null) {
+            String tileJsonUrl = source['url'].toString().split('?').first;
+            String pbfUrl = tileJsonUrl.replaceAll('.json', '/{z}/{x}/{y}.pbf');
+
+            // Bypass planet.json completely and use direct tiles
+            source['tiles'] = ['$pbfUrl?api_key=$apiKey'];
+            source.remove('url');
           }
-        });
-        
-        // 🚀 INJECT SATELLITE SOURCE
-        if (themeType == MapThemeType.satellite) {
-          styleData['sources']['ridel-satellite'] = {
-            "type": "raster",
-            "tiles": ["https://ridel.ridel.workers.dev/api/satellite/{z}/{y}/{x}"],
-            "tileSize": 256,
-            "maxzoom": 19 // Prevents blanking on deep zoom
-          };
         }
       }
 
-      // 4. LAYERS: AESTHETICS & FATAL CRASH SANITIZER
-      if (styleData['layers'] != null && styleData['layers'] is List) {
+      // 🚀 SATELLITE SOURCE INJECTION (STRICTLY for Satellite Theme)
+      if (resolvedTheme == MapThemeType.satellite) {
+        sources['ridel-satellite'] = {
+          "type": "raster",
+          "tiles": [
+            "https://ridel.ridel.workers.dev/api/satellite/{z}/{y}/{x}"
+          ],
+          "tileSize": 256,
+          "maxzoom": 19
+        };
+      }
+
+      // 4. LAYERS MODIFICATION
+      if (styleData['layers'] != null) {
         List<dynamic> layers = styleData['layers'];
 
-        // 🚀 INJECT SATELLITE LAYER AT THE BOTTOM (Index 0)
-        if (themeType == MapThemeType.satellite) {
+        // 🚀 SATELLITE LAYER INJECTION (At the very bottom - index 0)
+        if (resolvedTheme == MapThemeType.satellite) {
           layers.insert(0, {
             "id": "ridel-satellite-base",
             "type": "raster",
@@ -136,185 +125,54 @@ class MapStyleHelper {
           });
         }
 
-        List<dynamic> updatedLayers = [];
-        List<dynamic> transitLayers = [];
-        List<dynamic> symbolLayers = [];
-
         for (var layer in layers) {
-          if (layer is! Map) continue;
+          if (layer is Map) {
+            layer.remove('maxzoom'); // Let visual elements stretch infinitely
 
-          // 🚀 FATAL CRASH SANITIZER: Remove Layer Limits & Broken Icons
-          layer.remove('maxzoom'); // Fixes blanking out on deep zoom
-          if (layer.containsKey('layout') && layer['layout'] is Map) {
-            var iconImage = layer['layout']['icon-image'];
-            if (iconImage == "" || iconImage == "pedestrian_polygon" || iconImage == null) {
-              layer['layout'].remove('icon-image'); // Kills the WebGL Crash!
+            // 🚀 DEEP WEBGL SANITIZER (Kills "Missing required image id" crash)
+            if (layer.containsKey('layout') && layer['layout'] is Map) {
+              var layout = layer['layout'];
+              if (layout.containsKey('icon-image')) {
+                var iconImg = layout['icon-image'];
+                if (iconImg is String) {
+                  if (iconImg.trim().isEmpty ||
+                      iconImg == "pedestrian_polygon") {
+                    layout.remove('icon-image');
+                  }
+                } else if (iconImg is List) {
+                  // Ola hides empty strings in expressions
+                  String expStr = iconImg.toString();
+                  if (expStr.contains('""') ||
+                      expStr.contains("''") ||
+                      expStr.contains("pedestrian_polygon")) {
+                    layout.remove('icon-image');
+                  }
+                }
+              }
+            }
+
+            // 🚀 SATELLITE TRANSPARENCY (Strictly typed to prevent WebGL aborts)
+            if (resolvedTheme == MapThemeType.satellite) {
+              if (layer['paint'] == null) layer['paint'] = <String, dynamic>{};
+
+              if (layer['type'] == 'fill') {
+                layer['paint']['fill-opacity'] = 0.0;
+                layer['paint'].remove('fill-extrusion-opacity');
+              } else if (layer['type'] == 'fill-extrusion') {
+                layer['paint']['fill-extrusion-opacity'] = 0.0;
+                layer['paint'].remove('fill-opacity');
+              } else if (layer['type'] == 'background') {
+                layer['paint']['background-color'] = 'rgba(0,0,0,0)';
+                layer['paint']['background-opacity'] = 0.0;
+              }
             }
           }
-
-          // 🚀 STRICTLY TYPED TRANSPARENCY FOR SATELLITE MODE
-          if (themeType == MapThemeType.satellite) {
-            if (layer['paint'] == null) layer['paint'] = <String, dynamic>{};
-
-            if (layer['type'] == 'fill') {
-              layer['paint']['fill-opacity'] = 0.0;
-              // Ensure we don't accidentally pass 3D props to a 2D layer
-              layer['paint'].remove('fill-extrusion-opacity'); 
-            } 
-            else if (layer['type'] == 'fill-extrusion') {
-              layer['paint']['fill-extrusion-opacity'] = 0.0;
-              // Ensure we don't accidentally pass 2D props to a 3D layer
-              layer['paint'].remove('fill-opacity');
-            } 
-            else if (layer['type'] == 'background') {
-              layer['paint']['background-color'] = 'rgba(0,0,0,0)';
-              layer['paint']['background-opacity'] = 0.0;
-            }
-          }
-
-
-          final String id = (layer['id'] as String? ?? '').toLowerCase();
-          final String type = (layer['type'] as String? ?? '');
-
-          // DECLUTTER: Remove 3D models and heavy POIs
-          if (id.contains('3d_model')) continue;
-          bool isClutter = id.contains('shop') ||
-              id.contains('food') ||
-              id.contains('restaurant') ||
-              id.contains('atm');
-          if (isClutter && type != 'symbol' && !id.contains('transit')) {
-            continue;
-          }
-
-          if (layer['paint'] == null || layer['paint'] is! Map) {
-            if (type == 'symbol') {
-              layer['paint'] = <String, dynamic>{};
-            } else {
-              updatedLayers.add(layer);
-              continue;
-            }
-          }
-
-          final paint = layer['paint'] as Map<String, dynamic>;
-
-          // 🍏 APPLE AESTHETICS INTEGRATION
-          if (type == 'background') {
-            paint['background-color'] = useDark ? '#202A37' : '#EFEFF4';
-          } else if (type == 'fill') {
-            if (id.contains('water') ||
-                id.contains('ocean') ||
-                id.contains('river')) {
-              paint['fill-color'] = useDark ? '#171F2C' : '#A2C0D4';
-            } else if (id.contains('park') ||
-                id.contains('forest') ||
-                id.contains('grass')) {
-              paint['fill-color'] = useDark ? '#17332E' : '#BCE2B9';
-              paint['fill-opacity'] = useDark ? 0.90 : 0.55;
-            } else if (id.contains('building')) {
-              paint['fill-color'] = useDark ? '#334152' : '#E5E5EA';
-              paint['fill-opacity'] = useDark ? 1.0 : 0.85;
-              paint['fill-outline-color'] = useDark ? '#1D2633' : '#D1D1D6';
-            } else if (id.contains('highway') || id.contains('road')) {
-              paint['fill-color'] = useDark ? '#2A3646' : '#FFFFFF';
-            } else {
-              paint['fill-color'] = useDark ? '#202A37' : '#EFEFF4';
-            }
-          } else if (type == 'line') {
-            // METRO LINES (Strict Colors)
-            if (id.contains('metro') ||
-                id.contains('subway') ||
-                id.contains('transit')) {
-              paint['line-color'] = [
-                "match", ["get", "color"],
-                "#FFDF00", useDark ? "#FFD60A" : "#FFCC00",
-                "#1e90ff", useDark ? "#0A84FF" : "#007AFF",
-                "#ff0000", useDark ? "#FF453A" : "#FF3B30",
-                "#009933", useDark ? "#32D74B" : "#34C759",
-                "#e542de", useDark ? "#BF5AF2" : "#AF52DE",
-                "#FC8EAC", useDark ? "#FF375F" : "#FF2D55",
-                "orange", useDark ? "#FF9F0A" : "#FF9500",
-                "#999999" // fallback
-              ];
-              paint['line-opacity'] = 1.0;
-              paint['line-width'] = 2.0;
-              paint.remove('line-blur');
-              transitLayers.add(layer);
-              continue;
-            } else if (id.contains('casing') || id.contains('outline')) {
-              paint['line-color'] = useDark ? '#12151C' : '#C7C7CC';
-              paint['line-width'] = [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                14,
-                2.5,
-                18,
-                10.0
-              ];
-            } else if (id.contains('highway') || id.contains('motorway')) {
-              paint['line-color'] = useDark ? '#161E28' : '#FFFFFF';
-              paint['line-width'] = [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                12,
-                3.0,
-                18,
-                14.0
-              ];
-            } else if (id.contains('road') || id.contains('street')) {
-              paint['line-color'] = useDark ? '#2A3646' : '#FFFFFF';
-              paint['line-width'] = [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                14,
-                1.5,
-                18,
-                8.0
-              ];
-            } else {
-              paint['line-opacity'] = 0.15;
-            }
-          } else if (type == 'symbol') {
-            if (layer['layout'] == null) layer['layout'] = <String, dynamic>{};
-
-            bool isEssential = id.contains('road') ||
-                id.contains('street') ||
-                id.contains('city') ||
-                id.contains('transit') ||
-                id.contains('station');
-            layer['layout']['visibility'] =
-                (isEssential || showPOIs) ? 'visible' : 'none';
-
-            layer['layout']['text-allow-overlap'] = false;
-            layer['layout']['icon-allow-overlap'] = false;
-            layer['layout']['symbol-spacing'] = 300;
-
-            paint['text-color'] = useDark ? '#E0E6ED' : '#1C1C1E';
-            paint['text-halo-color'] = useDark ? '#202A37' : '#FFFFFF';
-            paint['text-halo-width'] = 2.0;
-            paint['icon-opacity'] = useDark ? 0.65 : 0.70;
-
-            symbolLayers.add(layer);
-            continue;
-          }
-
-          updatedLayers.add(layer);
         }
-
-        updatedLayers.addAll(transitLayers);
-        updatedLayers.addAll(symbolLayers);
-        styleData['layers'] = updatedLayers;
       }
 
-      String finalStyleString = json.encode(styleData);
-
-      return kIsWeb
-          ? "data:application/json;charset=utf-8,${Uri.encodeComponent(finalStyleString)}"
-          : finalStyleString;
+      return 'data:application/json;charset=utf-8,${Uri.encodeComponent(jsonEncode(styleData))}';
     } catch (e) {
-      debugPrint("STYLE FETCH ERROR: $e");
+      debugPrint("STYLE FETCH/PARSE ERROR: $e");
       return _getEsriFallbackStyle();
     }
   }

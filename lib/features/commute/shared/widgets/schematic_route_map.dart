@@ -32,8 +32,11 @@ class SchematicRouteMap extends StatefulWidget {
 
 
 class _SchematicRouteMapState extends State<SchematicRouteMap>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late AnimationController _pulseController;
+  late AnimationController _snapController;
+  Animation<double>? _snapAnimation;
+  double? _draggedValue;
 
   @override
   void initState() {
@@ -43,6 +46,26 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
       duration: const Duration(milliseconds: 1500),
     );
     _pulseController.repeat(reverse: true);
+
+    _snapController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _snapController.addListener(() {
+      if (_snapAnimation != null) {
+        setState(() {
+          _draggedValue = _snapAnimation!.value;
+        });
+      }
+    });
+    _snapController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        setState(() {
+          _draggedValue = null;
+          _snapAnimation = null;
+        });
+      }
+    });
   }
 
   // 🚀 Premium Title Case Formatter
@@ -57,6 +80,7 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
   @override
   void dispose() {
     _pulseController.dispose();
+    _snapController.dispose();
     super.dispose();
   }
 
@@ -65,16 +89,46 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
     
     final ScrollController scrollController = ScrollController();
     
-    // We use showModalBottomSheet with our RidelSheet directly to enforce exactly 90%
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
+        final initialNow = DateTime.now();
+        final arrivalTime = initialNow.add(Duration(minutes: widget.routeData.totalTimeMin));
+        final secondaryColor = isLightMode ? Colors.grey[600] : Colors.white54;
+
         return Wrap(
           children: [
             RidelSheet(
               title: "Journey Details",
+              subtitle: Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: StreamBuilder<DateTime>(
+                  stream: Stream.periodic(const Duration(minutes: 1), (_) => DateTime.now()),
+                  builder: (context, snapshot) {
+                    final currentNow = snapshot.data ?? initialNow;
+                    final duration = arrivalTime.difference(currentNow);
+                    final remainingMins = duration.inMinutes > 0 ? duration.inMinutes : 0;
+                    
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(CupertinoIcons.clock_fill, size: 14, color: secondaryColor),
+                        const SizedBox(width: 6),
+                        Text(
+                          "$remainingMins min remaining",
+                          style: GoogleFonts.inter(
+                            color: secondaryColor,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                ),
+              ),
               showCloseButton: true,
               child: RawScrollbar(
                 controller: scrollController,
@@ -241,7 +295,6 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
 
     return Container(
       width: double.infinity,
-      height: 140, // Fixed height for the new dynamic island layout
       decoration: BoxDecoration(
         color: hasError 
             ? const Color(0xFF2A0808) 
@@ -331,30 +384,18 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         // Floating Context Text
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Align(
-                    alignment: Alignment.topCenter,
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 0.0), // Center at top
-                      child: Text(
-                        floatingText,
-                        style: GoogleFonts.inter(
-                          color: isLightMode ? Colors.black87 : Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
+        Padding(
+          padding: const EdgeInsets.only(bottom: 24.0),
+          child: Text(
+            floatingText,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              color: isLightMode ? Colors.black87 : Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.3,
+            ),
           ),
         ),
         
@@ -362,7 +403,6 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
         LayoutBuilder(
           builder: (context, constraints) {
             final trackWidth = constraints.maxWidth;
-            final activeWidth = trackWidth * progress;
             
             return Stack(
               clipBehavior: Clip.none,
@@ -402,7 +442,7 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
                 // Active Progress Track
                 Container(
                   height: 6,
-                  width: activeWidth,
+                  width: (_draggedValue ?? progress) * trackWidth,
                   decoration: BoxDecoration(
                     color: activeColor,
                     borderRadius: BorderRadius.circular(10),
@@ -417,8 +457,29 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
                 
                 // Live Pulsing Indicator at the tip
                 Positioned(
-                  left: activeWidth - 16, // Center the 32x32 pulse circle
-                  child: _buildPulseNode(),
+                  left: ((_draggedValue ?? progress) * trackWidth) - 16, // Center the 32x32 pulse circle
+                  child: GestureDetector(
+                    onPanUpdate: (details) {
+                      setState(() {
+                        if (_snapAnimation != null) {
+                          _snapController.stop();
+                          _snapAnimation = null;
+                        }
+                        _draggedValue = ((_draggedValue ?? progress) + (details.delta.dx / trackWidth)).clamp(0.0, 1.0);
+                      });
+                    },
+                    onPanEnd: (details) {
+                      _snapAnimation = Tween<double>(
+                        begin: _draggedValue ?? progress,
+                        end: progress,
+                      ).animate(CurvedAnimation(
+                        parent: _snapController,
+                        curve: Curves.elasticOut,
+                      ));
+                      _snapController.forward(from: 0.0);
+                    },
+                    child: _buildPulseNode(),
+                  ),
                 ),
               ],
             );
@@ -432,12 +493,13 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
             Expanded(
               child: Text(
                 originName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.inter(
                   color: isLightMode ? Colors.black54 : Colors.white54,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
-                overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.left,
               ),
             ),
@@ -445,12 +507,13 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
             Expanded(
               child: Text(
                 destinationName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.inter(
                   color: isLightMode ? Colors.black54 : Colors.white54,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
-                overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.right,
               ),
             ),

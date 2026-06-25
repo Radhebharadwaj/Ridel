@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:ridel/core/widgets/ridel_sheet.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -194,10 +195,12 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
   }
 
   Future<void> _handleSwap(String newFrom, String newTo) async {
+    _locationSubscription?.cancel();
     setState(() {
       _isLoading = true;
       _currentFrom = newFrom;
       _currentTo = newTo;
+      _currentRouteData = null; // Fix: Reset previous route results
       _activeStationIndex = null;
       _trackingError = null;
       _hasNotifiedArrival = false;
@@ -216,6 +219,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
           _currentRouteData = newResult;
           _isLoading = false;
         });
+        _initLiveTracking(); // Restart live tracking for new route
       }
     } catch (e) {
       if (mounted) {
@@ -228,9 +232,14 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
     if (_busPreference == newPref) {
       return;
     }
+    _locationSubscription?.cancel();
     setState(() {
       _busPreference = newPref;
       _isLoading = true;
+      _currentRouteData = null; // Fix: Reset previous route results
+      _activeStationIndex = null;
+      _trackingError = null;
+      _hasNotifiedArrival = false;
     });
     try {
       final newResult = await BusService()
@@ -243,6 +252,8 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
         if (newResult == null) {
           ToastService.showError(
               context, "No route found for this preference.");
+        } else {
+          _initLiveTracking(); // Restart live tracking for new route
         }
       }
     } catch (e) {
@@ -332,6 +343,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.only(left: 20, right: 20, top: 10),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   AppHeader(
@@ -741,11 +753,14 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
                     decoration: BoxDecoration(
                       color: isLightMode ? Colors.black.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: isLightMode ? Colors.black.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.05)),
+                      border: Border.all(color: isLightMode ? Colors.black.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.1)),
                     ),
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text("Origin", style: GoogleFonts.inter(fontSize: 11, color: isLightMode ? Colors.black54 : Colors.white54, fontWeight: FontWeight.w600)),
+                        Icon(CupertinoIcons.building_2_fill, size: 20, color: isLightMode ? Colors.black54 : Colors.white54),
+                        const SizedBox(height: 8),
+                        Text("Origin", maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 11, color: isLightMode ? Colors.black54 : Colors.white54, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
                         Text(_currentFrom.split(' ').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: isLightMode ? Colors.black87 : Colors.white)),
                       ],
@@ -753,7 +768,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
                 child: GestureDetector(
                   onTap: () => _openFacilitiesSheet(isOrigin: false),
@@ -763,11 +778,14 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
                     decoration: BoxDecoration(
                       color: isLightMode ? Colors.black.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: isLightMode ? Colors.black.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.05)),
+                      border: Border.all(color: isLightMode ? Colors.black.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.1)),
                     ),
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text("Destination", style: GoogleFonts.inter(fontSize: 11, color: isLightMode ? Colors.black54 : Colors.white54, fontWeight: FontWeight.w600)),
+                        Icon(CupertinoIcons.ticket_fill, size: 20, color: isLightMode ? Colors.black54 : Colors.white54),
+                        const SizedBox(height: 8),
+                        Text("Destination", maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 11, color: isLightMode ? Colors.black54 : Colors.white54, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
                         Text(_currentTo.split(' ').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: isLightMode ? Colors.black87 : Colors.white)),
                       ],

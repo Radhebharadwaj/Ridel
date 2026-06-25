@@ -240,26 +240,22 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   void _onLocationPickerStateChanged() {
     if (!mounted) return;
     final state = _locationPickerController.sheetState.value;
-    final provider = Provider.of<MapProvider>(context, listen: false);
 
     if (state == SheetState.selectingLocation) {
-      provider.controller?.addListener(_onCameraMove);
+      // 🚀 FIX: No longer listening to raw onCameraMove spam. 
+      // Reverse geocode is now triggered safely in _onMapProviderUpdated via MapProvider's onCameraIdle.
+      
       // Trigger an initial reverse geocode
-      _onCameraMove();
+      final provider = Provider.of<MapProvider>(context, listen: false);
+      final pos = provider.controller?.cameraPosition;
+      if (pos != null) {
+        _locationPickerController.onCameraMove(pos.target);
+      }
+      
       // Shrink sheet to show more map
       if (_sheetController.isAttached) {
         _safeAnimateSheet(_safeMinSize);
       }
-    } else {
-      provider.controller?.removeListener(_onCameraMove);
-    }
-  }
-
-  void _onCameraMove() {
-    final provider = Provider.of<MapProvider>(context, listen: false);
-    final pos = provider.controller?.cameraPosition;
-    if (pos != null) {
-      _locationPickerController.onCameraMove(pos.target);
     }
   }
 
@@ -699,9 +695,21 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     unawaited(_checkAndFetchRoute());
   }
 
+  LatLng? _lastIdleCenter;
+
   void _onMapProviderUpdated() async {
     if (!mounted) return;
     final provider = Provider.of<MapProvider>(context, listen: false);
+
+    // 🚀 NEW: Hook location picker reverse geocode to map IDLE center updates
+    if (_locationPickerController.sheetState.value == SheetState.selectingLocation) {
+      final currentCenter = provider.currentMapCenter;
+      if (currentCenter != null && _lastIdleCenter != currentCenter) {
+        // Only trigger if we moved significantly to avoid micro-jitter geocoding
+        _lastIdleCenter = currentCenter;
+        _locationPickerController.onCameraMove(currentCenter);
+      }
+    }
 
     // 🚀 FIX: Deep Clean Synchronization with Provider
     // If provider was cleared (e.g., cross button tapped in headers) but sheet still has the place

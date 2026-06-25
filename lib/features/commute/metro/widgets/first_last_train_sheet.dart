@@ -278,7 +278,7 @@ class _FirstLastTrainSheetState extends State<FirstLastTrainSheet> {
   Widget build(BuildContext context) {
     // 🚀 TOP PADDING: RidelSheet ke header ko clear karne ke liye
     return Padding(
-      padding: const EdgeInsets.only(top: 95, left: 20, right: 20, bottom: 20),
+      padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

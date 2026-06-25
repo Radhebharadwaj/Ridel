@@ -10,6 +10,8 @@ import 'package:ridel/core/services/notification_service.dart';
 
 import 'package:ridel/core/widgets/notification_sheet.dart';
 
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../features/profile/services/profile_repository.dart';
 import '../utils/app_haptics.dart';
 import 'city_selector_sheet.dart';
@@ -77,7 +79,7 @@ class _AppHeaderState extends State<AppHeader> {
   }
 
   void _triggerSqueezeAnimation() {
-    setState(() => _headerScale = 0.92); // Thoda soft squeeze 0.9 ki jagah
+    setState(() => _headerScale = 0.92);
     Future.delayed(const Duration(milliseconds: 150), () {
       if (mounted) {
         setState(() => _headerScale = 1.0);
@@ -102,7 +104,11 @@ class _AppHeaderState extends State<AppHeader> {
     try {
       await _repo.getProfile();
       String current = ProfileRepository.userCity.value;
-      if (current == "Locating..." ||
+      
+      bool isGranted = await Permission.location.isGranted;
+
+      if (isGranted ||
+          current == "Locating..." ||
           current == "Select City" ||
           current.isEmpty ||
           current == "Detecting...") {
@@ -166,7 +172,7 @@ class _AppHeaderState extends State<AppHeader> {
       padding: EdgeInsets.only(
         top: topInset + headerPadding,
         bottom: 16,
-        left: 24,
+        left: 8.0, // tighter left alignment
         right: 24,
       ),
       decoration: BoxDecoration(
@@ -190,11 +196,9 @@ class _AppHeaderState extends State<AppHeader> {
               ]
             : null,
       ),
-      child: SizedBox(
-        height: 60.0,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
             child: ValueListenableBuilder<String>(
@@ -261,31 +265,30 @@ class _AppHeaderState extends State<AppHeader> {
                         )
                       : Row(
                           key: const ValueKey("normal_title"),
-                          mainAxisAlignment: MainAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            // Back Button (Choreographed via Width & Opacity)
+                            // 1. BACK BUTTON (Tightened & Left-Aligned)
                             AnimatedContainer(
-                              duration: const Duration(milliseconds: 500),
+                              duration: const Duration(milliseconds: 450),
                               curve: Curves.fastOutSlowIn,
-                              width: _isRouteModeActive ? 45.0 : 0.0,
-                              clipBehavior: Clip.hardEdge,
-                              decoration: const BoxDecoration(), // Required to enable clipping
-                              child: AnimatedOpacity(
-                                duration: const Duration(milliseconds: 400),
-                                curve: Curves.fastOutSlowIn,
-                                opacity: _isRouteModeActive ? 1.0 : 0.0,
-                                child: GestureDetector(
-                                  onTap: _handleBackTap,
-                                  behavior: HitTestBehavior.opaque,
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    widthFactor: 1.0,
-                                    child: SizedBox(
-                                      width: 45.0,
-                                      height: 60.0,
+                              width: _isRouteModeActive ? 40.0 : 0.0,
+                              child: ClipRect(
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  widthFactor: 1.0,
+                                  child: GestureDetector(
+                                    onTap: _isRouteModeActive
+                                        ? _handleBackTap
+                                        : null,
+                                    behavior: HitTestBehavior.opaque,
+                                    child: Container(
+                                      width: 40.0,
+                                      height: 48.0,
+                                      color: Colors.transparent,
+                                      alignment: Alignment.centerLeft,
                                       child: Icon(
                                         Icons.arrow_back_ios_new_rounded,
-                                        size: 26,
+                                        size: 24,
                                         color: textColor,
                                       ),
                                     ),
@@ -293,40 +296,50 @@ class _AppHeaderState extends State<AppHeader> {
                                 ),
                               ),
                             ),
-                            // Text (Pushed naturally by the Back Button)
+
+                            // 2. TIGHT SPACING
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 450),
+                              curve: Curves.fastOutSlowIn,
+                              width: _isRouteModeActive ? 4.0 : 0.0,
+                            ),
+
+                            // 3. MAIN TITLE (locked in original position)
                             Flexible(
-                              child: AnimatedScale(
-                                duration: const Duration(milliseconds: 500),
-                                scale: _headerScale,
-                                curve: Curves.fastOutSlowIn,
-                                alignment: Alignment.centerLeft,
-                                child: GestureDetector(
-                                  onTap: _openCitySelector,
-                                  onLongPress: () {
-                                    AppHaptics.heavyImpact();
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            const AdminBroadcastScreen(),
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 8.0),
+                                child: AnimatedScale(
+                                  duration: const Duration(milliseconds: 450),
+                                  scale: _headerScale,
+                                  curve: Curves.fastOutSlowIn,
+                                  child: GestureDetector(
+                                    onTap: _openCitySelector,
+                                    onLongPress: () {
+                                      AppHaptics.heavyImpact();
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              const AdminBroadcastScreen(),
+                                        ),
+                                      );
+                                    },
+                                    behavior: HitTestBehavior.opaque,
+                                    child: Text(
+                                      displayTitle,
+                                      textAlign: TextAlign.left,
+                                      style: GoogleFonts.inter(
+                                        fontSize: isFake ? 22 : 32,
+                                        fontWeight: FontWeight.w800,
+                                        color: isFake
+                                            ? Colors.redAccent
+                                            : textColor,
+                                        letterSpacing: -1.0,
+                                        height: 1.0,
                                       ),
-                                    );
-                                  },
-                                  behavior: HitTestBehavior.opaque,
-                                  child: Text(
-                                    displayTitle,
-                                    textAlign: TextAlign.left,
-                                    style: GoogleFonts.inter(
-                                      fontSize: isFake ? 22 : 32,
-                                      fontWeight: FontWeight.w800,
-                                      color: isFake
-                                          ? Colors.redAccent
-                                          : textColor,
-                                      letterSpacing: -1.0,
-                                      height: 1.0,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ),
@@ -426,7 +439,6 @@ class _AppHeaderState extends State<AppHeader> {
             ),
           ),
         ],
-      ),
       ),
     );
   }
