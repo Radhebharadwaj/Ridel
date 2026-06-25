@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -292,12 +293,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 constraints: BoxConstraints(
                   minHeight: constraints.maxHeight - 40,
                 ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 400),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
+                child: IntrinsicHeight(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 400),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.max,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                        const Spacer(),
                         RidelLogo(
                             size: 100,
                             color: isLightMode ? Colors.black87 : Colors.white),
@@ -312,6 +316,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           neonColor: neonColor,
                           isPaused: _isLoading,
                         ),
+
                         const SizedBox(height: 32),
                         SizedBox(
                           height: 260,
@@ -327,22 +332,25 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 40),
-                        TextButton(
-                          onPressed: _isLoading ? null : _handleSkip,
-                          style: TextButton.styleFrom(
-                            foregroundColor: isLightMode
-                                ? Colors.black54
-                                : Colors.white.withValues(alpha: 0.5),
-                          ),
-                          child: Text(
-                            'Skip for now →',
-                            style: TextStyle(
-                              color: isLightMode
-                                  ? Colors.black87
+                        const Spacer(),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 24.0),
+                          child: TextButton(
+                            onPressed: _isLoading ? null : _handleSkip,
+                            style: TextButton.styleFrom(
+                              foregroundColor: isLightMode
+                                  ? Colors.black54
                                   : Colors.white.withValues(alpha: 0.5),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
+                            ),
+                            child: Text(
+                              'Skip for now →',
+                              style: TextStyle(
+                                color: isLightMode
+                                    ? Colors.black87
+                                    : Colors.white.withValues(alpha: 0.5),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
                         ),
@@ -506,14 +514,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
-
-      ],
     ),
-    );
+  ],
+),
+);
   }
 
   Widget _buildEmailForm(bool isLightMode) {
@@ -658,7 +666,7 @@ class _LoginScreenState extends State<LoginScreen> {
         height: 56,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(100),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.grey.shade300),
           boxShadow: [
             BoxShadow(
@@ -672,13 +680,21 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     }
 
-    return RidelLiquidButton(
-      width: double.infinity,
-      height: 56,
-      enableStretch: false,
-      glassTint: const Color(0x1AFFFFFF),
-      onTap: null,
-      child: _buildTextField(isLightMode),
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0x1AFFFFFF),
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(100),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: SizedBox(
+            height: 56,
+            child: _buildTextField(isLightMode),
+          ),
+        ),
+      ),
     );
   }
 
@@ -744,7 +760,7 @@ class _LoginScreenState extends State<LoginScreen> {
             height: 56,
             decoration: BoxDecoration(
               color: Colors.black87,
-              borderRadius: BorderRadius.circular(100),
+              borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.1),
@@ -785,39 +801,34 @@ class _LoginScreenState extends State<LoginScreen> {
     return SizedBox(
       height: 56,
       width: double.infinity,
-      child: _ScaleButton(
+      child: RidelLiquidButton(
+        width: double.infinity,
+        height: 56,
+        enableStretch: false,
+        glassTint: neonColor.withValues(alpha: 0.15),
         onTap: onTap,
-        child: IgnorePointer(
-          child: RidelLiquidButton(
-            width: double.infinity,
-            height: 56,
-            enableStretch: false,
-            glassTint: neonColor.withValues(alpha: 0.15),
-            onTap: null,
-            child: Center(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                switchInCurve: Curves.easeInOutCubic,
-                switchOutCurve: Curves.easeInOutCubic,
-                child: _isLoading
-                    ? const SizedBox(
-                        key: ValueKey('loading'),
-                        height: 24,
-                        width: 24,
-                        child: BrandedLoader(isFullScreen: false),
-                      )
-                    : const Text(
-                        'Continue',
-                        key: ValueKey('text'),
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-              ),
-            ),
+        child: Center(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            switchInCurve: Curves.easeInOutCubic,
+            switchOutCurve: Curves.easeInOutCubic,
+            child: _isLoading
+                ? const SizedBox(
+                    key: ValueKey('loading'),
+                    height: 24,
+                    width: 24,
+                    child: BrandedLoader(isFullScreen: false),
+                  )
+                : const Text(
+                    'Continue',
+                    key: ValueKey('text'),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
           ),
         ),
       ),
@@ -864,29 +875,33 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return _ScaleButton(
       onTap: onTap,
-      child: IgnorePointer(
-        child: RidelLiquidButton(
-          width: double.infinity,
-          height: 56,
-          enableStretch: false,
-          glassTint: const Color(0x1AFFFFFF),
-          onTap: null,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SvgPicture.string(GoogleLoginButton.googleSvgCode,
-                  height: 20, width: 20),
-              const SizedBox(width: 10),
-              const Flexible(
-                child: Text('Google',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600)),
-              ),
-            ],
+      child: Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: const Color(0x1AFFFFFF),
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(100),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SvgPicture.string(GoogleLoginButton.googleSvgCode,
+                    height: 20, width: 20),
+                const SizedBox(width: 10),
+                const Flexible(
+                  child: Text('Google',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -901,7 +916,7 @@ class _LoginScreenState extends State<LoginScreen> {
           height: 56,
           decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(100),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.grey.shade300, width: 1),
               boxShadow: [
                 BoxShadow(
@@ -932,28 +947,32 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return _ScaleButton(
       onTap: onTap,
-      child: const IgnorePointer(
-        child: RidelLiquidButton(
-          width: double.infinity,
-          height: 56,
-          enableStretch: false,
-          glassTint: Color(0x1AFFFFFF),
-          onTap: null,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.apple, color: Colors.white, size: 24),
-              SizedBox(width: 8),
-              Flexible(
-                child: Text('Apple',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600)),
-              ),
-            ],
+      child: Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: const Color(0x1AFFFFFF),
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(100),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.apple, color: Colors.white, size: 24),
+                SizedBox(width: 8),
+                Flexible(
+                  child: Text('Apple',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
           ),
         ),
       ),

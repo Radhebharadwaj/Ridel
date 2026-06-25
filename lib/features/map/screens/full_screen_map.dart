@@ -22,8 +22,8 @@ import 'package:ridel/features/map/widgets/quick_action_buttons.dart';
 import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:ridel/core/utils/toast_service.dart';
+import 'package:ridel/core/config/app_config.dart';
 import 'package:ridel/main.dart';
-
 class FullScreenMapPage extends StatefulWidget {
   final ValueNotifier<double> searchSheetProgressNotifier;
   final bool isMapTabActive;
@@ -40,15 +40,18 @@ class FullScreenMapPage extends StatefulWidget {
 
 class _FullScreenMapPageState extends State<FullScreenMapPage>
     with TickerProviderStateMixin {
+  static int mapBuildCount = 0;
+  final Set<String> _addedImages = {};
   late AnimationController _fadeScaleController;
-
   String? _loadedMapStyle;
-
+  
   bool _isMapReady = false;
+  bool _isMapReadyToLoad = false;
   bool _hasMapError = false;
   MapLibreMapController? _tempController;
   MapThemeType? _currentTheme;
   bool _isTilted = false;
+  CameraPosition? _currentCameraPosition;
 
   final ValueNotifier<bool> _showScaleBarNotifier = ValueNotifier(false);
   Timer? _scaleBarTimer;
@@ -57,15 +60,17 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   final ValueNotifier<double> _scaleWidthNotifier = ValueNotifier(60.0);
 
   bool _showPOIs = true;
-  final bool _show3D = false;
+
   Symbol? _heroSymbol;
 
-  void _onCameraMove() {
-    final mapProvider = Provider.of<MapProvider>(context, listen: false);
-    final ctrl = mapProvider.controller ?? _tempController;
+  void _onCameraMove(CameraPosition? position) {
+    // 🚀 FAST PATH: Just update local variable, DO NOT trigger Flutter rebuilds here!
+    _currentCameraPosition = position;
+  }
 
-    if (ctrl != null && ctrl.cameraPosition != null) {
-      final cam = ctrl.cameraPosition!;
+  void _onCameraIdleScaleBar() {
+    if (_currentCameraPosition != null) {
+      final cam = _currentCameraPosition!;
       final currentZoom = cam.zoom;
       final lat = cam.target.latitude;
 
@@ -75,22 +80,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       double maxMeters = metersPerPixel * maxPixelWidth;
 
       const scaleValues = [
-        10,
-        20,
-        50,
-        100,
-        200,
-        500,
-        1000,
-        2000,
-        5000,
-        10000,
-        20000,
-        50000,
-        100000,
-        200000,
-        500000,
-        1000000
+        10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000
       ];
 
       int chosenMeters = 10;
@@ -107,27 +97,22 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           ? '${chosenMeters ~/ 1000} km'
           : '$chosenMeters m';
 
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _showScaleBarNotifier.value = true;
-        _scaleTextNotifier.value = newText;
-        _scaleWidthNotifier.value = newWidth.clamp(20.0, 150.0);
-      });
+      if (!mounted) return;
+      _showScaleBarNotifier.value = true;
+      _scaleTextNotifier.value = newText;
+      _scaleWidthNotifier.value = newWidth.clamp(20.0, 150.0);
 
       _scaleBarTimer?.cancel();
-      _scaleBarTimer = Timer(const Duration(milliseconds: 1000), () {
+      _scaleBarTimer = Timer(const Duration(milliseconds: 1500), () {
         if (mounted) _showScaleBarNotifier.value = false;
       });
     }
   }
 
-  void _onCameraIdleScaleBar() {
-    // Timer is already handled in _onCameraMove
-  }
-
   @override
   void initState() {
     super.initState();
+    debugPrint("🛠️ MAP LIFECYCLE: initState called.");
     _fadeScaleController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
@@ -136,26 +121,41 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     widget.searchSheetProgressNotifier.addListener(_onProgressChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeMapData();
+      _initializeApp();
     });
   }
 
-  Future<void> _initializeMapData() async {
-    try {
+  Future<void> _initializeApp() async {
+    // 1. Purana kachra saaf kar
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+
+    // 2. Chabi fetch kar (Map ko wait karwa)
+    await AppConfig.fetchKeys();
+
+    // 3. Check kar ki kya chabi sach mein aayi?
+    if (AppConfig.olaMapsKey.isNotEmpty && AppConfig.olaMapsKey != "2") {
+      if (mounted) {
+        setState(() {
+          _isMapReadyToLoad = true; // Chabi mil gayi, ab map dikha
+        });
+      }
       await _initMapStyle();
-    } catch (e) {
-      debugPrint("Init map style error: $e");
+    } else {
+      debugPrint("CRITICAL ERROR: Key fetch fail ho gayi ya null hai!");
       if (mounted) {
         setState(() {
           _hasMapError = true;
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
+          _isMapReadyToLoad = true; // Show the map error UI instead of loader loop
           _isMapReady = true;
         });
       }
+    }
+    
+    if (mounted) {
+      setState(() {
+        _isMapReady = true;
+      });
     }
   }
 
@@ -177,6 +177,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   @override
   void dispose() {
+    debugPrint("🛠️ MAP LIFECYCLE: dispose called. WebGL context tearing down.");
     _tempController?.dispose();
     _showScaleBarNotifier.dispose();
     _scaleTextNotifier.dispose();
@@ -188,9 +189,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   }
 
   Future<void> _initMapStyle({bool updateExisting = false}) async {
-    // 🔥 Sabse pehle cache delete kar taaki naya fetch ho
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
 
     if (!mounted) return;
     if (!updateExisting) {
@@ -203,7 +201,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           ? (_currentTheme == MapThemeType.dark)
           : isSystemDark;
       final style = await MapStyleHelper.getOlaStyle(isDark,
-          themeType: _currentTheme, showPOIs: _showPOIs, show3D: _show3D);
+          themeType: _currentTheme);
 
       if (mounted) {
         setState(() {
@@ -310,8 +308,32 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     });
   }
 
+  void _safeMoveCamera(LatLng target, {double? zoom, double? bearing, double? tilt}) {
+    final mapController = Provider.of<MapProvider>(context, listen: false).controller ?? _tempController;
+    // ignore: unnecessary_null_comparison
+    if (target.latitude == null || target.longitude == null) {
+      debugPrint("🛑 NULL DETECTED: animateCamera received a null target!");
+      return;
+    }
+    
+    debugPrint("🛠️ DEBUG ANIMATE CAMERA: Lat:${target.latitude}, Lng:${target.longitude}, Zoom:${zoom ?? 14.0}");
+    
+    mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: target,
+          zoom: zoom ?? 14.0,
+          tilt: tilt ?? 0.0,
+          bearing: bearing ?? 0.0,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    mapBuildCount++;
+    debugPrint("🛠️ MAP LIFECYCLE: build called (Count: $mapBuildCount). If this prints rapidly, we have a setState loop!");
     final bool isDesktop = MediaQuery.of(context).size.width >= 600;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -319,6 +341,15 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         isDesktop ? 32.0 : MediaQuery.of(context).padding.top + 24.0;
     final double sideMargin = isDesktop ? 32.0 : 28.0;
 
+    // 🚀 Agar chabi nahi aayi, toh Loading Spinner dikha, Map render mat kar!
+    if (!_isMapReadyToLoad) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF1A1A1A), // Dark background
+        body: Center(
+          child: CircularProgressIndicator(color: Colors.blueAccent),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -352,7 +383,21 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       ),
                     );
                   }
-                  return MapLibreMap(
+
+                  // Calculate safe initial position BEFORE passing it to MapLibre
+                  final userCurrentLocation = Provider.of<MapProvider>(context, listen: false).currentLocation;
+                  final double safeLat = userCurrentLocation?.latitude ?? 28.6139;
+                  final double safeLng = userCurrentLocation?.longitude ?? 77.2090;
+
+                  debugPrint("🛠️ DEBUG INITIAL CAMERA: Lat:$safeLat, Lng:$safeLng");
+
+                  // ignore: unnecessary_null_comparison
+                  if (safeLat == null || safeLng == null) {
+                    debugPrint("🛑 NULL DETECTED: Fallback lat/lng somehow became null!");
+                  }
+
+                  return RepaintBoundary(
+                    child: MapLibreMap(
                           key: const ValueKey('ridel_main_map'),
                           styleString: _loadedMapStyle!,
                           minMaxZoomPreference:
@@ -366,6 +411,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             ),
                           ),
                           onMapCreated: (controller) {
+                            debugPrint("✅ MAP ENGINE: onMapCreated fired. WebGL context locked.");
                             if (_tempController != null) return;
                             _tempController = controller;
 
@@ -376,15 +422,19 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             mapProvider.engine.mapController = controller;
                           },
                           onStyleLoadedCallback: () async {
+
                             final controller = _tempController;
                             if (controller == null) return;
 
                             Future<void> safeAddImage(String? id, Uint8List bytes) async {
                               if (id == null || id.trim().isEmpty) return;
+                              if (_addedImages.contains(id)) return; // Use boolean flag check to prevent JS interop calls
                               try {
                                 await controller.addImage(id, bytes);
+                                _addedImages.add(id);
                               } catch (e) {
-                                debugPrint("SafeAddImage error: $e");
+                                // Ignore if it already exists or fails
+                                debugPrint("Image add warning: $e");
                               }
                             }
 
@@ -530,15 +580,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                   );
 
                                   // Smoothly offset camera so sheet doesn't cover marker and zoom in
-                                  controller.animateCamera(
-                                    CameraUpdate.newLatLngZoom(
-                                      LatLng(coordinates.latitude - 0.0025,
-                                          coordinates.longitude),
-                                      16.5, // Slightly zoom in to focus on the tapped POI
-                                    ),
-                                    duration: const Duration(
-                                        milliseconds:
-                                            850), // Cinematic duration
+                                  _safeMoveCamera(
+                                    LatLng(coordinates.latitude - 0.0025, coordinates.longitude),
+                                    zoom: 16.5,
                                   );
 
                                   if (!mounted) return;
@@ -549,9 +593,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               }
                             }
                           },
-                          initialCameraPosition: const CameraPosition(
-                              target: LatLng(28.6139, 77.2090),
-                              zoom: 14.5,
+                          initialCameraPosition: CameraPosition(
+                              target: LatLng(safeLat, safeLng),
+                              zoom: 14.0,
                               tilt: 0.0,
                               bearing: 0.0),
 
@@ -561,16 +605,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           zoomGesturesEnabled: true,
                           tiltGesturesEnabled: true,
 
-                          // 🚀 CRITICAL FIX 2: Restore native blue dot logic exactly like custom_map_screen
-                          myLocationEnabled: showNativeBlueDot,
-                          myLocationTrackingMode:
-                              Provider.of<MapProvider>(context, listen: false)
-                                      .isAutoTracking
-                                  ? (kIsWeb
-                                      ? MyLocationTrackingMode.tracking
-                                      : MyLocationTrackingMode.trackingCompass)
-                                  : MyLocationTrackingMode.none,
-                          myLocationRenderMode: MyLocationRenderMode.normal,
+                          // 🚀 Nuke the Toxic Native JS Geolocator
+                          myLocationEnabled: false, // 🚀 Kills the JS tracking loop causing the crashes
+                          myLocationTrackingMode: MyLocationTrackingMode.none,
+                          myLocationRenderMode: MyLocationRenderMode.normal, // Do not use COMPASS or GPS
                           trackCameraPosition: true,
 
                           logoViewMargins: const Point(-5000, -5000),
@@ -586,39 +624,52 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             mapProvider.engine.onUserPannedMap();
                           },
                           onUserLocationUpdated: (location) {
-                            final mapProvider = Provider.of<MapProvider>(
-                                context,
-                                listen: false);
-                            final pos = location.position;
-                            mapProvider.updateCurrentLocation(pos);
+                            // 🚀 STRICT GUARD: Prevent async context crashes (Fixes line 648)
+                            if (!mounted) return;
+                            
+                            // Push the state update outside the current render cycle
+                            Future.microtask(() {
+                              if (context.mounted) {
+                                Provider.of<MapProvider>(context, listen: false).updateCurrentLocation(location.position);
+                              }
+                            });
                           },
-                          onCameraMove: (_) => _onCameraMove(),
-                          onCameraIdle: () async {
+                          onCameraMove: (position) => _onCameraMove(position),
+                          onCameraIdle: () {
                             _onCameraIdleScaleBar();
-                            final mapProvider = Provider.of<MapProvider>(
-                                context,
-                                listen: false);
-                            final ctrl =
-                                mapProvider.controller ?? _tempController;
-                            if (ctrl != null) {
-                              try {
-                                final bounds = await ctrl.getVisibleRegion();
-                                LatLng? userLoc = mapProvider.currentLocation;
-                                if (userLoc != null) {
-                                  bool isVisible = bounds.contains(userLoc);
-                                  mapProvider.setUserVisibility(isVisible);
-                                }
+                            if (!mounted) return;
+                            
+                            // 🚀 Defer the state update until AFTER the current rendering frame finishes
+                            WidgetsBinding.instance.addPostFrameCallback((_) async {
+                              if (!mounted) return;
+                              final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                              final ctrl = mapProvider.controller ?? _tempController;
+                              if (ctrl != null) {
+                                try {
+                                  final bounds = await ctrl.getVisibleRegion();
+                                  LatLng? userLoc = mapProvider.currentLocation;
+                                  if (userLoc != null) {
+                                    bool isVisible = bounds.contains(userLoc);
+                                    mapProvider.setUserVisibility(isVisible);
+                                  }
 
-                                // Notify engine about zoom updates for UI scaling
-                                final cam = ctrl.cameraPosition;
-                                if (cam != null) {
-                                  mapProvider.updateMapCenter(
-                                      cam.target, cam.zoom);
-                                }
-                              } catch (_) {}
-                            }
+                                  // Notify engine about zoom updates for UI scaling
+                                  if (_currentCameraPosition != null) {
+                                    mapProvider.updateMapCenter(
+                                        _currentCameraPosition!.target,
+                                        _currentCameraPosition!.zoom);
+                                  } else {
+                                    final cam = ctrl.cameraPosition;
+                                    if (cam != null) {
+                                      mapProvider.updateMapCenter(cam.target, cam.zoom);
+                                    }
+                                  }
+                                } catch (_) {}
+                              }
+                            });
                           },
-                        );
+                        ),
+                  );
                 },
               ),
             ),
@@ -696,8 +747,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
           if (MediaQuery.sizeOf(context).width < 800)
             Positioned.fill(
-              child: MapSearchSheet(
-                key: const ValueKey('map_search_sheet'),
+              child: RepaintBoundary(
+                child: MapSearchSheet(
+                  key: const ValueKey('map_search_sheet'),
                 isMapTabActive: widget.isMapTabActive,
                 onSearchModeChanged: (isActive) {},
                 onSearchSubmitted: (query) {},
@@ -714,6 +766,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                 },
               ),
             ),
+          ),
 
           // 🚀 1. SMOOTH WEATHER WIDGET (Mobile = Top Left, Desktop = Top Right)
           ValueListenableBuilder<bool>(
@@ -1074,16 +1127,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       _isTilted = !_isTilted;
       final currentCamera = mapProvider.controller!.cameraPosition;
       if (currentCamera != null) {
-        await mapProvider.controller!.animateCamera(
-          CameraUpdate.newCameraPosition(
-            CameraPosition(
-              target: currentCamera.target,
-              zoom: currentCamera.zoom,
-              bearing: currentCamera.bearing,
-              tilt: _isTilted ? 60.0 : 0.0,
-            ),
-          ),
-          duration: const Duration(milliseconds: 1200),
+        _safeMoveCamera(
+          currentCamera.target,
+          zoom: currentCamera.zoom,
+          bearing: currentCamera.bearing,
+          tilt: _isTilted ? 60.0 : 0.0,
         );
       }
       return;
@@ -1121,15 +1169,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         await mapProvider.controller!
             .updateMyLocationTrackingMode(MyLocationTrackingMode.none);
 
-        await mapProvider.controller!.animateCamera(
-          CameraUpdate.newCameraPosition(
-            CameraPosition(
-                target: LatLng(pos.latitude, pos.longitude),
-                zoom: 16.5,
-                tilt: 0.0,
-                bearing: 0.0),
-          ),
-          duration: const Duration(milliseconds: 1000),
+        _safeMoveCamera(
+          LatLng(pos.latitude, pos.longitude),
+          zoom: 16.5,
+          tilt: 0.0,
+          bearing: 0.0,
         );
         mapProvider.setAutoTracking(true);
       }
@@ -1568,8 +1612,9 @@ class _PremiumMapSkeletonState extends State<PremiumMapSkeleton>
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ShaderMask(
-                  blendMode: BlendMode.srcIn,
+                RepaintBoundary(
+                  child: ShaderMask(
+                    blendMode: BlendMode.srcIn,
                   shaderCallback: (bounds) {
                     return LinearGradient(
                       // Sweeps tightly from left to right
@@ -1626,6 +1671,7 @@ class _PremiumMapSkeletonState extends State<PremiumMapSkeleton>
                         ),
                       ),
                     ],
+                  ),
                   ),
                 ),
                 const SizedBox(height: 30.0),

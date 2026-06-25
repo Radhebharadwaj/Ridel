@@ -53,8 +53,9 @@ class _BrandedLoaderState extends State<BrandedLoader>
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ShaderMask(
-                  blendMode: BlendMode.srcIn,
+                RepaintBoundary(
+                  child: ShaderMask(
+                    blendMode: BlendMode.srcIn,
                   shaderCallback: (bounds) {
                     return LinearGradient(
                       // Sweeps tightly from left to right
@@ -107,6 +108,7 @@ class _BrandedLoaderState extends State<BrandedLoader>
                         ),
                       ),
                     ],
+                  ),
                   ),
                 ),
                 const SizedBox(height: 30.0),

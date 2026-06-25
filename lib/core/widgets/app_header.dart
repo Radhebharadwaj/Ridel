@@ -10,7 +10,6 @@ import 'package:ridel/core/services/notification_service.dart';
 
 import 'package:ridel/core/widgets/notification_sheet.dart';
 
-import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../features/profile/services/profile_repository.dart';
 import '../utils/app_haptics.dart';

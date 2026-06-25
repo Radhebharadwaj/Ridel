@@ -153,17 +153,24 @@ class _JourneyTimelineCardState extends State<JourneyTimelineCard> {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Header Stats
-          _buildSummaryHeader(),
+          if (!widget.isMetro)
+            _buildBusConversationalHeader()
+          else
+            _buildSummaryHeader(),
           
           // Timeline
           if (_showDetails) ...[
             const SizedBox(height: 24),
-            _buildTimeline(),
+            if (!widget.isMetro)
+              _buildBusActionCards()
+            else
+              _buildTimeline(),
           ],
-
 
           // CTA Button
           const SizedBox(height: 12),
+          if (!widget.isMetro)
+            _buildAiAssistPill(),
           _buildBookTicketCTA(),
         ],
       ),
@@ -600,7 +607,154 @@ class _JourneyTimelineCardState extends State<JourneyTimelineCard> {
       ),
     );
   }
+  Widget _buildBusConversationalHeader() {
+    final isLightMode = Theme.of(context).brightness == Brightness.light;
+    return Text(
+      "Let's get you to ${widget.toStation}. First, walk to the ${widget.fromStation} bus stop.",
+      style: GoogleFonts.inter(
+        color: isLightMode ? Colors.black87 : Colors.white,
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
 
+  Widget _buildBusActionCards() {
+    final isLightMode = Theme.of(context).brightness == Brightness.light;
+    final path = widget.routeData.path;
+    String busNumber = path.isNotEmpty ? path.first.lineName : "Bus";
+
+    return Column(
+      children: [
+        // Walk Card
+        _buildActionCard(
+          icon: Icons.directions_walk_rounded,
+          iconColor: Colors.blueAccent,
+          text: "Walk 2 mins to ${widget.fromStation} stop",
+          statusWidget: Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.redAccent, width: 2),
+            ),
+          ),
+          isLightMode: isLightMode,
+        ),
+        const SizedBox(height: 16),
+        // Wait & Ride Card
+        _buildActionCard(
+          icon: Icons.directions_bus_rounded,
+          iconColor: Colors.orangeAccent,
+          text: "Wait & Ride",
+          subtitle: "Live: Arriving in 4 mins",
+          subtitleColor: const Color(0xFF00FF00), // neon green
+          badgeText: "[$busNumber]",
+          isLightMode: isLightMode,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionCard({
+    required IconData icon,
+    required Color iconColor,
+    required String text,
+    String? subtitle,
+    Color? subtitleColor,
+    String? badgeText,
+    Widget? statusWidget,
+    required bool isLightMode,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isLightMode ? Colors.grey.shade100 : const Color(0xFF1E2129),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isLightMode ? Colors.black.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: iconColor, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(text, style: GoogleFonts.inter(
+                        color: isLightMode ? Colors.black87 : Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      )),
+                    ),
+                    if (badgeText != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemBlue.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(badgeText, style: GoogleFonts.inter(
+                          color: CupertinoColors.systemBlue,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        )),
+                      ),
+                    ],
+                  ],
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: GoogleFonts.inter(
+                    color: subtitleColor ?? (isLightMode ? Colors.black54 : Colors.white54),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  )),
+                ],
+              ],
+            ),
+          ),
+          if (statusWidget != null) ...[
+            const SizedBox(width: 12),
+            statusWidget,
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiAssistPill() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: RidelLiquidButton(
+        height: 48,
+        onTap: () {
+          AppHaptics.lightImpact();
+        },
+        child: Center(
+          child: Text(
+            "✨ Confused? Ask Ridel AI",
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
   Widget _buildSummaryHeader() {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
     final primaryMode = _primaryMode;

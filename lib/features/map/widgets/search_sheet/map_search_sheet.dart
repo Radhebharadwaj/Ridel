@@ -211,6 +211,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     if (widget.isMapTabActive) unawaited(_slideController.forward());
 
     _searchFocus.addListener(() {
+      if (!mounted) return;
       if (_searchFocus.hasFocus) {
         _safeAnimateSheet(_safeMaxSize);
       }
@@ -218,6 +219,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       Provider.of<MapProvider>(context, listen: false)
           .addListener(_onMapProviderUpdated);
     });
@@ -285,6 +287,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     _debounce?.cancel();
 
     _debounce = Timer(const Duration(milliseconds: 500), () async {
+      if (!mounted) return;
       debugPrint("🔍 DEBUG SEARCH: Sending query -> '$currentQuery'");
       final globalLoc =
           Provider.of<GlobalLocationService>(context, listen: false);
@@ -392,6 +395,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   Future<void> _selectPlaceFromList(PlaceModel place) async {
+    if (!mounted) return;
     final safeProvider = Provider.of<MapProvider>(context, listen: false);
 
     try {
@@ -451,6 +455,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       // 4. Fly Camera
       if (lat != 0.0 && lng != 0.0) {
         await safeProvider.cancelAndClearRoute(resetCamera: false);
+        if (!mounted) return;
         safeProvider.setTargetDestination(LatLng(lat, lng));
         setState(() => _selectedPlace = place);
         if (_sheetController.isAttached) {
@@ -608,6 +613,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
               final validLatLng =
                   LatLng(placeToSubmit.latitude, placeToSubmit.longitude);
 
+              if (!mounted) return;
               // Update provider with valid data
               final provider = Provider.of<MapProvider>(context, listen: false);
               await provider.cancelAndClearRoute(resetCamera: false);
@@ -622,6 +628,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
               // and revert UI to prevent a permanent locked/broken state.
               debugPrint(
                   "🚨 ABORTING FLIGHT: Valid coordinates not found for this place.");
+              if (!mounted) return;
               final provider = Provider.of<MapProvider>(context, listen: false);
               provider.setTargetDestination(null);
               provider.setDestinationSelected(false);
@@ -698,79 +705,75 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   LatLng? _lastIdleCenter;
 
   void _onMapProviderUpdated() async {
-    if (!mounted) return;
-    final provider = Provider.of<MapProvider>(context, listen: false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final provider = Provider.of<MapProvider>(context, listen: false);
 
-    // 🚀 NEW: Hook location picker reverse geocode to map IDLE center updates
-    if (_locationPickerController.sheetState.value == SheetState.selectingLocation) {
-      final currentCenter = provider.currentMapCenter;
-      if (currentCenter != null && _lastIdleCenter != currentCenter) {
-        // Only trigger if we moved significantly to avoid micro-jitter geocoding
-        _lastIdleCenter = currentCenter;
-        _locationPickerController.onCameraMove(currentCenter);
-      }
-    }
-
-    // 🚀 FIX: Deep Clean Synchronization with Provider
-    // If provider was cleared (e.g., cross button tapped in headers) but sheet still has the place
-    if (!provider.isDestinationSelected &&
-        _selectedPlace != null &&
-        !_showDirections) {
-      setState(() {
-        _selectedPlace = null;
-        _destPlace = null;
-        _originPlace = null;
-        _searchCtrl.clear();
-        _activeRoutingField = null;
-        _currentRoute = null;
-        _showSearchList = true;
-        _isNavSheetExpanded = false;
-      });
-      // 🚀 FIX: Sheet should NOT collapse here! It should retain current size
-      // if (_sheetController.isAttached && !_searchFocus.hasFocus) {
-      //   _sheetController.animateTo(_safeMinSize,
-      //       duration: const Duration(milliseconds: 350),
-      //       curve: Curves.easeOutCubic);
-      // }
-    }
-
-    if (provider.tappedPlaceFromMap != null) {
-      final tappedPlace = provider.tappedPlaceFromMap!;
-      provider.clearTappedPlace();
-
-      if (_showDirections && _activeRoutingField != null) {
-        AppHaptics.heavyImpact();
-        if (_activeRoutingField == 'origin') {
-          setState(() {
-            _originPlace = tappedPlace;
-            _originCtrl.text = tappedPlace.name;
-            _activeRoutingField = 'dest';
-            _destFocus.requestFocus();
-          });
-        } else {
-          setState(() {
-            _destPlace = tappedPlace;
-            _destCtrl.text = tappedPlace.name;
-            _activeRoutingField = null;
-            _destFocus.unfocus();
-            _originFocus.unfocus();
-          });
+      // 🚀 NEW: Hook location picker reverse geocode to map IDLE center updates
+      if (_locationPickerController.sheetState.value == SheetState.selectingLocation) {
+        final currentCenter = provider.currentMapCenter;
+        if (currentCenter != null && _lastIdleCenter != currentCenter) {
+          // Only trigger if we moved significantly to avoid micro-jitter geocoding
+          _lastIdleCenter = currentCenter;
+          _locationPickerController.onCameraMove(currentCenter);
         }
-        unawaited(_checkAndFetchRoute());
-      } else if (!_showDirections) {
+      }
+
+      // 🚀 FIX: Deep Clean Synchronization with Provider
+      // If provider was cleared (e.g., cross button tapped in headers) but sheet still has the place
+      if (!provider.isDestinationSelected &&
+          _selectedPlace != null &&
+          !_showDirections) {
         setState(() {
-          _selectedPlace = tappedPlace;
-          _searchCtrl.text = tappedPlace.name;
-          _showSearchList = false;
-          _showDirections = false;
-          _isLoadingDetails = true;
+          _selectedPlace = null;
+          _destPlace = null;
+          _originPlace = null;
+          _searchCtrl.clear();
+          _activeRoutingField = null;
+          _currentRoute = null;
+          _showSearchList = true;
+          _isNavSheetExpanded = false;
         });
-        if (_sheetController.isAttached) {
-          _safeAnimateSheet(_safeMidSize);
-        }
-        unawaited(_fetchExtraDetailsForPlace(tappedPlace));
       }
-    }
+
+      if (provider.tappedPlaceFromMap != null) {
+        final tappedPlace = provider.tappedPlaceFromMap!;
+        provider.clearTappedPlace();
+
+        if (_showDirections && _activeRoutingField != null) {
+          AppHaptics.heavyImpact();
+          if (_activeRoutingField == 'origin') {
+            setState(() {
+              _originPlace = tappedPlace;
+              _originCtrl.text = tappedPlace.name;
+              _activeRoutingField = 'dest';
+              _destFocus.requestFocus();
+            });
+          } else {
+            setState(() {
+              _destPlace = tappedPlace;
+              _destCtrl.text = tappedPlace.name;
+              _activeRoutingField = null;
+              _destFocus.unfocus();
+              _originFocus.unfocus();
+            });
+          }
+          unawaited(_checkAndFetchRoute());
+        } else if (!_showDirections) {
+          setState(() {
+            _selectedPlace = tappedPlace;
+            _searchCtrl.text = tappedPlace.name;
+            _showSearchList = false;
+            _showDirections = false;
+            _isLoadingDetails = true;
+          });
+          if (_sheetController.isAttached) {
+            _safeAnimateSheet(_safeMidSize);
+          }
+          unawaited(_fetchExtraDetailsForPlace(tappedPlace));
+        }
+      }
+    });
   }
 
   Future<void> _checkAndFetchRoute() async {
@@ -785,6 +788,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     if (_originPlace != null) {
       originLoc = LatLng(_originPlace!.latitude, _originPlace!.longitude);
     } else {
+      if (!mounted) return;
       final locService =
           Provider.of<GlobalLocationService>(context, listen: false);
       if (locService.currentPosition == null) {
@@ -917,6 +921,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       _activeRoutingField = null;
     });
 
+    if (!mounted) return;
     final mapProvider = Provider.of<MapProvider>(context, listen: false);
     final mapCtrl = mapProvider.controller;
 
@@ -1134,8 +1139,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         screenSize.height - MediaQuery.paddingOf(context).top;
     final double defaultIdleHeight = screenSize.height;
 
-    return Stack(
-      children: [
+    return RepaintBoundary(
+      child: Stack(
+        children: [
         AnimatedOpacity(
           opacity: (isKeyboardOpen && widget.isMapTabActive) ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 300),
@@ -1586,6 +1592,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           child: const AnimatedMapPin(),
         ),
       ],
-    );
+    ));
   }
 }

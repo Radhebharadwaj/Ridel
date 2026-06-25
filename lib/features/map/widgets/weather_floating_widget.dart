@@ -470,8 +470,9 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                         ),
                         child: Center(
                             child: _isLoading
-                                ? Shimmer.fromColors(
-                                    baseColor: isLightMode
+                                ? RepaintBoundary(
+                                    child: Shimmer.fromColors(
+                                      baseColor: isLightMode
                                         ? Colors.black12
                                         : Colors.white.withValues(alpha: 0.2),
                                     highlightColor: isLightMode
@@ -499,7 +500,8 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                                         ),
                                       ],
                                     ),
-                                  )
+                                  ),
+                                )
                                 : Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [

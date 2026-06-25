@@ -25,7 +25,7 @@ import 'package:ridel/main.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:ridel/core/widgets/app_header.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
-import 'package:ridel/core/widgets/ridel_liquid_button.dart';
+
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/app_shadows.dart';
 import 'package:ridel/features/commute/shared/widgets/facilities_sheet.dart';
@@ -53,7 +53,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
   late RouteResult? _currentRouteData;
   late String _currentFrom;
   late String _currentTo;
-  BusRoutePreference _busPreference = BusRoutePreference.fastest;
+  final BusRoutePreference _busPreference = BusRoutePreference.fastest;
   bool _isLoading = false;
   int? _activeStationIndex;
   String? _trackingError;
@@ -228,40 +228,6 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
     }
   }
 
-  Future<void> _onPreferenceChanged(BusRoutePreference newPref) async {
-    if (_busPreference == newPref) {
-      return;
-    }
-    _locationSubscription?.cancel();
-    setState(() {
-      _busPreference = newPref;
-      _isLoading = true;
-      _currentRouteData = null; // Fix: Reset previous route results
-      _activeStationIndex = null;
-      _trackingError = null;
-      _hasNotifiedArrival = false;
-    });
-    try {
-      final newResult = await BusService()
-          .findBusRoute(_currentFrom, _currentTo, preference: _busPreference);
-      if (mounted) {
-        setState(() {
-          _currentRouteData = newResult;
-          _isLoading = false;
-        });
-        if (newResult == null) {
-          ToastService.showError(
-              context, "No route found for this preference.");
-        } else {
-          _initLiveTracking(); // Restart live tracking for new route
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -292,10 +258,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
           onSwap: _handleSwap,
         ),
         const SizedBox(height: 25),
-        if (!widget.isMetro)
-          Padding(
-              padding: const EdgeInsets.only(bottom: 20, left: 20, right: 20),
-              child: _buildPreferenceToggle()),
+
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: _isLoading
@@ -371,10 +334,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
                   ),
                       const SizedBox(height: 20),
 
-                      if (!widget.isMetro)
-                        Padding(
-                            padding: const EdgeInsets.only(bottom: 20),
-                            child: _buildPreferenceToggle()),
+
                       
                       _isLoading
                           ? _buildLoadingState()
@@ -559,96 +519,6 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
               ],
             )
           : mobileContent,
-    );
-  }
-
-  Widget _buildPreferenceToggle() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      height: 56,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2129) : Colors.white,
-        borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
-        boxShadow: AppShadows.buttonSoft,
-      ),
-      child: Row(
-        children: [
-          // 🚀 BUTTON 1: TIME SAVER
-          Expanded(
-            child: RidelLiquidButton(
-              height: 48,
-              customGradient: _busPreference == BusRoutePreference.fastest
-                  ? const LinearGradient(
-                      colors: [Color(0xFFFF9F0A), Color(0xFFFF6D00)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    )
-                  : null,
-              onTap: () {
-                AppHaptics.lightImpact();
-                if (_busPreference != BusRoutePreference.fastest) {
-                  // 🚀 FIX: Ab sirf UI nahi badlega, naya fastest route bhi calculate hoga!
-                  _onPreferenceChanged(BusRoutePreference.fastest);
-                }
-              },
-              child: Center(
-                child: Text(
-                  'Time Saver ⏱️',
-                  style: GoogleFonts.inter(
-                    color: _busPreference == BusRoutePreference.fastest
-                        ? Colors.white
-                        : (isDark ? Colors.white54 : Colors.black54),
-                    fontSize: 14,
-                    fontWeight: _busPreference == BusRoutePreference.fastest
-                        ? FontWeight.w800
-                        : FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-
-          // 🚀 BUTTON 2: LESS INTERCHANGE
-          Expanded(
-            child: RidelLiquidButton(
-              height: 48,
-              customGradient:
-                  _busPreference == BusRoutePreference.lessInterchange
-                      ? const LinearGradient(
-                          colors: [Color(0xFFFF9F0A), Color(0xFFFF6D00)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        )
-                      : null,
-              onTap: () {
-                AppHaptics.lightImpact();
-                if (_busPreference != BusRoutePreference.lessInterchange) {
-                  // 🚀 FIX: Kam interchange wala route mangwao!
-                  _onPreferenceChanged(BusRoutePreference.lessInterchange);
-                }
-              },
-              child: Center(
-                child: Text(
-                  'Less Interchange 🔄',
-                  style: GoogleFonts.inter(
-                    color: _busPreference == BusRoutePreference.lessInterchange
-                        ? Colors.white
-                        : (isDark ? Colors.white54 : Colors.black54),
-                    fontSize: 14,
-                    fontWeight:
-                        _busPreference == BusRoutePreference.lessInterchange
-                            ? FontWeight.w800
-                            : FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
