@@ -2,7 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:ridel/core/widgets/ridel_premium_loader.dart';
+import 'package:ridel/core/widgets/ridel_loading_dots.dart';
 
 class BrandedLoader extends StatefulWidget {
   final bool isFullScreen;
@@ -39,7 +39,10 @@ class _BrandedLoaderState extends State<BrandedLoader>
   Widget build(BuildContext context) {
     if (!widget.isFullScreen) {
       return const Center(
-        child: RidelPremiumLoader(size: 32.0),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: PremiumDotLoader(),
+        ),
       );
     }
 

@@ -38,9 +38,9 @@ class _FareCalculatorSheetState extends State<FareCalculatorSheet> {
       final route =
           await MetroService().findBestRoute(fromStation!, toStation!);
 
-      if (route != null && route.path.isNotEmpty) {
-        _routeDistance = route.totalDistance;
-        _timeMinutes = route
+      if (route.isNotEmpty) {
+        _routeDistance = route.first.totalDistance;
+        _timeMinutes = route.first
             .totalTimeMin; // 🚀 Yahan model ka correct variable use kiya hai
 
         final fareConfigs = await DatabaseHelper.instance.getFareConfig(0);

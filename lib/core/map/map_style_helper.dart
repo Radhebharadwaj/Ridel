@@ -228,8 +228,7 @@ class MapStyleHelper {
         // 1. BACKGROUND — The canvas foundation
         // ════════════════════════════════════════════════════
         if (type == 'background') {
-          // Dark: Rich deep slate (NOT black) | Light: Warm paper white
-          paint['background-color'] = useDark ? '#202A37' : '#EFEFF4';
+          paint['background-color'] = useDark ? '#1C1C1E' : '#F2F2F7'; // Apple Dark/Light Base
         }
 
         // ════════════════════════════════════════════════════
@@ -237,38 +236,25 @@ class MapStyleHelper {
         //    Apple Maps uses very subtle, desaturated tones
         // ════════════════════════════════════════════════════
         else if (type == 'fill') {
-          // ── 2a. WATER (Oceans, Rivers, Lakes) ──
           if (id.contains('water') ||
               id.contains('ocean') ||
               id.contains('river') ||
               id.contains('lake') ||
               id.contains('reservoir')) {
-            paint['fill-color'] = useDark ? '#171F2C' : '#A2C0D4';
-            paint['fill-opacity'] = 1.0;
-          }
-          // ── 2b. FORESTS & WOODS ──
-          else if (id.contains('forest') || id.contains('wood')) {
-            paint['fill-color'] = useDark ? '#17332E' : '#BCE2B9';
-            paint['fill-opacity'] = useDark ? 0.95 : 0.65;
-          }
-          // ── 2c. PARKS & GARDENS ──
-          else if (id.contains('park') ||
+            paint['fill-color'] = useDark ? '#0A0A14' : '#A2C1D6';
+          } else if (id.contains('park') ||
+              id.contains('forest') ||
+              id.contains('grass') ||
               id.contains('garden') ||
-              id.contains('recreation')) {
-            paint['fill-color'] = useDark ? '#17332E' : '#BCE2B9';
-            paint['fill-opacity'] = useDark ? 0.90 : 0.55;
-          }
-          // ── 2d. GRASS, PITCH, MEADOW ──
-          else if (id.contains('grass') ||
+              id.contains('recreation') ||
               id.contains('pitch') ||
-              id.contains('meadow')) {
-            paint['fill-color'] = useDark ? '#17332E' : '#BCE2B9';
-            paint['fill-opacity'] = useDark ? 0.85 : 0.50;
-          }
-          // ── 2e. BUILDINGS (2D flat fills + crisp outline edges) ──
-          else if (id.contains('building')) {
+              id.contains('meadow') ||
+              id.contains('wood')) {
+            paint['fill-color'] = useDark ? '#1D2A24' : '#C1DFC4';
+            paint['fill-opacity'] = useDark ? 0.6 : 0.8;
+          } else if (id.contains('building')) {
             heavyLayerIds.add(id); // 🚀 Add 2D buildings to LOD tracker
-            paint['fill-color'] = useDark ? '#283240' : '#E5E5EA';
+            paint['fill-color'] = useDark ? '#2C2C2E' : '#E5E5EA';
             if (show3D) {
               layer['type'] = 'fill-extrusion';
               paint.clear();
@@ -283,80 +269,16 @@ class MapStyleHelper {
                 ["get", "min_height"],
                 0.0
               ];
-              paint['fill-extrusion-color'] = useDark ? '#334152' : '#E5E5EA';
+              paint['fill-extrusion-color'] = useDark ? '#2C2C2E' : '#E5E5EA';
               paint.remove('fill-outline-color');
             } else {
               layer['type'] = 'fill';
-              paint['fill-color'] = useDark ? '#334152' : '#E5E5EA';
-              paint['fill-opacity'] = useDark ? 1.0 : 0.85;
-              paint['fill-outline-color'] = useDark ? '#1D2633' : '#D1D1D6';
+              paint['fill-color'] = useDark ? '#2C2C2E' : '#E5E5EA';
+              paint['fill-outline-color'] = useDark ? '#1C1C1E' : '#D1D1D6';
             }
-          }
-          // ── 2f. HIGHWAY / MOTORWAY FILLS ──
-          else if (id.contains('highway') ||
-              id.contains('motorway') ||
-              id.contains('trunk')) {
-            paint['fill-color'] = useDark ? '#161E28' : '#FFFFFF';
-          }
-          // ── 2g. PRIMARY ROAD FILLS ──
-          else if (id.contains('primary')) {
-            paint['fill-color'] = useDark ? '#161E28' : '#FFFFFF';
-          }
-          // ── 2h. SECONDARY / MINOR ROAD FILLS ──
-          else if (id.contains('road') ||
-              id.contains('street') ||
-              id.contains('secondary') ||
-              id.contains('tertiary')) {
-            paint['fill-color'] = useDark ? '#2A3646' : '#FFFFFF';
-          }
-          // ── 2i. HOSPITAL / HEALTHCARE ──
-          else if (id.contains('hospital') ||
-              id.contains('clinic') ||
-              id.contains('health')) {
-            paint['fill-color'] = useDark ? '#222C39' : '#FBF0F0';
-            paint['fill-opacity'] = useDark ? 0.90 : 0.60;
-          }
-          // ── 2j. SCHOOL / UNIVERSITY / EDUCATION ──
-          else if (id.contains('school') ||
-              id.contains('university') ||
-              id.contains('college') ||
-              id.contains('education')) {
-            paint['fill-color'] = useDark ? '#232D3B' : '#F0F0FB';
-            paint['fill-opacity'] = useDark ? 0.90 : 0.60;
-          }
-          // ── 2k. COMMERCIAL / RETAIL ZONES ──
-          else if (id.contains('commercial') ||
-              id.contains('retail') ||
-              id.contains('market')) {
-            paint['fill-color'] = useDark ? '#1F2936' : '#FDF8F0';
-            paint['fill-opacity'] = useDark ? 0.85 : 0.55;
-          }
-          // ── 2l. RESIDENTIAL ZONES ──
-          else if (id.contains('residential')) {
-            paint['fill-color'] = useDark ? '#1E2733' : '#F5F3F7';
-            paint['fill-opacity'] = useDark ? 0.85 : 0.50;
-          }
-          // ── 2m. INDUSTRIAL ──
-          else if (id.contains('industrial')) {
-            paint['fill-color'] = useDark ? '#1D2530' : '#F0F1F3';
-          }
-          // ── 2n. SAND / BEACH / DESERT ──
-          else if (id.contains('sand') || id.contains('beach')) {
-            paint['fill-color'] = useDark ? '#20282E' : '#F5ECD7';
-          }
-          // ── 2o. CEMETERY ──
-          else if (id.contains('cemetery')) {
-            paint['fill-color'] = useDark ? '#1A232D' : '#EEF1F0';
-          }
-          // ── 2p. LANDUSE & LAND (General terrain — matches background) ──
-          else if (id.contains('land') ||
-              id.contains('landuse') ||
-              id.contains('earth')) {
-            paint['fill-color'] = useDark ? '#202A37' : '#EFEFF4';
-          }
-          // ── 2q. CATCH-ALL (Matches background) ──
-          else {
-            paint['fill-color'] = useDark ? '#202A37' : '#EFEFF4';
+          } else {
+            // Mute everything else
+            paint['fill-color'] = useDark ? '#1C1C1E' : '#F2F2F7';
           }
         }
 
@@ -485,8 +407,8 @@ class MapStyleHelper {
             // 2. EXPLICIT OPACITY — 1.0 as per Phase 3 spec
             paint['line-opacity'] = 1.0;
 
-            // 3. FIXED WIDTH — 2.0 as per Phase 3 spec
-            paint['line-width'] = 2.0;
+            // 3. FIXED WIDTH — 2.5 as per Phase 3 spec
+            paint['line-width'] = 2.5;
 
             // 4. DASHED TRACK — [2, 3] as per Phase 3 spec
             paint['line-dasharray'] = [2, 3];
@@ -518,154 +440,19 @@ class MapStyleHelper {
           }
 
           // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          // 4b. HEAVY RAIL / RAILWAY (Not metro)
-          //     Subtle groove, never competes with metro lines
+          // 4b. HIGHWAYS & ARTERIAL ROADS
           // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          else if (id.contains('rail') && !id.contains('guard')) {
-            paint['line-color'] = useDark ? '#2C2C2E' : '#C8CCD5';
-            paint['line-opacity'] = useDark ? 0.45 : 0.40;
-            paint['line-width'] = [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              8,
-              0.5,
-              12,
-              1.0,
-              16,
-              1.5
-            ];
-          }
-
+          else if (id.contains('highway') || id.contains('primary')) {
+            paint['line-color'] = useDark ? '#3A3A3C' : '#FFFFFF';
+            paint['line-width'] = ["interpolate", ["linear"], ["zoom"], 12, 1.5, 18, 8.0];
+          } 
           // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          // 4c. ROAD CASING layers (borders/outlines for depth)
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          else if (id.contains('casing') ||
-              id.contains('_case') ||
-              id.contains('outline')) {
-            if (id.contains('highway') ||
-                id.contains('motorway') ||
-                id.contains('primary') ||
-                id.contains('trunk') ||
-                id.contains('arterial')) {
-              paint['line-color'] = useDark ? '#12151C' : '#C7C7CC';
-              paint['line-width'] = [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                12,
-                4.0,
-                18,
-                16.0
-              ];
-            } else {
-              paint['line-color'] = useDark ? '#12151C' : '#C7C7CC';
-              paint['line-width'] = [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                14,
-                2.5,
-                18,
-                10.0
-              ];
-            }
-            paint['line-opacity'] = useDark ? 1.0 : 0.50;
-            if (layer['layout'] == null) layer['layout'] = {};
-            layer['layout']['line-cap'] = 'round';
-            layer['layout']['line-join'] = 'round';
-          }
-
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          // 4d. HIGHWAYS & ARTERIAL ROADS
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          else if (id.contains('highway') ||
-              id.contains('motorway') ||
-              id.contains('primary') ||
-              id.contains('trunk') ||
-              id.contains('arterial')) {
-            paint['line-color'] = useDark ? '#161E28' : '#FFFFFF';
-            if (useDark) paint['line-blur'] = 0.5;
-            paint['line-opacity'] = 1.0;
-            paint['line-width'] = [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              12,
-              3.0,
-              18,
-              14.0
-            ];
-            if (layer['layout'] == null) layer['layout'] = {};
-            layer['layout']['line-cap'] = 'round';
-            layer['layout']['line-join'] = 'round';
-          }
-
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          // 4e. MINOR STREETS & LOCAL ROADS
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          else if (id.contains('secondary') ||
-              id.contains('road') ||
-              id.contains('street') ||
-              id.contains('tertiary') ||
-              id.contains('residential') ||
-              id.contains('service') ||
-              id.contains('path')) {
-            paint['line-color'] = useDark ? '#2A3646' : '#FFFFFF';
-            paint['line-opacity'] = useDark ? 1.0 : 0.70;
-            paint['line-width'] = [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              14,
-              1.5,
-              18,
-              8.0
-            ];
-            if (layer['layout'] == null) layer['layout'] = {};
-            layer['layout']['line-cap'] = 'round';
-            layer['layout']['line-join'] = 'round';
-          }
-
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          // 4g. ADMIN BOUNDARIES & BORDERS
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          else if (id.contains('admin') ||
-              id.contains('border') ||
-              id.contains('boundary')) {
-            paint['line-color'] = useDark ? '#38383A' : '#94A3B8';
-            paint['line-opacity'] = useDark ? 0.30 : 0.35;
-            paint['line-width'] = [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              4,
-              0.5,
-              8,
-              1.0,
-              14,
-              1.5
-            ];
-            paint['line-dasharray'] = [3, 2];
-          }
-
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          // 4h. WATER BOUNDARIES (Coastlines, River edges)
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          else if (id.contains('water') ||
-              id.contains('coast') ||
-              id.contains('river')) {
-            paint['line-color'] = useDark ? '#1C2B39' : '#7CBEE5';
-            paint['line-opacity'] = useDark ? 0.50 : 0.45;
-            paint['line-width'] = 1.0;
-          }
-
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          // 4i. CATCH-ALL — Everything else fades away
+          // 4c. EVERYTHING ELSE (Minor streets)
           // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
           else {
-            paint['line-color'] = useDark ? '#2C2C2E' : '#E0E4EA';
-            paint['line-opacity'] = 0.15;
+            // Fade out minor streets to reduce clutter
+            paint['line-color'] = useDark ? '#2C2C2E' : '#EAEAEA';
+            paint['line-width'] = ["interpolate", ["linear"], ["zoom"], 14, 0.5, 18, 4.0];
           }
         }
 
@@ -741,27 +528,31 @@ class MapStyleHelper {
             layer['minzoom'] = 13.0; // Show major transit hubs earlier
           }
 
-          // Text styling: 'Floating' aesthetic with halos
-          paint['text-color'] = useDark ? '#E0E6ED' : '#1C1C1E';
-          paint['text-halo-color'] = useDark ? '#202A37' : '#FFFFFF';
+          // ✨ 4. PREMIUM TYPOGRAPHY & SAFE POIS
+          // A. Safe POI Restoration (Only kill explicitly empty/broken icons)
+          if (layer['layout'].containsKey('icon-image')) {
+            String iconVal = layer['layout']['icon-image'].toString().trim();
+            if (iconVal.isEmpty || iconVal == '""' || iconVal == "''" || iconVal == '[]') {
+              layer['layout'].remove('icon-image');
+            } else {
+              // Shrink valid icons slightly for a refined look
+              layer['layout']['icon-size'] = 0.65; 
+              paint['icon-opacity'] = useDark ? 0.8 : 0.9;
+            }
+          }
+
+          // B. Typography Enhancements (Fixes the floating text issue)
+          paint['text-color'] = useDark ? '#EBEBF5' : '#1C1C1E';
+          
+          // Add a thick halo matching the background to make text readable anywhere
+          paint['text-halo-color'] = useDark ? '#1C1C1E' : '#F2F2F7';
           paint['text-halo-width'] = 2.0;
-          paint['text-halo-blur'] = 1.0;
+          paint['text-halo-blur'] = 0.5;
 
-          // Icons: visible but faded so transit lines stay dominant
-          paint['icon-opacity'] = useDark ? 0.65 : 0.70;
-
-          // Apply text offset so it floats nicely below the icon
-          layer['layout']['text-offset'] = [
-            0.0,
-            1.2
-          ]; // Pushes the text down along the Y-axis
-          layer['layout']['text-anchor'] =
-              'top'; // Anchors the top of the text to the point
-
-          // Refine Text Sizing for Elegance
-          layer['layout']['text-size'] =
-              11.0; // Slightly smaller, premium font size
-          layer['layout']['text-justify'] = 'center';
+          // Anchor text neatly below the POI point, rather than overlapping it
+          layer['layout']['text-anchor'] = 'top';
+          layer['layout']['text-offset'] = [0.0, 0.8]; // Push text slightly down
+          layer['layout']['text-size'] = 11.5; // Premium, slightly smaller font size
 
           // 🚀 SATELLITE TRANSPARENCY OVERRIDE
           if (resolvedTheme == MapThemeType.satellite) {
@@ -778,11 +569,6 @@ class MapStyleHelper {
               paint['background-color'] = 'rgba(0,0,0,0)';
               paint['background-opacity'] = 0.0;
             }
-          }
-
-          // 🚀 PERFORMANCE FIX: Strip all native icons to prevent missing image WebGL crashes
-          if (layer['layout'] != null && layer['layout'].containsKey('icon-image')) {
-            layer['layout'].remove('icon-image');
           }
 
           symbolLayers.add(layer);

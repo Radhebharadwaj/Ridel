@@ -45,6 +45,8 @@ class RouteResult {
   final double totalDistance;
   final List<String> pathLineIds;
 
+  int get totalTimeSeconds => totalTimeMin * 60;
+
   RouteResult({
     required this.path,
     required this.totalFare,

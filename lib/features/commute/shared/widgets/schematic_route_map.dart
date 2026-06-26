@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:ridel/core/utils/app_haptics.dart'; // 🚀 Added for button feedback
 import 'package:ridel/core/utils/app_shadows.dart'; // 🚀 Import app_shadows
+import 'package:ridel/features/profile/services/profile_repository.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
+import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/features/commute/shared/models/route_models.dart';
 
 class SchematicRouteMap extends StatefulWidget {
@@ -32,7 +36,7 @@ class SchematicRouteMap extends StatefulWidget {
 
 
 class _SchematicRouteMapState extends State<SchematicRouteMap>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _pulseController;
   late AnimationController _snapController;
   Animation<double>? _snapAnimation;
@@ -41,6 +45,7 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
@@ -78,7 +83,25 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      final status = await Permission.location.status;
+      if (status.isGranted) {
+        if (ProfileRepository.userCity.value == 'Location Disabled') {
+          ProfileRepository.userCity.value = 'Locating...';
+        }
+        if (mounted) {
+          Provider.of<GlobalLocationService>(context, listen: false).initializeEcoLocation();
+          setState(() {});
+        }
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pulseController.dispose();
     _snapController.dispose();
     super.dispose();
@@ -279,7 +302,9 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
     
     // Calculate progress
     final int currentIdx = widget.activeStationIndex ?? -1;
-    final double progress = path.isEmpty ? 0.0 : (currentIdx >= 0 ? currentIdx / (path.length - 1) : 0.0).clamp(0.0, 1.0);
+    final double rawProgress = path.isEmpty ? 0.0 : (currentIdx >= 0 ? currentIdx / (path.length - 1) : 0.0);
+    final double progress = rawProgress.clamp(0.0, 1.0);
+    final bool isGpsDisabled = ProfileRepository.userCity.value == 'Location Disabled';
     
     final activeColor = widget.isMetro ? path.first.lineColor : const Color(0xFFFF9F0A);
     
@@ -370,7 +395,9 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
                 padding: const EdgeInsets.only(left: 24, right: 24, bottom: 24, top: 16),
                 child: hasError
                     ? _buildErrorOverlay()
-                    : _buildLiveTrackerLayout(progress, activeColor, floatingText, originName, destinationName, isLightMode, path.length),
+                    : isGpsDisabled
+                        ? _buildStaticLocationFallback(isLightMode, trackColor: activeColor)
+                        : _buildLiveTrackerLayout(progress, activeColor, floatingText, originName, destinationName, isLightMode, path.length),
               ),
             ],
           ),
@@ -440,9 +467,11 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
                   }),
 
                 // Active Progress Track
-                Container(
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 800),
+                  curve: Curves.easeOutCubic,
                   height: 6,
-                  width: (_draggedValue ?? progress) * trackWidth,
+                  width: ((_draggedValue ?? progress) * trackWidth).clamp(0.0, double.infinity),
                   decoration: BoxDecoration(
                     color: activeColor,
                     borderRadius: BorderRadius.circular(10),
@@ -645,6 +674,72 @@ class _SchematicRouteMapState extends State<SchematicRouteMap>
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildStaticLocationFallback(bool isLightMode, {required Color trackColor}) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.location_disabled_rounded,
+          color: isLightMode ? Colors.black38 : Colors.white38,
+          size: 32,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          "Journey Tracking Paused",
+          style: GoogleFonts.inter(
+            color: isLightMode ? Colors.black87 : Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 15,
+          ),
+        ),
+        const SizedBox(height: 16),
+        GestureDetector(
+          onTap: () async {
+            AppHaptics.mediumImpact();
+            final status = await Permission.location.request();
+            if (status.isGranted) {
+              if (ProfileRepository.userCity.value == 'Location Disabled') {
+                ProfileRepository.userCity.value = 'Locating...';
+              }
+              if (mounted) {
+                Provider.of<GlobalLocationService>(context, listen: false).initializeEcoLocation();
+                setState(() {});
+              }
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: trackColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(100),
+              border: Border.all(color: trackColor.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.my_location_rounded, color: trackColor, size: 16),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    "Enable Location to Track Journey",
+                    maxLines: 2,
+                    softWrap: true,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      color: trackColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

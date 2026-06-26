@@ -21,7 +21,8 @@ import 'package:ridel/core/widgets/ridel_liquid_button.dart'; // 🚀 MASTER BUT
 import 'package:url_launcher/url_launcher.dart';
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/core/providers/app_navigation_provider.dart';
-import 'package:ridel/core/widgets/branded_loader.dart';
+
+import 'package:ridel/core/widgets/ridel_loading_dots.dart';
 import 'package:ridel/features/profile/services/profile_repository.dart';
 
 class CommuteSearchCard extends StatefulWidget {
@@ -180,14 +181,14 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
 
       if (!mounted) return;
 
-      if (result != null && result.path.isNotEmpty) {
+      if (result.isNotEmpty) {
         // 2. Agar `totalFare` directly populated nahi hai, toh safe fallback logic lagao
         // MetroFareConfig use karke ya fir existing totalFare property use karke.
         int finalFare = 0;
 
         // Kabhi-kabhi result.totalFare double hoti hai, kabhi int. Isliye safe parsing.
-        if (result.totalFare > 0) {
-          finalFare = result.totalFare.toInt();
+        if (result.first.totalFare > 0) {
+          finalFare = result.first.totalFare.toInt();
         } else {
           // Agar 0 aa raha hai (backend se route mein fare nahi aaya),
           // toh fallback to minimum fare or generic calculation (DMRC rules approx)
@@ -240,6 +241,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
         return;
       }
 
+      if (!mounted) return;
       final locService =
           Provider.of<GlobalLocationService>(context, listen: false);
 
@@ -495,6 +497,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
       }
     }
 
+    if (!mounted) return;
     final locService =
         Provider.of<GlobalLocationService>(context, listen: false);
 
@@ -572,13 +575,13 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
 
           if (!mounted) return;
 
-          if (result != null && result.path.isNotEmpty) {
+          if (result.isNotEmpty) {
             Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(
                     builder: (context) => RouteResultScreen(
                         fromStation: _fromCtrl.text,
                         toStation: _toCtrl.text,
-                        routeData: result)));
+                        routesData: result)));
           } else {
             ToastService.showError(context, "No route found.");
           }
@@ -594,7 +597,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
                     builder: (context) => RouteResultScreen(
                           fromStation: _fromCtrl.text,
                           toStation: _toCtrl.text,
-                          routeData: result,
+                          routesData: [result],
                           isMetro: false,
                         )));
           } else {
@@ -744,15 +747,8 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: _accentColor,
-                ),
-              ),
-              const SizedBox(width: 16),
+              PremiumDotLoader(color: _accentColor),
+              const SizedBox(width: 12),
               Flexible(
                 child: Text(
                   "Finding best route...",
@@ -937,10 +933,10 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
                         overflow: TextOverflow.ellipsis),
                   ),
                   _isCalculatingFare
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: BrandedLoader(isFullScreen: false))
+                      ? PremiumDotLoader(
+                          color: widget.isDark
+                              ? Colors.cyanAccent
+                              : Colors.cyan.shade700)
                       : Text(_calculatedFare,
                           style: GoogleFonts.inter(
                               fontSize: 18,

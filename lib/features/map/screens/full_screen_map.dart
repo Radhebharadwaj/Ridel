@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:pointer_interceptor/pointer_interceptor.dart';
+
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ridel/core/map/map_provider.dart';
@@ -21,7 +21,7 @@ import 'package:ridel/features/map/widgets/weather_floating_widget.dart';
 import 'package:ridel/features/map/widgets/quick_action_buttons.dart';
 import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:ridel/core/widgets/branded_loader.dart';
+
 import 'package:ridel/features/profile/services/profile_repository.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:ridel/core/utils/toast_service.dart';
@@ -53,7 +53,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   bool _hasMapError = false;
   MapLibreMapController? _tempController;
   MapThemeType? _currentTheme;
-  bool _isTilted = false;
   CameraPosition? _currentCameraPosition;
 
   final ValueNotifier<bool> _showScaleBarNotifier = ValueNotifier(false);
@@ -403,7 +402,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     });
   }
 
-  Future<void> _safeMoveCamera(LatLng target, {double? zoom, double? bearing, double? tilt}) async {
+  Future<void> _safeMoveCamera(LatLng target, {double? zoom, double? bearing, double? tilt, Duration? duration}) async {
     final mapController = Provider.of<MapProvider>(context, listen: false).controller ?? _tempController;
     // ignore: unnecessary_null_comparison
     if (target.latitude == null || target.longitude == null) {
@@ -423,6 +422,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             bearing: bearing ?? 0.0,
           ),
         ),
+        duration: duration,
       );
     }
   }
@@ -504,7 +504,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             mapProvider.engine.mapController = controller;
 
                             // 🚀 One-time location fetch on map start
-                            Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high).then((pos) {
+                            Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high)).then((pos) {
                                final latLng = LatLng(pos.latitude, pos.longitude);
                                controller.animateCamera(CameraUpdate.newLatLngZoom(latLng, 16.0));
                             }).catchError((e) {
@@ -1214,25 +1214,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       return;
     }
 
-    bool isAlreadyFocused = mapProvider.isUserVisibleOnScreen;
-
-    if (isAlreadyFocused && mapProvider.controller != null) {
-      _isTilted = !_isTilted;
-      final currentCamera = mapProvider.controller!.cameraPosition;
-      if (currentCamera != null) {
-        await _safeMoveCamera(
-          currentCamera.target,
-          zoom: currentCamera.zoom,
-          bearing: currentCamera.bearing,
-          tilt: _isTilted ? 60.0 : 0.0,
-        );
-        if (mounted) setState(() {});
-      }
-      return;
-    }
-
-    _isTilted = false;
-
     try {
       // 🚨 CRITICAL: Append .timeout to prevent infinite browser deadlock
       LocationPermission permission = await Geolocator.checkPermission()
@@ -1253,21 +1234,72 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       // If granted, proceed:
       debugPrint("✅ [DEBUG] Permission granted. Fetching location...");
       if (!mounted) return;
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      if (mapProvider.controller != null) {
-        final latLng = LatLng(pos.latitude, pos.longitude);
-        await mapProvider.controller!
-            .updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+      final position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
+      final userLatLng = LatLng(position.latitude, position.longitude);
 
+      final mapController = mapProvider.controller ?? _tempController;
+
+      if (mapController == null) return;
+
+      // Fallback if _currentCameraPosition is null initially before the first move
+      final currentCamera = _currentCameraPosition ?? mapController.cameraPosition;
+      if (currentCamera == null) return;
+
+      // Update the custom dot (Location provider state)
+      Future.microtask(() {
+        if (context.mounted) {
+          mapProvider.updateCurrentLocation(userLatLng);
+        }
+      });
+
+      await mapController.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+
+      // 2. Calculate Distance from Camera Center to User
+      final double distance = Geolocator.distanceBetween(
+        currentCamera.target.latitude,
+        currentCamera.target.longitude,
+        userLatLng.latitude,
+        userLatLng.longitude,
+      );
+
+      // 3. The Smart State Machine
+      if (distance > 15.0) {
+        // STATE 1: Far away -> Smooth "Fly To" animation
         await _safeMoveCamera(
-          latLng,
+          userLatLng,
           zoom: 16.5,
           tilt: 0.0,
           bearing: 0.0,
+          duration: const Duration(milliseconds: 1800), // 🚀 1.8s smooth glide across the map
         );
         mapProvider.setAutoTracking(true);
-        if (mounted) setState(() {});
+      } else {
+        // Already centered -> Toggle Tilt
+        final currentTilt = currentCamera.tilt;
+        
+        if (currentTilt < 20.0) {
+          // STATE 2: Flat -> Enter 3D Drive Mode (Cinematic Tilt)
+          await _safeMoveCamera(
+            userLatLng,
+            zoom: 17.5, // Zoom in slightly for 3D
+            tilt: 50.0, // Aggressive premium tilt
+            bearing: currentCamera.bearing,
+            duration: const Duration(milliseconds: 1200), // 🚀 1.2s elegant tilt up
+          );
+          mapProvider.setAutoTracking(true);
+        } else {
+          // STATE 3: Tilted -> Reset to Flat 2D
+          await _safeMoveCamera(
+            userLatLng,
+            zoom: 16.5,
+            tilt: 0.0,
+            bearing: 0.0, // Reset North
+            duration: const Duration(milliseconds: 900), // 🚀 0.9s snappy but smooth reset
+          );
+          mapProvider.setAutoTracking(true);
+        }
       }
+      if (mounted) setState(() {});
     } on TimeoutException catch (_) {
       // Catches the infinite hang caused by strict browser shields
       debugPrint(

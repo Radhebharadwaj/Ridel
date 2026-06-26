@@ -34,14 +34,14 @@ import 'package:ridel/core/widgets/branded_loader.dart';
 class RouteResultScreen extends StatefulWidget {
   final String fromStation;
   final String toStation;
-  final RouteResult? routeData;
+  final List<RouteResult>? routesData;
   final bool isMetro;
 
   const RouteResultScreen({
     super.key,
     required this.fromStation,
     required this.toStation,
-    this.routeData,
+    this.routesData,
     this.isMetro = true,
   });
 
@@ -50,7 +50,8 @@ class RouteResultScreen extends StatefulWidget {
 }
 
 class _RouteResultScreenState extends State<RouteResultScreen> {
-  late RouteResult? _currentRouteData;
+  late List<RouteResult>? _currentRoutesData;
+  late RouteResult? _activeRouteData;
   late String _currentFrom;
   late String _currentTo;
   final BusRoutePreference _busPreference = BusRoutePreference.fastest;
@@ -63,13 +64,17 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
 
   bool _isPanelOpen = true;
   double _railWidth = 80.0;
+  
+  // To track which route is expanded (0 for primary, 1 for alternate)
+  int _expandedRouteIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _currentFrom = widget.fromStation;
     _currentTo = widget.toStation;
-    _currentRouteData = widget.routeData;
+    _currentRoutesData = widget.routesData;
+    _activeRouteData = widget.routesData != null && widget.routesData!.isNotEmpty ? widget.routesData!.first : null;
     _initLiveTracking();
   }
 
@@ -82,12 +87,12 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
 
     _locationSubscription =
         locationService.engineLocationStream.listen((Position userPos) {
-      if (_currentRouteData == null || _currentRouteData!.path.isEmpty) {
+      if (_activeRouteData == null || _activeRouteData!.path.isEmpty) {
         return;
       }
       double minDistance = double.infinity;
       int closestIndex = 0;
-      final path = _currentRouteData!.path;
+      final path = _activeRouteData!.path;
       for (int i = 0; i < path.length; i++) {
         double dist = Geolocator.distanceBetween(
             userPos.latitude, userPos.longitude, path[i].lat, path[i].lon);
@@ -133,7 +138,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
   }
 
   void _openDeviceMap() async {
-    if (_currentRouteData == null || _currentRouteData!.path.isEmpty) {
+    if (_activeRouteData == null || _activeRouteData!.path.isEmpty) {
       return;
     }
     final locService =
@@ -143,8 +148,8 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
       ToastService.showError(context, "Unable to fetch current location.");
       return;
     }
-    final double destLat = _currentRouteData!.path.first.lat;
-    final double destLng = _currentRouteData!.path.first.lon;
+    final double destLat = _activeRouteData!.path.first.lat;
+    final double destLng = _activeRouteData!.path.first.lon;
     double distanceInMeters = Geolocator.distanceBetween(
         pos.latitude, pos.longitude, destLat, destLng);
     String googleMode = distanceInMeters <= 300 ? 'walking' : 'driving';
@@ -166,7 +171,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
   }
 
   void _openRidelMap() async {
-    if (_currentRouteData == null || _currentRouteData!.path.isEmpty) {
+    if (_activeRouteData == null || _activeRouteData!.path.isEmpty) {
       return;
     }
     final mapProvider = Provider.of<MapProvider>(context, listen: false);
@@ -174,12 +179,12 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
         Provider.of<GlobalLocationService>(context, listen: false);
     final pos = locService.currentPosition;
     if (pos != null) {
-      final destLat = _currentRouteData!.path.first.lat;
-      final destLng = _currentRouteData!.path.first.lon;
+      final destLat = _activeRouteData!.path.first.lat;
+      final destLng = _activeRouteData!.path.first.lon;
       final currentLoc = maplibre.LatLng(pos.latitude, pos.longitude);
       final stationLatLng = maplibre.LatLng(destLat, destLng);
       await mapProvider.startStationNavigation(
-          currentLoc, stationLatLng, _currentRouteData!.path.first.name);
+          currentLoc, stationLatLng, _activeRouteData!.path.first.name);
 
       if (!mounted) return;
       ToastService.showSuccess(context, "Navigation started in Ridel Maps.");
@@ -200,23 +205,30 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
       _isLoading = true;
       _currentFrom = newFrom;
       _currentTo = newTo;
-      _currentRouteData = null; // Fix: Reset previous route results
+      _activeRouteData = null; // Fix: Reset previous route results
       _activeStationIndex = null;
       _trackingError = null;
       _hasNotifiedArrival = false;
     });
     try {
-      RouteResult? newResult;
+      List<RouteResult>? newRoutesData;
       if (widget.isMetro) {
-        newResult = await MetroService().findBestRoute(newFrom, newTo);
+        newRoutesData = await MetroService().findBestRoute(newFrom, newTo);
       } else {
-        newResult = await BusService()
+        final busResult = await BusService()
             .findBusRoute(newFrom, newTo, preference: _busPreference);
+        if (busResult != null) {
+          newRoutesData = [busResult];
+        } else {
+          newRoutesData = [];
+        }
       }
 
       if (mounted) {
         setState(() {
-          _currentRouteData = newResult;
+          _currentRoutesData = newRoutesData;
+          _activeRouteData = newRoutesData != null && newRoutesData.isNotEmpty ? newRoutesData.first : null;
+          _expandedRouteIndex = 0;
           _isLoading = false;
         });
         _initLiveTracking(); // Restart live tracking for new route
@@ -263,17 +275,12 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: _isLoading
               ? _buildLoadingState()
-              : _currentRouteData != null
-                  ? JourneyTimelineCard(
-                      routeData: _currentRouteData!,
-                      fromStation: _currentFrom,
-                      toStation: _currentTo,
-                      isMetro: widget.isMetro,
-                    )
+              : _activeRouteData != null
+                  ? _buildAccordionRoutes()
                   : _buildErrorState(),
         ),
         const SizedBox(height: 40),
-        if (!_isLoading && _currentRouteData != null && widget.isMetro) ...[
+        if (!_isLoading && _activeRouteData != null && widget.isMetro) ...[
           Padding(
             padding: const EdgeInsets.only(left: 24, bottom: 12),
             child: Text("Station Facilities",
@@ -285,7 +292,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: FacilitiesSheetContent(routeData: _currentRouteData!),
+            child: FacilitiesSheetContent(routeData: _activeRouteData!),
           ),
         ],
         const SizedBox(height: 40),
@@ -338,18 +345,13 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
                       
                       _isLoading
                           ? _buildLoadingState()
-                          : _currentRouteData != null
-                              ? JourneyTimelineCard(
-                                  routeData: _currentRouteData!,
-                                  fromStation: _currentFrom,
-                                  toStation: _currentTo,
-                                  isMetro: widget.isMetro,
-                                )
+                          : _activeRouteData != null
+                              ? _buildAccordionRoutes()
                               : _buildErrorState(),
-                      if (_currentRouteData != null) ...[
+                      if (_activeRouteData != null) ...[
                         const SizedBox(height: 20),
                         SchematicRouteMap(
-                          routeData: _currentRouteData!,
+                          routeData: _activeRouteData!,
                           isMetro: widget.isMetro,
                           activeStationIndex: _activeStationIndex,
                           trackingError: _trackingError,
@@ -561,6 +563,129 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
       ),
     );
   }
+  Widget _buildAccordionRoutes() {
+    if (_currentRoutesData == null || _currentRoutesData!.isEmpty) {
+      return _buildErrorState();
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final routesToRender = _currentRoutesData!.take(2).toList();
+    return Column(
+      children: List.generate(routesToRender.length, (index) {
+        final route = routesToRender[index];
+        final isExpanded = _expandedRouteIndex == index;
+        final isPrimary = index == 0;
+        
+        int interchanges = route.path.where((s) => s.type == StationType.interchange).length;
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12.0),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(35),
+            clipBehavior: Clip.antiAlias,
+            child: AnimatedSize(
+              alignment: Alignment.topCenter,
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeInOutCubic,
+                  child: AnimatedCrossFade(
+                    duration: const Duration(milliseconds: 350),
+                    crossFadeState: isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                    firstChild: GestureDetector(
+                      onTap: () {
+                        AppHaptics.selectionClick();
+                        setState(() {
+                          _expandedRouteIndex = index;
+                          _activeRouteData = route;
+                        });
+                        _initLiveTracking();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF161A25).withValues(alpha: 0.75)
+                              : Colors.white.withValues(alpha: 0.90),
+                          borderRadius: BorderRadius.circular(35),
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.12)
+                                : Colors.black.withValues(alpha: 0.04),
+                            width: 1.0,
+                          ),
+                          boxShadow: isDark
+                              ? [
+                                  ...AppShadows.cardFloating,
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.8),
+                                    blurRadius: 40,
+                                    spreadRadius: 8,
+                                    offset: const Offset(0, 15),
+                                  ),
+                                ]
+                              : [
+                                  BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.08),
+                                      blurRadius: 24,
+                                      offset: const Offset(0, 8))
+                                ],
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              isPrimary ? Icons.flash_on_rounded : Icons.alt_route_rounded,
+                      color: isPrimary ? Colors.amber : Colors.cyan,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isPrimary ? "Suggested Route" : "Alternative Route",
+                            style: GoogleFonts.inter(
+                              color: isDark ? Colors.white : Colors.black87,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "${(route.totalTimeSeconds / 60).ceil()} min • $interchanges Transfer${interchanges == 1 ? '' : 's'}",
+                            style: GoogleFonts.inter(
+                              color: isDark ? Colors.white70 : Colors.black54,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      CupertinoIcons.chevron_down,
+                      color: isDark ? Colors.white54 : Colors.black45,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+                secondChild: JourneyTimelineCard(
+                  routeData: route,
+                  fromStation: _currentFrom,
+                  toStation: _currentTo,
+                  isMetro: widget.isMetro,
+                ),
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
   Widget _buildStationFacilitiesCard() {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
     return Container(
@@ -672,8 +797,8 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
 
   void _openFacilitiesSheet({required bool isOrigin}) {
     AppHaptics.selectionClick();
-    if (_currentRouteData == null || _currentRouteData!.path.isEmpty) return;
-    final path = _currentRouteData!.path;
+    if (_activeRouteData == null || _activeRouteData!.path.isEmpty) return;
+    final path = _activeRouteData!.path;
     final stationId = isOrigin ? path.first.id : path.last.id;
     RidelSheet.show(
       context,
@@ -681,7 +806,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
       showCloseButton: true,
       useRootNavigator: true,
       isDynamicHeight: true,
-      child: FacilitiesSheetContent(routeData: _currentRouteData!, initialStationId: stationId),
+      child: FacilitiesSheetContent(routeData: _activeRouteData!, initialStationId: stationId),
     );
   }
 }

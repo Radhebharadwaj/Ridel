@@ -16,7 +16,7 @@ import 'package:ridel/core/widgets/auth_header.dart';
 import 'package:ridel/core/widgets/ridel_logo.dart';
 import 'package:ridel/core/widgets/ridel_liquid_button.dart';
 import 'package:ridel/features/auth/services/auth_service.dart';
-import 'package:ridel/features/profile/services/profile_repository.dart';
+
 import 'package:ridel/layout/main_layout.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:ridel/core/widgets/branded_loader.dart';

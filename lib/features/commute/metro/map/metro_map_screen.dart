@@ -417,14 +417,14 @@ class _MetroMapScreenState extends State<MetroMapScreen>
 
         if (!mounted) return;
 
-        if (result != null && result.path.isNotEmpty) {
+        if (result.isNotEmpty) {
           Navigator.push(
               context,
               MaterialPageRoute(
                   builder: (context) => RouteResultScreen(
                       fromStation: fromStation!.name,
                       toStation: toStation!.name,
-                      routeData: result)));
+                      routesData: result)));
         } else {
           ToastService.showError(context, "No route found.");
         }

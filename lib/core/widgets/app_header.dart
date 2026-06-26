@@ -111,6 +111,7 @@ class _AppHeaderState extends State<AppHeader> {
            ProfileRepository.userCity.value = "Locating...";
         }
         
+        if (!mounted) return;
         final locationService =
             Provider.of<GlobalLocationService>(context, listen: false);
         await locationService.initializeEcoLocation(isManualTrigger: false);
@@ -120,16 +121,7 @@ class _AppHeaderState extends State<AppHeader> {
     }
   }
 
-  Future<void> _detectAndSaveRealLocation() async {
-    try {
-      final locationService =
-          Provider.of<GlobalLocationService>(context, listen: false);
 
-      if (!locationService.hasValidLocation) {
-        await locationService.initializeEcoLocation();
-      }
-    } catch (_) {}
-  }
 
   void _openCitySelector() {
     AppHaptics.lightImpact();
