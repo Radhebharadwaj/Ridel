@@ -101,8 +101,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 // 🚀 MAIN FUNCTION
 // ----------------------------------------------------------------------
 Future<void> main() async {
-  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-  
+  WidgetsFlutterBinding.ensureInitialized(); // 🚀 MUST BE LINE 1
+
   try {
     await dotenv.load(fileName: ".env");
   } catch (e) {
@@ -110,7 +110,7 @@ Future<void> main() async {
   }
 
   runZonedGuarded(() async {
-    FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+    FlutterNativeSplash.preserve(widgetsBinding: WidgetsBinding.instance);
 
     FlutterError.onError = (FlutterErrorDetails details) {
       FlutterError.presentError(details);

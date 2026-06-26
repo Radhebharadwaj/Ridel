@@ -22,6 +22,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/core/widgets/branded_loader.dart';
+import 'package:ridel/features/profile/services/profile_repository.dart';
 
 class CommuteSearchCard extends StatefulWidget {
   final bool isDark;
@@ -232,12 +233,17 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
     try {
       if (_allStationsCache.isEmpty) return;
 
+      if (ProfileRepository.userCity.value == 'Location Disabled') return;
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        return;
+      }
+
       final locService =
           Provider.of<GlobalLocationService>(context, listen: false);
 
-      if (!locService.hasValidLocation) {
-        await locService.initializeEcoLocation();
-      }
+      if (!locService.hasValidLocation) return;
 
       final pos = locService.currentPosition;
       if (pos == null) return;
@@ -283,17 +289,6 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
           navProvider.setNearestMetroStation(uniqueLocations.first);
         } else {
           navProvider.setNearestBusStop(uniqueLocations.first);
-        }
-
-        if (_fromCtrl.text.isEmpty && !navProvider.hasSeenNearestStopToast) {
-          navProvider.markNearestStopToastSeen();
-          ToastService.showNearestTransportToast(
-            context,
-            onTapUpdateOrigin: (String name) {
-              AppHaptics.heavyImpact();
-              setState(() => _fromCtrl.text = name);
-            },
-          );
         }
       }
     } catch (e) {
@@ -488,10 +483,22 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
     AppHaptics.heavyImpact();
     setState(() => _fromCtrl.text = "Locating...");
 
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        setState(() => _fromCtrl.text = "");
+        if (mounted) {
+          ToastService.showError(context, "Location permission is required.");
+        }
+        return;
+      }
+    }
+
     final locService =
         Provider.of<GlobalLocationService>(context, listen: false);
 
-    await locService.forceRefreshLocation();
+    await locService.initializeEcoLocation(isManualTrigger: true);
     
     // 🚨 CRITICAL FIX: Recalculate the distances with the new fresh GPS coordinates!
     await _calculateNearestLocationsInBackground();
@@ -1227,6 +1234,14 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
 
     final bool isNearestList =
         _suggestions.isNotEmpty && _suggestions.first.containsKey('distance');
+
+    final locService = Provider.of<GlobalLocationService>(context, listen: false);
+    final isLocationDisabled = ProfileRepository.userCity.value == 'Location Disabled';
+    final isGpsOff = locService.currentPosition == null;
+
+    if (isNearestList && (isLocationDisabled || isGpsOff)) {
+      return const SizedBox.shrink();
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),

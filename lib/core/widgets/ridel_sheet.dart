@@ -1,6 +1,6 @@
 // lib/core/widgets/ridel_sheet.dart
 
- // 🚀 Added for ImageFilter
+import 'dart:ui'; // 🚀 Added for ImageFilter
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -242,116 +242,156 @@ class _RidelSheetState extends State<RidelSheet> {
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Stack(
         children: [
-          // ================= PREMIUM GLASS HEADER =================
-          if (!widget.customHeader) ...[
-            Container(
-              padding: EdgeInsets.fromLTRB(
-                  20,
-                  _isFullScreen
-                      ? MediaQuery.of(context).padding.top + 10
-                      : 20,
-                  20,
-                  0),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 850),
-                switchInCurve: Curves.easeInOutQuart,
-                switchOutCurve: Curves.easeInOutQuart,
-                child: Row(
-                  key: ValueKey(isDark),
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                        width: 44,
-                        height: 44,
-                        child: widget.showBackButton
-                            ? RidelLiquidButton(
-                                width: 44,
-                                height: 44,
-                                shapeType: LiquidShapeType.circle,
-                                glassTint: glassBtnColor,
-                                onTap: () => Navigator.pop(context),
-                                child: Padding(
-                                  padding: const EdgeInsets.only(right: 2.0),
-                                  child: Icon(Icons.arrow_back_ios_new_rounded,
-                                      color: iconColor, size: 18),
-                                ),
-                              )
-                            : null),
-                    Expanded(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.topCenter,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Padding(
-                              padding: EdgeInsets.only(
-                                  top: widget.subtitle != null ? 0 : 8.0),
-                              child: Text(widget.title,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                  style: GoogleFonts.inter(
-                                      color: textColor,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: -0.3)), // 🚀 Refined typography
-                            ),
-                            if (widget.subtitle != null) ...[
-                              const SizedBox(height: 4),
-                              widget.subtitle!,
-                            ]
-                          ],
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                        width: 44,
-                        height: 44,
-                        child: widget.showFullScreenButton
-                            ? RidelLiquidButton(
-                                width: 44,
-                                height: 44,
-                                shapeType: LiquidShapeType.circle,
-                                glassTint: glassBtnColor,
-                                onTap: () => setState(
-                                    () => _isFullScreen = !_isFullScreen),
-                                child: Icon(
-                                    _isFullScreen
-                                        ? Icons.fullscreen_exit_rounded
-                                        : Icons.fullscreen_rounded,
-                                    color: iconColor,
-                                    size: 22),
-                              )
-                            : widget.showCloseButton
-                                ? RidelLiquidButton(
-                                    width: 44,
-                                    height: 44,
-                                    shapeType: LiquidShapeType.circle,
-                                    glassTint: glassBtnColor,
-                                    onTap: () => Navigator.pop(context),
-                                    child: Icon(Icons.close_rounded,
-                                        color: iconColor, size: 20),
-                                  )
-                                : null),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16.0),
-          ],
-
           // ================= CONTENT =================
-          Flexible(
+          Positioned.fill(
             child: MediaQuery.removePadding(
               context: context,
               removeTop: true,
               child: widget.child,
             ),
           ),
+
+          // ================= PREMIUM GLASS HEADER =================
+          if (!widget.customHeader)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 115, // 🚀 Extra height to allow the smooth blur fade
+              child: RepaintBoundary(
+                child: ClipRect(
+                child: ShaderMask(
+                  shaderCallback: (Rect bounds) {
+                    // 🚀 The Mask that makes the bottom of the header transparent (fade out blur)
+                    return const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.white, Colors.white, Colors.transparent],
+                      stops: [0.0, 0.65, 1.0],
+                    ).createShader(bounds);
+                  },
+                  blendMode: BlendMode.dstIn,
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(
+                        sigmaX: 20, sigmaY: 20), // 💎 Heavy Apple glass blur
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 850),
+                      curve: Curves.easeInOutQuart,
+                      alignment: Alignment.topCenter,
+                      padding: EdgeInsets.fromLTRB(
+                          20,
+                          _isFullScreen
+                              ? MediaQuery.of(context).padding.top + 10
+                              : 20,
+                          20,
+                          0),
+                      decoration: BoxDecoration(
+                        // 🚀 Smooth Color Gradient overlay
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            finalBgColor, // 100% Solid at the very top
+                            finalBgColor.withValues(alpha: 0.85), // Fading mid
+                            finalBgColor.withValues(
+                                alpha: 0.0) // Transparent bottom
+                          ],
+                          stops: const [0.0, 0.5, 1.0],
+                        ),
+                      ),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 850),
+                        switchInCurve: Curves.easeInOutQuart,
+                        switchOutCurve: Curves.easeInOutQuart,
+                        child: Row(
+                          key: ValueKey(isDark),
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                                width: 44,
+                                height: 44,
+                                child: widget.showBackButton
+                                    ? RidelLiquidButton(
+                                        width: 44,
+                                        height: 44,
+                                        shapeType: LiquidShapeType.circle,
+                                        glassTint: glassBtnColor,
+                                        onTap: () => Navigator.pop(context),
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(right: 2.0),
+                                          child: Icon(Icons.arrow_back_ios_new_rounded,
+                                              color: iconColor, size: 18),
+                                        ),
+                                      )
+                                    : null),
+                            Expanded(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.topCenter,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Padding(
+                                      padding: EdgeInsets.only(
+                                          top: widget.subtitle != null ? 0 : 8.0),
+                                      child: Text(widget.title,
+                                          textAlign: TextAlign.center,
+                                          maxLines: 1,
+                                          style: GoogleFonts.inter(
+                                              color: textColor,
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: -0.3)), // 🚀 Refined typography
+                                    ),
+                                    if (widget.subtitle != null) ...[
+                                      const SizedBox(height: 4),
+                                      widget.subtitle!,
+                                    ]
+                                  ],
+                                ),
+                              ),
+                            ),
+                            SizedBox(
+                                width: 44,
+                                height: 44,
+                                child: widget.showFullScreenButton
+                                    ? RidelLiquidButton(
+                                        width: 44,
+                                        height: 44,
+                                        shapeType: LiquidShapeType.circle,
+                                        glassTint: glassBtnColor,
+                                        onTap: () => setState(
+                                            () => _isFullScreen = !_isFullScreen),
+                                        child: Icon(
+                                            _isFullScreen
+                                                ? Icons.fullscreen_exit_rounded
+                                                : Icons.fullscreen_rounded,
+                                            color: iconColor,
+                                            size: 22),
+                                      )
+                                    : widget.showCloseButton
+                                        ? RidelLiquidButton(
+                                            width: 44,
+                                            height: 44,
+                                            shapeType: LiquidShapeType.circle,
+                                            glassTint: glassBtnColor,
+                                            onTap: () => Navigator.pop(context),
+                                            child: Icon(Icons.close_rounded,
+                                                color: iconColor, size: 20),
+                                          )
+                                        : null),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                ),
+              ),
+            ),
         ],
       ),
     );

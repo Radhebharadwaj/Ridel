@@ -158,6 +158,19 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     final locService =
         Provider.of<GlobalLocationService>(context, listen: false);
 
+    if (locService.currentCity == 'Location Disabled' || 
+        locService.currentCity == 'Select City' || 
+        locService.currentCity == 'Locating...') {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+      }
+      _isExecutingFetch = false;
+      return;
+    }
+
     double? lat;
     double? lng;
     bool isMocked = false;
@@ -412,10 +425,11 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     // 🚀 CRITICAL FIX: Removed ValueListenableBuilder to prevent double-rendering.
     // Rely exclusively on the synced local `_weather` state.
     final activeWeather = _weather;
-    final bool showLoading = _isLoading && activeWeather == null;
+    final bool isLocationDisabled = locService.currentCity == 'Location Disabled' || locService.currentCity == 'Select City';
+    final bool showLoading = _isLoading && activeWeather == null && !isLocationDisabled;
 
     // 🚀 NEW: Handled Error & Loading States smoothly
-    if (showLoading || _hasError || activeWeather == null) {
+    if (showLoading || _hasError || activeWeather == null || isLocationDisabled) {
       return PointerInterceptor(
         child: GestureDetector(
               onTap: () async {
@@ -469,7 +483,39 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                           border: Border.all(color: borderColor, width: 1.0),
                         ),
                         child: Center(
-                            child: _isLoading
+                            child: isLocationDisabled
+                                ? Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Shimmer.fromColors(
+                                        baseColor: isLightMode ? Colors.black12 : Colors.white.withValues(alpha: 0.1),
+                                        highlightColor: isLightMode ? Colors.black26 : Colors.white.withValues(alpha: 0.2),
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Container(
+                                              height: 20,
+                                              width: 30,
+                                              decoration: BoxDecoration(
+                                                borderRadius: BorderRadius.circular(8),
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Container(
+                                              height: 10,
+                                              width: 45,
+                                              decoration: BoxDecoration(
+                                                borderRadius: BorderRadius.circular(4),
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : _isLoading
                                 ? RepaintBoundary(
                                     child: Shimmer.fromColors(
                                       baseColor: isLightMode

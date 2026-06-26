@@ -106,12 +106,14 @@ class _AppHeaderState extends State<AppHeader> {
       
       bool isGranted = await Permission.location.isGranted;
 
-      if (isGranted ||
-          current == "Locating..." ||
-          current == "Select City" ||
-          current.isEmpty ||
-          current == "Detecting...") {
-        _detectAndSaveRealLocation();
+      if (isGranted) {
+        if (current.isEmpty || current == "Select City" || current == "Location Disabled") {
+           ProfileRepository.userCity.value = "Locating...";
+        }
+        
+        final locationService =
+            Provider.of<GlobalLocationService>(context, listen: false);
+        await locationService.initializeEcoLocation(isManualTrigger: false);
       }
     } catch (e) {
       debugPrint('Error initializing location: $e');
@@ -214,7 +216,7 @@ class _AppHeaderState extends State<AppHeader> {
                 }).join(' ');
 
                 final displayTitle = displayCity;
-                final isFake = cityName == "Fake GPS Detected";
+                final isFake = cityName == "Fake GPS Detected" || cityName == "Location Disabled";
 
                 return AnimatedSwitcher(
                   duration: const Duration(milliseconds: 400),
@@ -324,20 +326,32 @@ class _AppHeaderState extends State<AppHeader> {
                                       );
                                     },
                                     behavior: HitTestBehavior.opaque,
-                                    child: Text(
-                                      displayTitle,
-                                      textAlign: TextAlign.left,
-                                      style: GoogleFonts.inter(
-                                        fontSize: isFake ? 22 : 32,
-                                        fontWeight: FontWeight.w800,
-                                        color: isFake
-                                            ? Colors.redAccent
-                                            : textColor,
-                                        letterSpacing: -1.0,
-                                        height: 1.0,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (isFake)
+                                          const Padding(
+                                            padding: EdgeInsets.only(right: 6.0),
+                                            child: Icon(Icons.location_off_rounded, color: Colors.redAccent, size: 24),
+                                          ),
+                                        Flexible(
+                                          child: Text(
+                                            displayTitle,
+                                            textAlign: TextAlign.left,
+                                            style: GoogleFonts.inter(
+                                              fontSize: isFake ? 22 : 32,
+                                              fontWeight: FontWeight.w800,
+                                              color: textColor,
+                                              letterSpacing: -1.0,
+                                              height: 1.0,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(Icons.keyboard_arrow_down, color: isDark ? Colors.white54 : Colors.black54, size: 22),
+                                      ],
                                     ),
                                   ),
                                 ),

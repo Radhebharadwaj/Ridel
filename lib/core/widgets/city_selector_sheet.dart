@@ -136,6 +136,10 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
     final previousCityState = ProfileRepository.userCity.value;
     ProfileRepository.userCity.value = 'Locating...';
 
+    if (mounted) {
+      ToastService.showInfo(context, "Updating location...");
+    }
+
     final locationService =
         Provider.of<GlobalLocationService>(context, listen: false);
 

@@ -100,9 +100,9 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           await Geolocator.openLocationSettings();
         }
         _isUsingIpFallback = false;
-        _currentCity = "Delhi"; // Prompt manual entry
-        ProfileRepository.userCity.value = "Delhi";
-        WeatherService.getWeatherByCity(_currentCity);
+        _currentCity = "Location Disabled"; // Prompt manual entry
+        ProfileRepository.userCity.value = "Location Disabled";
+        currentCityName.value = "Location Disabled";
         notifyListeners();
         return;
       }
@@ -112,18 +112,12 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     
     // 🚀 FIX 3: FIRST-LAUNCH UX
     if (_permission == LocationPermission.denied) {
-      final prefs = await SharedPreferences.getInstance();
-      final hasPrompted = prefs.getBool('has_prompted_location') ?? false;
-
-      if (!hasPrompted) {
-        // Absolutely first launch! Auto-prompt to prevent terrible UX.
-        _permission = await Geolocator.requestPermission();
-        await prefs.setBool('has_prompted_location', true);
-      } else if (isManualTrigger) {
-        // User manually clicked the button later
+      if (isManualTrigger) {
+        // User manually clicked the button to detect region
         _permission = await Geolocator.requestPermission();
       } else {
-        // Already prompted before, and this is an auto-startup. Fall back silently.
+        // Crucial: Do NOT prompt for permission on startup if it's denied.
+        // Only auto-fetch if it is already granted.
         await _fetchLocationFromIP(forceSelectCityUI: true);
         return;
       }
@@ -146,20 +140,22 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
 
     if (_permission == LocationPermission.whileInUse || _permission == LocationPermission.always) {
       // 🚀 OPTIMIZATION: Fast Cache for Location
-      try {
-        final lastPos = await Geolocator.getLastKnownPosition();
-        if (lastPos != null && currentPositionNotifier.value == null) {
-          debugPrint("⚡ Instant Location: Using last known position.");
-          currentPositionNotifier.value = lastPos;
-          _isUsingIpFallback = false;
-          _lastCityGeocodedPosition = lastPos;
-          resolveCityName(lastPos.latitude, lastPos.longitude).then((_) {
-            WeatherService.getWeather(lastPos.latitude, lastPos.longitude);
+      if (!isManualTrigger) {
+        try {
+          final lastPos = await Geolocator.getLastKnownPosition();
+          if (lastPos != null && currentPositionNotifier.value == null) {
+            debugPrint("⚡ Instant Location: Using last known position.");
+            currentPositionNotifier.value = lastPos;
+            _isUsingIpFallback = false;
+            _lastCityGeocodedPosition = lastPos;
+            resolveCityName(lastPos.latitude, lastPos.longitude).then((_) {
+              WeatherService.getWeather(lastPos.latitude, lastPos.longitude);
+              notifyListeners();
+            });
             notifyListeners();
-          });
-          notifyListeners();
-        }
-      } on Object catch (_) {}
+          }
+        } on Object catch (_) {}
+      }
 
       try {
         final pos = await Geolocator.getCurrentPosition(
@@ -505,17 +501,19 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           isMocked: true, // Tells the app this is not exact GPS
         );
 
-        String fetchedCityName = data['city']?.toString() ?? "Delhi";
+        String fetchedCityName = data['city']?.toString() ?? "Location Disabled";
         if (fetchedCityName.trim().isEmpty || fetchedCityName.toLowerCase().contains('select city') || fetchedCityName == "Current Location") {
-            fetchedCityName = 'Delhi';
+            fetchedCityName = 'Location Disabled';
         }
 
-        _currentCity = forceSelectCityUI ? "Delhi" : fetchedCityName;
-        _currentState = forceSelectCityUI ? "Delhi" : (data['region']?.toString() ?? "");
+        _currentCity = forceSelectCityUI ? "Location Disabled" : fetchedCityName;
+        _currentState = forceSelectCityUI ? "Location Disabled" : (data['region']?.toString() ?? "");
         currentCityName.value = _currentCity;
         _isUsingIpFallback = true;
         ProfileRepository.userCity.value = _currentCity;
-        WeatherService.getWeatherByCity(_currentCity);
+        if (!forceSelectCityUI && _currentCity != "Location Disabled") {
+          WeatherService.getWeatherByCity(_currentCity);
+        }
         notifyListeners();
         debugPrint(
             "IP Fallback Success: $_currentCity, $_currentState");
@@ -535,12 +533,11 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
       accuracy: 10000.0, altitude: 0, altitudeAccuracy: 0, heading: 0,
       headingAccuracy: 0, speed: 0, speedAccuracy: 0, isMocked: true,
     );
-    _currentCity = forceSelectCityUI ? "Delhi" : "Nagpur";
-    _currentState = forceSelectCityUI ? "Delhi" : "Maharashtra";
+    _currentCity = forceSelectCityUI ? "Location Disabled" : "Location Disabled";
+    _currentState = forceSelectCityUI ? "Location Disabled" : "Location Disabled";
     currentCityName.value = _currentCity;
     _isUsingIpFallback = true;
     ProfileRepository.userCity.value = _currentCity;
-    WeatherService.getWeatherByCity(_currentCity);
     notifyListeners();
   }
 

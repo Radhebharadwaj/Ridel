@@ -262,12 +262,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _goToHome() {
     if (!mounted) return;
-    if (ProfileRepository.userCity.value.isEmpty ||
-        ProfileRepository.userCity.value == 'Locating...' ||
-        ProfileRepository.userCity.value == 'Location Failed' ||
-        ProfileRepository.userCity.value == 'GPS Disabled') {
-      ProfileRepository.userCity.value = 'delhi';
-    }
     unawaited(Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const MainLayout()),

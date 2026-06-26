@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:convert';
 import 'dart:collection';
 import 'dart:developer' as developer;
@@ -266,7 +267,7 @@ class RouteEngineService {
         if (response.statusCode == 200 || response.statusCode == 201) {
           developer.log(response.body, name: 'OLA_ROUTING_JSON');
           final Map<String, dynamic>? primitiveData =
-              _processHeavyRouteSync(response.body);
+              await compute(_processHeavyRouteSync, response.body);
 
           if (primitiveData != null) {
             final List<List<List<double>>> rawAll = primitiveData['allRoutes'];
@@ -450,7 +451,10 @@ class RouteEngineService {
       PolylinePoints polylinePoints = PolylinePoints();
       List<PointLatLng> result = polylinePoints.decodePolyline(encodedPolyline);
       rawCoords = result.map((p) => [p.latitude, p.longitude]).toList();
-      debugPrint("🗺️ High-Res Polyline Decoded: ${rawCoords.length} points.");
+      
+      // 🚀 Optimize: Douglas-Peucker Simplification
+      // ~0.0001 is roughly 10 meters tolerance.
+      rawCoords = _simplifyPath(rawCoords, 0.0001);
     }
 
     if (rawCoords.isEmpty) return null;
@@ -520,6 +524,48 @@ class RouteEngineService {
       'gradientStops': gradientStops,
       'congestion': congestionList,
     };
+  }
+
+  static List<List<double>> _simplifyPath(List<List<double>> points, double tolerance) {
+    if (points.length <= 2) return points;
+
+    double maxDistance = 0.0;
+    int index = 0;
+
+    for (int i = 1; i < points.length - 1; i++) {
+      double distance = _perpendicularDistance(points[i], points[0], points[points.length - 1]);
+      if (distance > maxDistance) {
+        maxDistance = distance;
+        index = i;
+      }
+    }
+
+    if (maxDistance > tolerance) {
+      List<List<double>> left = _simplifyPath(points.sublist(0, index + 1), tolerance);
+      List<List<double>> right = _simplifyPath(points.sublist(index), tolerance);
+
+      List<List<double>> result = [];
+      result.addAll(left.sublist(0, left.length - 1));
+      result.addAll(right);
+      return result;
+    } else {
+      return [points[0], points[points.length - 1]];
+    }
+  }
+
+  static double _perpendicularDistance(List<double> p, List<double> p1, List<double> p2) {
+    double x = p[0];
+    double y = p[1];
+    double x1 = p1[0];
+    double y1 = p1[1];
+    double x2 = p2[0];
+    double y2 = p2[1];
+
+    double area = (0.5 * (x1 * y2 + y1 * x + x2 * y - x2 * y1 - x * y2 - x1 * y)).abs();
+    double bottom = math.sqrt(math.pow(x1 - x2, 2) + math.pow(y1 - y2, 2));
+
+    if (bottom == 0) return 0.0;
+    return area / bottom * 2.0;
   }
 }
 
