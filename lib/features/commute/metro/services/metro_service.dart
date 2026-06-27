@@ -73,25 +73,6 @@ class MetroService {
         continue;
       }
 
-      // STRICT INTERCHANGE VALIDATION
-      final fromStop = _stops[fromId];
-      final toStop = _stops[toId];
-      if (fromStop != null && toStop != null) {
-        bool isLineChange = edge.routeId == 'WALK' || (fromStop.stopName == toStop.stopName && fromId != toId);
-        if (isLineChange) {
-          final validInterchanges = [
-            'Inderlok', 'Kashmere Gate', 'Rajiv Chowk', 'Mandi House', 'Central Secretariat',
-            'Hauz Khas', 'Botanical Garden', 'Janakpuri West', 'Kalkaji Mandir', 'Lajpat Nagar',
-            'Mayur Vihar-I', 'Welcome', 'Yamuna Bank', 'Anand Vihar ISBT', 'Kirti Nagar',
-            'New Delhi', 'Dwarka Sector 21', 'Sikanderpur', 'Netaji Subhash Place', 'Rajouri Garden',
-            'Dilli Haat - INA'
-          ];
-          if (!validInterchanges.contains(fromStop.stopName)) {
-            continue; // Block illegal ghost transfers!
-          }
-        }
-      }
-
       _addEdge(fromId, edge);
     }
 
@@ -212,6 +193,20 @@ class MetroService {
 
   // ==================== PATH FINDING ====================
 
+  bool _isInterchange(String nodeId) {
+    final edges = _graph[nodeId] ?? [];
+    final uniqueNodes = <String>{};
+    final uniqueRoutes = <String>{};
+
+    for (final edge in edges) {
+      uniqueNodes.add(edge.toNodeId);
+      uniqueRoutes.add(edge.routeId);
+    }
+
+    return uniqueNodes.length >= 3 && uniqueRoutes.length > 1;
+  }
+
+
   Future<List<RouteResult>> findBestRoute(String sourceName, String destName) async {
     await _ensureInitialized();
     String? sourceId = _findClosestStationId(sourceName);
@@ -222,8 +217,11 @@ class MetroService {
       return [];
     }
     
+    // The user requested explicit 5-minute penalty (300 seconds)
+    const int interchangePenaltySeconds = 300;
+
     // Run 1: Absolute Fastest Route
-    RouteResult? fastestRoute = _dijkstra(sourceId, destId, interchangePenaltyMinutes * 60);
+    RouteResult? fastestRoute = _dijkstra(sourceId, destId, interchangePenaltySeconds);
     
     // Run 2: Fewest Interchanges (Heavy Penalty)
     RouteResult? fewestChangesRoute = _dijkstra(sourceId, destId, 30 * 60);
@@ -240,27 +238,41 @@ class MetroService {
     }
 
     if (results.length < 2 && fastestRoute != null) {
-      final interchanges = fastestRoute.path.where((s) => s.type == StationType.interchange).map((s) => s.id).toSet();
-      if (interchanges.isNotEmpty) {
-        RouteResult? altRoute = _dijkstra(sourceId, destId, interchangePenaltyMinutes * 60, penaltyNodes: interchanges);
-        if (altRoute != null && altRoute.pathLineIds.join(',') != fastestRoute.pathLineIds.join(',')) {
-          if (altRoute.totalTimeMin <= fastestRoute.totalTimeMin + 180) {
-            results.add(altRoute);
-          }
-        }
-      } else {
-        // No interchanges to penalize, fallback to 0 penalty run
-        RouteResult? altRoute = _dijkstra(sourceId, destId, 0);
-        if (altRoute != null && altRoute.pathLineIds.join(',') != fastestRoute.pathLineIds.join(',')) {
+      // Edge-penalty approach: Penalize the edges of the first route
+      final Set<String> penaltyEdges = {};
+      for (int i = 0; i < fastestRoute.path.length - 1; i++) {
+         penaltyEdges.add('${fastestRoute.path[i].id}->${fastestRoute.path[i+1].id}');
+      }
+      
+      RouteResult? altRoute = _dijkstra(sourceId, destId, interchangePenaltySeconds, penaltyEdges: penaltyEdges);
+      if (altRoute != null && altRoute.pathLineIds.join(',') != fastestRoute.pathLineIds.join(',')) {
+        if (altRoute.totalTimeMin <= fastestRoute.totalTimeMin + 180) {
           results.add(altRoute);
         }
       }
     }
 
+    if (results.isEmpty) {
+      throw RouteNotFoundException("No route found between these stops.");
+    }
+
+    // SMART SORT LOGIC
+    results.sort((a, b) {
+      int timeDiff = (a.totalTimeMin - b.totalTimeMin).abs();
+      if (timeDiff <= 10) {
+        int aTransfers = a.path.where((s) => s.type == StationType.interchange).length;
+        int bTransfers = b.path.where((s) => s.type == StationType.interchange).length;
+        if (aTransfers != bTransfers) {
+          return aTransfers.compareTo(bTransfers);
+        }
+      }
+      return a.totalTimeMin.compareTo(b.totalTimeMin);
+    });
+
     return results;
   }
 
-  RouteResult? _dijkstra(String sourceId, String destId, int interchangePenaltySeconds, {Set<String>? penaltyNodes}) {
+  RouteResult? _dijkstra(String sourceId, String destId, int interchangePenaltySeconds, {Set<String>? penaltyNodes, Set<String>? penaltyEdges}) {
     final costs = <String, double>{};
     final previous = <String, GraphEdge?>{};
     final arrivedOnRoute = <String, String?>{};
@@ -283,6 +295,13 @@ class MetroService {
       for (final edge in edges) {
         double addedCost = edge.timeSeconds.toDouble();
 
+        // 🚀 DYNAMIC INTERCHANGE GUARD
+        if (currentLine != null && currentLine != edge.routeId) {
+          if (!_isInterchange(currentId)) {
+            continue;
+          }
+        }
+
         // SMART PENALTY
         if (currentLine != null &&
             currentLine != edge.routeId &&
@@ -294,6 +313,10 @@ class MetroService {
         // AVOIDANCE PENALTY FOR ALTERNATE ROUTE
         if (penaltyNodes != null && penaltyNodes.contains(edge.toNodeId) && edge.toNodeId != destId) {
           addedCost += 100000.0; // Massive weight to force a different path
+        }
+
+        if (penaltyEdges != null && penaltyEdges.contains('$currentId->${edge.toNodeId}')) {
+          addedCost += 100000.0; // Heavily penalize the edge to find next best path
         }
 
         final newCost = currentCost + addedCost;

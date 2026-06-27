@@ -23,6 +23,7 @@ import 'package:ridel/core/utils/app_shadows.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
 import 'package:ridel/features/map/models/place_model.dart';
 import 'package:ridel/features/map/services/master_search_service.dart';
+import 'package:ridel/features/commute/shared/services/database_helper.dart';
 import 'package:ridel/features/map/services/map_share_service.dart';
 import 'package:ridel/core/services/place_service.dart';
 import 'package:ridel/features/map/services/place_api_services.dart';
@@ -44,6 +45,8 @@ import 'saved_places/places_repository.dart' as saved;
 part 'search_sheet_headers.dart';
 part 'search_sheet_views.dart';
 part 'search_sheet_premium.dart';
+
+enum SheetMode { search, placeDetail, routing }
 
 bool _guestHistoryCleared = false;
 
@@ -68,6 +71,8 @@ class MapSearchSheet extends StatefulWidget {
 
 class _MapSearchSheetState extends State<MapSearchSheet>
     with SingleTickerProviderStateMixin {
+  SheetMode _currentMode = SheetMode.search;
+  
   final TextEditingController _searchCtrl = TextEditingController();
   final TextEditingController _originCtrl = TextEditingController();
   final TextEditingController _destCtrl = TextEditingController();
@@ -93,7 +98,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   bool _isSearching = false;
   bool _isSearchMode = false;
 
-  bool _showSearchList = true;
+  bool _showSearchList = false;
   PlaceModel? _selectedPlace;
 
   // ignore: unused_field
@@ -222,6 +227,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       if (!mounted) return;
       Provider.of<MapProvider>(context, listen: false)
           .addListener(_onMapProviderUpdated);
+          
+      // 🚀 FIX: Broadcast initial height instantly to position Quick Access Buttons correctly on startup
+      _sheetProgress.value = _safeMinSize;
+      if (widget.onProgressChanged != null) {
+        widget.onProgressChanged!(_safeMinSize);
+      }
     });
 
     _searchCtrl.addListener(_onSearchChanged);
@@ -261,51 +272,96 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     }
   }
 
+  // Safe RAM filter that won't crash the widget tree
+  List<PlaceModel> _getInstantLocalResults(String query) {
+    if (query.isEmpty) return [];
+    try {
+      final lowerQuery = query.toLowerCase().trim();
+      final allStops = DatabaseHelper.instance.instantCachedStops;
+      
+      return allStops.where((stop) {
+        final stopName = (stop['stop_name'] ?? stop['name'] ?? '').toString();
+        return stopName.toLowerCase().contains(lowerQuery);
+      }).take(5).map((stop) {
+        return PlaceModel(
+          placeId: stop['stop_id']?.toString() ?? '',
+          name: stop['stop_name']?.toString() ?? stop['name']?.toString() ?? 'Unknown Stop',
+          address: 'Transit Stop',
+          latitude: double.tryParse((stop['lat'] ?? stop['LAT'] ?? '0').toString()) ?? 0.0,
+          longitude: double.tryParse((stop['lon'] ?? stop['LON'] ?? stop['lng'] ?? stop['LNG'] ?? '0').toString()) ?? 0.0,
+          categories: stop['transport_mode'] == 0 ? ['metro_station'] : ['bus_station'],
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint("Local Search Error: $e");
+      return [];
+    }
+  }
+
   void _onSearchChanged() {
     _pokeDash();
 
-    final currentQuery = _searchCtrl.text.trim();
+    final query = _searchCtrl.text.trim();
 
-    if (currentQuery.isEmpty) {
+    if (query.isEmpty) {
       if (mounted) {
         setState(() {
           _searchResults = [];
-          _isSearching = false; // Using _isSearching as isLoading
+          _isSearching = false;
           if (!_showSearchList) _showSearchList = true;
         });
       }
       return;
     }
 
+    // 🚀 1. INSTANT LOCAL SEARCH (0ms UI Update)
+    final localResults = _getInstantLocalResults(query);
     setState(() {
-      _isSearching = true;
       _showSearchList = true;
-      // Removed the aggressive _searchResults clearing to keep previous
-      // suggestions visible while the debounce timer runs and fetches new ones.
+      if (localResults.isNotEmpty) {
+        _searchResults = localResults;
+        _isSearching = false; // Kill shimmer instantly if we have local data!
+      } else {
+        _isSearching = true; // Show shimmer only if RAM is empty
+      }
     });
 
     _debounce?.cancel();
 
+    // 🚀 2. BACKGROUND API SEARCH (500ms Debounce)
     _debounce = Timer(const Duration(milliseconds: 500), () async {
       if (!mounted) return;
-      debugPrint("🔍 DEBUG SEARCH: Sending query -> '$currentQuery'");
-      final globalLoc =
-          Provider.of<GlobalLocationService>(context, listen: false);
-      final pos = globalLoc.currentPosition;
-      final latLng = pos != null ? LatLng(pos.latitude, pos.longitude) : null;
+      debugPrint("🔍 DEBUG SEARCH: Sending query -> '$query'");
+      final cleanQuery = query.toLowerCase().trim();
+      
+      try {
+        final globalLoc = Provider.of<GlobalLocationService>(context, listen: false);
+        final pos = globalLoc.currentPosition;
+        final latLng = pos != null ? LatLng(pos.latitude, pos.longitude) : null;
+        
+        // Fetch remote places silently
+        final apiResults = await MasterSearchService().searchPlaces(
+          cleanQuery,
+          userLocation: latLng,
+        );
+        
+        if (!mounted || _searchCtrl.text.trim() != query) return;
 
-      final results = await MasterSearchService().searchPlaces(
-        currentQuery,
-        userLocation: latLng, // Pass user location for parameter broadening
-      );
-      debugPrint(
-          "🔍 DEBUG SEARCH: Received ${results.length} results for '$currentQuery'");
-
-      if (mounted && _searchCtrl.text.trim() == currentQuery) {
         setState(() {
-          _searchResults = results;
-          _isSearching = false;
+          // Merge avoiding exact duplicates by name
+          final combined = [...localResults];
+          for (var apiItem in apiResults) {
+            if (!combined.any((local) => local.name.toLowerCase() == apiItem.name.toLowerCase())) {
+              combined.add(apiItem);
+            }
+          }
+          _searchResults = combined;
+          _isSearching = false; // End shimmer
         });
+      } catch (e) {
+        if (mounted && _searchCtrl.text.trim() == query) {
+          setState(() => _isSearching = false);
+        }
       }
     });
   }
@@ -335,7 +391,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         setState(() => _isSearchMode = true);
         WidgetsBinding.instance
             .addPostFrameCallback((_) => widget.onSearchModeChanged(true));
-        _sheetProgress.value = 0.0;
+            
+        // 🚀 FIX: Reset to _safeMinSize instead of 0.0 to prevent button collapse
+        _sheetProgress.value = _safeMinSize;
+        if (widget.onProgressChanged != null) {
+          widget.onProgressChanged!(_safeMinSize);
+        }
         if (_sheetController.isAttached) {
           try {
             _sheetController.jumpTo(_safeMinSize);
@@ -395,6 +456,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   Future<void> _selectPlaceFromList(PlaceModel place) async {
+    FocusScope.of(context).unfocus(); // 🚀 KILL KEYBOARD FOCUS
     if (!mounted) return;
     final safeProvider = Provider.of<MapProvider>(context, listen: false);
 
@@ -457,7 +519,13 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         await safeProvider.cancelAndClearRoute(resetCamera: false);
         if (!mounted) return;
         safeProvider.setTargetDestination(LatLng(lat, lng));
-        setState(() => _selectedPlace = place);
+        setState(() {
+          _selectedPlace = place;
+          _currentMode = SheetMode.placeDetail; // 🚀 SWITCH MODE
+          _showSearchList = false;
+          _searchResults.clear(); // 🚀 CLEAR LIST TO PREVENT OVERRIDE
+          _isSearching = false;
+        });
         if (_sheetController.isAttached) {
           _sheetController.animateTo(
             _safeMinSize,
@@ -490,6 +558,43 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         savedPlace.latitude != 0.0 &&
         savedPlace.longitude != 0.0) {
       await _submitSearch(savedPlace);
+      return;
+    }
+
+    // 🚀 INTERCEPT CATEGORY SEARCHES (Nearby Places)
+    final lowerQuery = query.trim().toLowerCase();
+    
+    // RAM Cache Queries (Zero API)
+    if (lowerQuery == 'metro' || lowerQuery == 'metro stations' || lowerQuery == 'bus stops') {
+      final provider = Provider.of<MapProvider>(context, listen: false);
+      await provider.showNearbyStopsOnMap(lowerQuery);
+      
+      // Collapse sheet to show the map
+      if (_sheetController.isAttached) {
+        _sheetController.animateTo(
+          _safeMinSize,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+      return;
+    }
+
+    // Network Queries (Overpass API)
+    final otherCategories = [
+      'petrol pumps', 'railway stations', 'hotels', 'restaurants', 'parking', 'coffee', 'cng', 'gym'
+    ];
+    if (otherCategories.contains(lowerQuery)) {
+      final provider = Provider.of<MapProvider>(context, listen: false);
+      await provider.findAndShowNearby(lowerQuery, context);
+      
+      if (_sheetController.isAttached) {
+        _sheetController.animateTo(
+          _safeMinSize,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
       return;
     }
 
@@ -555,6 +660,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           _selectedPlace = placeToSubmit;
           _showSearchList = false;
           _showDirections = false;
+          _currentMode = SheetMode.placeDetail;
           _isLoadingDetails = true;
         });
 
@@ -688,6 +794,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     AppHaptics.mediumImpact();
     setState(() {
       _showDirections = true;
+      _currentMode = SheetMode.routing;
       _isLoadingRoute = true;
       _routeErrorMessage = null;
       _destPlace = _selectedPlace;
@@ -765,6 +872,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
             _searchCtrl.text = tappedPlace.name;
             _showSearchList = false;
             _showDirections = false;
+            _currentMode = SheetMode.placeDetail;
             _isLoadingDetails = true;
           });
           if (_sheetController.isAttached) {
@@ -917,6 +1025,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     AppHaptics.lightImpact();
     setState(() {
       _showDirections = false;
+      _currentMode = SheetMode.search;
       _currentRoute = null;
       _activeRoutingField = null;
     });
@@ -1259,7 +1368,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                             child: DraggableScrollableSheet(
                               controller: _sheetController,
                               initialChildSize:
-                                  (isKeyboardOpen && !isNav) ? 1.0 : midS,
+                                  (isKeyboardOpen && !isNav) ? 1.0 : minS,
                               minChildSize: minS,
                               maxChildSize: currentMaxS,
                               snap: true,
@@ -1270,31 +1379,18 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                 return ValueListenableBuilder<double>(
                                   valueListenable: _sheetProgress,
                                   builder: (context, progress, child) {
-                                    final dynamicHeaderHeight =
-                                        provider.isActiveNavigation
-                                            ? (_isNavSheetExpanded
-                                                ? navExpandedHeight - 40
-                                                : navCollapsedHeight)
-                                            : (_showDirections
-                                                ? 190.0
-                                                : (lerpDouble(
-                                                        70.0, 76.0, progress) ??
-                                                    70.0));
                                     // 1. Calculate how far the sheet is dragged beyond half-open
-                                    final double morphFactor = (progress <=
-                                            0.45)
-                                        ? 0.0
-                                        : ((progress - 0.45) / (0.95 - 0.45))
-                                            .clamp(0.0, 1.0);
+                                    final double morphFactor = (progress <= 0.45) 
+                                        ? 0.0 
+                                        : ((progress - 0.45) / (0.95 - 0.45)).clamp(0.0, 1.0);
 
-                                    // Side margins morph from 28.0 (closed) to 0.0 (expanded)
-                                    final double currentSideMargin =
-                                        lerpDouble(28.0, 0.0, progress) ?? 28.0;
-
-                                    // Bottom margin morphs from 44.0 (closed) to 0.0 (expanded)
-                                    // This perfectly matches Nav Pill's 20 Positioned bottom + 24.0 margin
-                                    final double currentBottomMargin =
-                                        lerpDouble(44.0, 0.0, progress) ?? 44.0;
+                                    // 🚀 FIX: Bind margins and height strictly to morphFactor to prevent initial jumping
+                                    final double currentSideMargin = lerpDouble(28.0, 0.0, morphFactor) ?? 28.0;
+                                    final double currentBottomMargin = lerpDouble(44.0, 0.0, morphFactor) ?? 44.0;
+                                    
+                                    final dynamicHeaderHeight = provider.isActiveNavigation
+                                        ? (_isNavSheetExpanded ? navExpandedHeight - 40 : navCollapsedHeight)
+                                        : (_showDirections ? 190.0 : (lerpDouble(70.0, 76.0, morphFactor) ?? 70.0));
 
                                     // Permanent 35.0 radius on all 4 corners for all states
                                     final BorderRadius premiumRadius =
@@ -1329,6 +1425,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                               ),
                                               child: Stack(
                                                 clipBehavior: Clip.none,
+                                                alignment: Alignment.topCenter, // 🚀 FIX: Anchor to top so margin pushes down properly
                                                 children: [
                                                   // 🎨 PERFORMANCE FIX: RepaintBoundary around Blur
                                                   RepaintBoundary(
@@ -1346,8 +1443,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                           ? (_isNavSheetExpanded
                                                               ? navExpandedHeight
                                                               : navCollapsedHeight)
-                                                          : constraints
-                                                              .maxHeight,
+                                                          : (constraints.maxHeight - currentBottomMargin), // 🚀 FIX: Prevents upward Stack overflow!
                                                       margin: EdgeInsets.only(
                                                         left: currentSideMargin,
                                                         right:
@@ -1531,12 +1627,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                             Curves.easeInCubic,
                                                                         switchOutCurve:
                                                                             Curves.easeOutCubic,
-                                                                        child: (_showDirections
-                                                                            ? _buildDirectionsHeader(dynamicHeaderHeight,
-                                                                                isDark)
-                                                                            : (_selectedPlace != null
-                                                                                ? _buildSelectedPlaceHeader(dynamicHeaderHeight, progress, isDark)
-                                                                                : _buildSearchHeader(dynamicHeaderHeight, progress, isDark))),
+                                                                        child: (_currentMode == SheetMode.placeDetail)
+                                                                            ? const SizedBox.shrink()
+                                                                            : (_showDirections
+                                                                                ? _buildDirectionsHeader(dynamicHeaderHeight,
+                                                                                    isDark)
+                                                                                : (_selectedPlace != null
+                                                                                    ? _buildSelectedPlaceHeader(dynamicHeaderHeight, progress, isDark)
+                                                                                    : _buildSearchHeader(dynamicHeaderHeight, progress, isDark))),
                                                                       ),
                                                                     ),
                                                                   ),

@@ -36,6 +36,7 @@ class CitySelectorSheet extends StatefulWidget {
 
 class _CitySelectorSheetState extends State<CitySelectorSheet> {
   final TextEditingController _searchCtrl = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
 
   bool _isLoading = true;
   List<dynamic> _masterRegions = [];
@@ -81,6 +82,7 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
 
   @override
   void dispose() {
+    _searchFocus.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -302,7 +304,7 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
     const accentColor = CupertinoColors.systemBlue;
 
     return Padding(
-      padding: const EdgeInsets.only(top: 90, left: 24, right: 24),
+      padding: const EdgeInsets.only(top: 16.0, left: 24, right: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -343,10 +345,14 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
             ),
 
           if (_selectedRegion == null) ...[
-            Container(
-              height: 52,
-              padding: const EdgeInsets.only(left: 16, right: 8),
-              decoration: BoxDecoration(
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _searchFocus.requestFocus(),
+              child: Container(
+                height: 52,
+                margin: const EdgeInsets.only(top: 85.0, left: 20, right: 20, bottom: 12),
+                padding: const EdgeInsets.only(left: 16, right: 8),
+                decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF1E2129) : Colors.white,
                 borderRadius: BorderRadius.circular(100),
                 border: Border.all(
@@ -373,8 +379,10 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextField(
+                      focusNode: _searchFocus,
                       controller: _searchCtrl,
                       onChanged: _searchCityLive,
+                      textAlignVertical: TextAlignVertical.center,
                       style: GoogleFonts.inter(
                         color: textColor,
                         fontSize: 15,
@@ -389,8 +397,7 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
                           fontWeight: FontWeight.w400,
                         ),
                         border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 14.0),
                       ),
                     ),
                   ),
@@ -416,6 +423,7 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
                     ),
                 ],
               ),
+            ),
             ),
             const SizedBox(height: 28),
             GestureDetector(

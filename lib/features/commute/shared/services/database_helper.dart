@@ -38,6 +38,13 @@ class DatabaseHelper {
   List<Map<String, dynamic>>? _cachedMetroEdges;
   List<Map<String, dynamic>>? _cachedBusEdges;
 
+  // Sync access for instant RAM filtering
+  List<Map<String, dynamic>> get instantCachedStops {
+    final metro = _cachedMetroStops ?? [];
+    final bus = _cachedBusStops ?? [];
+    return [...metro, ...bus];
+  }
+
   // 🚀 NAYA FUNCTION: Background me DB load karo, UI ko API par chalne do
   Future<void> initBackgroundSync() async {
     if (_isLocalDbReady || _isDbDownloading) return;

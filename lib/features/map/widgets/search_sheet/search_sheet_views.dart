@@ -43,23 +43,8 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
         (_isSearchExpanded || isFocused || provider.isEditingHistory) &&
         isEmpty;
 
-    final isExpanded = progress > (_safeMinSize + 0.05);
-    final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
 
-    Widget buildHiddenExtra(Widget child) {
-      return AnimatedSize(
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeOutExpo, // 🚀 FIX: Upgraded to Apple-like Expo Curve
-        alignment: Alignment.topCenter,
-        child: isExpanded
-            ? AnimatedOpacity(
-                duration: const Duration(milliseconds: 250),
-                opacity: 1,
-                child: child,
-              )
-            : const SizedBox(width: double.infinity, height: 0),
-      );
-    }
+    final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -122,199 +107,52 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
               ],
             ),
           if (!isSelected && !isFocused && isEmpty)
-            Material(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.05)
-                  : Colors.black.withValues(alpha: 0.03),
-              borderRadius: BorderRadius.circular(24),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
               clipBehavior: Clip.antiAlias,
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.05),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.ios_share, color: Colors.blueAccent),
+                    title: const Text('Share My Location', style: TextStyle(fontWeight: FontWeight.w500)),
+                    trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+                    onTap: () async {
+                        AppHaptics.lightImpact();
+                        final locService = Provider.of<GlobalLocationService>(context, listen: false);
+                        if (locService.currentPosition == null) {
+                          await locService.forceRefreshLocation();
+                        }
+                        final pos = locService.currentPosition;
+                        if (pos != null) {
+                          await MapShareService.shareCurrentLocation(LatLng(pos.latitude, pos.longitude));
+                        } else {
+                          _showPremiumNotification('Could not get current location.', isError: true);
+                        }
+                    },
                   ),
-                ),
-                child: Column(
-                  children: [
-                    Theme(
-                      data: Theme.of(context).copyWith(
-                        dividerColor: Colors.transparent,
-                        unselectedWidgetColor: iconColor,
-                      ),
-                      child: ExpansionTile(
-                        controller: _nearbyTileCtrl,
-                        collapsedShape: const Border(),
-                        shape: const Border(),
-                        tilePadding: const EdgeInsets.symmetric(
-                            vertical: 4, horizontal: 16),
-                        onExpansionChanged: (expanded) {
-                          AppHaptics.lightImpact();
-                          rebuildState(() {});
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            Future.delayed(const Duration(milliseconds: 50),
-                                () {
-                              if (_sheetController.isAttached) {
-                                unawaited(
-                                  _sheetController.animateTo(
-                                    expanded ? _safeMaxSize : _safeMidSize,
-                                    duration: const Duration(milliseconds: 400),
-                                    curve: Curves.fastLinearToSlowEaseIn,
-                                  ),
-                                );
-                              }
-                            });
-                          });
-                        },
-                        leading: const Icon(Icons.directions_transit_rounded,
-                            color: Color(0xFF0A84FF)),
-                        title: Text(
-                          'Transit Quick Actions',
-                          style: TextStyle(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.9)
-                                : Colors.black87,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 16,
-                          ),
-                        ),
-                        iconColor: iconColor,
-                        collapsedIconColor: iconColor,
-                        children: [
-                          _buildNearbyTile(
-                            Icons.directions_subway_filled_rounded,
-                            const [Color(0xFF5AC8FA), Color(0xFF007AFF)],
-                            'Metro Stations',
-                            isDark,
-                            false,
-                          ),
-                          _buildNearbyTile(
-                            Icons.directions_bus_filled_rounded,
-                            const [Color(0xFF65D57B), Color(0xFF34C759)],
-                            'Bus Stops',
-                            isDark,
-                            false,
-                          ),
-                          _buildNearbyTile(
-                            Icons.train_rounded,
-                            const [Color(0xFF4CABFF), Color(0xFF0A84FF)],
-                            'Railway Stations',
-                            isDark,
-                            true,
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (showQuickActions)
-                      Column(
-                        children: [
-                          Divider(
-                            height: 1,
-                            thickness: 0.5,
-                            indent: 52,
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.08)
-                                : Colors.black.withValues(alpha: 0.08),
-                          ),
-                          RidelBounceButton(
-                            onTap: () async {
-                              AppHaptics.lightImpact();
-                              final locService =
-                                  Provider.of<GlobalLocationService>(context,
-                                      listen: false);
-                              if (locService.currentPosition == null) {
-                                await locService.forceRefreshLocation();
-                              }
-                              final pos = locService.currentPosition;
-                              if (pos != null) {
-                                await MapShareService.shareCurrentLocation(
-                                    LatLng(pos.latitude, pos.longitude));
-                              } else {
-                                _showPremiumNotification(
-                                    'Could not get current location.',
-                                    isError: true);
-                              }
-                            },
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              leading: const Icon(CupertinoIcons.share,
-                                  color: Color(0xFF0A84FF), size: 22),
-                              title: Text(
-                                'Share My Location',
-                                style: TextStyle(
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.9)
-                                      : Colors.black87,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              trailing: Icon(
-                                Icons.chevron_right_rounded,
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.3)
-                                    : Colors.black.withValues(alpha: 0.3),
-                              ),
-                            ),
-                          ),
-                          Divider(
-                            height: 1,
-                            thickness: 0.5,
-                            indent: 52,
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.08)
-                                : Colors.black.withValues(alpha: 0.08),
-                          ),
-                          buildHiddenExtra(
-                            RidelBounceButton(
-                              onTap: () async {
-                                AppHaptics.success();
-                                unawaited(
-                                  Provider.of<MapProvider>(
-                                    context,
-                                    listen: false,
-                                  ).markCurrentPosition(context),
-                                );
-                                // 🚀 FIX: Removed ugly SnackBar, using NotificationService
-                                _showPremiumNotification(
-                                  'Your current location has been pinned on the map.',
-                                );
-                              },
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                leading: const Icon(CupertinoIcons.pin,
-                                    color: Color(0xFF0A84FF), size: 22),
-                                title: Text(
-                                  'Mark My Location',
-                                  style: TextStyle(
-                                    color: isDark
-                                        ? Colors.white.withValues(alpha: 0.9)
-                                        : Colors.black87,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                trailing: Icon(
-                                  Icons.chevron_right_rounded,
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.3)
-                                      : Colors.black.withValues(alpha: 0.3),
-                                ),
-                              ),
-                            ),
-                          ), // closes buildHiddenExtra(
-                        ],
-                      ), // closes Column(children:
-                  ],
-                ),
+                  Divider(height: 1, color: Colors.grey.withValues(alpha: 0.2), indent: 50),
+                  ListTile(
+                    leading: const Icon(Icons.push_pin_outlined, color: Colors.blueAccent),
+                    title: const Text('Mark My Location', style: TextStyle(fontWeight: FontWeight.w500)),
+                    trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+                    onTap: () async {
+                        AppHaptics.success();
+                        unawaited(
+                          Provider.of<MapProvider>(
+                            context,
+                            listen: false,
+                          ).markCurrentPosition(context),
+                        );
+                        _showPremiumNotification('Your current location has been pinned on the map.');
+                    },
+                  ),
+                ],
               ),
             ),
-
             ],
           ),
         ),
@@ -446,15 +284,10 @@ if (showRecentSearches)
                           ],
                         ),
                       ),
-                      Divider(
-                          height: 1,
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.08)
-                              : Colors.black12),
                       provider.recentSearches.isEmpty
                           ? Padding(
                               padding:
-                                  const EdgeInsets.symmetric(vertical: 32.0),
+                                  const EdgeInsets.symmetric(vertical: 48.0),
                               child: Center(
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
@@ -620,8 +453,12 @@ if (showRecentSearches)
                                                       .setUIState(MapUIState
                                                           .placeSelected);
 
-                                                  rebuildState(() =>
-                                                      _selectedPlace = place);
+                                                  rebuildState(() {
+                                                    _selectedPlace = place;
+                                                    _currentMode = SheetMode.placeDetail;
+                                                    _showSearchList = false;
+                                                    _isSearching = false;
+                                                  });
                                                   if (_sheetController
                                                       .isAttached) {
                                                     WidgetsBinding.instance
@@ -748,7 +585,6 @@ if (showRecentSearches)
             const SizedBox(height: 16),
             _buildFindNearbyList(isDark),
           ],
-          
             ],
           ),
         ),
@@ -1336,33 +1172,32 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
     final dynamicRadius = combinedResults.length == 1 ? 50.0 : 24.0;
 
     final card = Container(
+      margin: const EdgeInsets.only(top: 12, left: 16, right: 16, bottom: 20),
       decoration: BoxDecoration(
         color: isDark
-            ? const Color(0xFF1C1C1E)
-            : const Color(0xFFF2F2F7), // Apple style grouped background
+            ? Colors.white.withValues(alpha: 0.05)
+            : Colors.black.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(dynamicRadius),
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.10)
-              : Colors.black.withValues(alpha: 0.06),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.05),
         ),
-        boxShadow: AppShadows.buttonSoft,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(dynamicRadius),
         child: ListView.separated(
-          padding: EdgeInsets.zero,
+          padding: const EdgeInsets.symmetric(vertical: 8),
           shrinkWrap: !isExpanded,
           physics: const ClampingScrollPhysics(),
           itemCount: combinedResults.length,
-          separatorBuilder: (context, index) => Padding(
-            padding: const EdgeInsets.only(left: 60.0), // Indent divider
-            child: Divider(
-              height: 1,
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.1)
-                  : Colors.black.withValues(alpha: 0.05),
-            ),
+          separatorBuilder: (context, index) => Divider(
+            height: 1,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.black.withValues(alpha: 0.05),
+            indent: 56,
+            endIndent: 16,
           ),
           itemBuilder: (context, index) {
             final place = combinedResults[index];
@@ -1414,89 +1249,302 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
       ),
     );
 
-    Widget content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: card,
-    );
+    return card;
+  }
 
-    return content;
+  Widget _buildReportIssueFooter(bool isDark) {
+    return Column(
+      children: [
+        const SizedBox(height: 16),
+        Center(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () async {
+              final Uri emailUri = Uri(
+                scheme: 'mailto',
+                path: 'support@billionaireworld.com', 
+                queryParameters: {
+                  'subject': 'Ridel App Feedback',
+                  'body': 'Please describe the issue you are facing...\n\n',
+                },
+              );
+              try {
+                if (await canLaunchUrl(emailUri)) {
+                  await launchUrl(emailUri, mode: LaunchMode.externalApplication);
+                }
+              } catch (e) {
+                debugPrint("Email error: \$e");
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.chat_bubble_outline_rounded,
+                    size: 13, 
+                    color: isDark ? Colors.white38 : Colors.black38
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Report an Issue',
+                    style: GoogleFonts.inter(
+                      color: isDark ? Colors.white38 : Colors.black38,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildModeIcon(String mode, IconData icon, bool isDark) {
+    final isSelected = _selectedNavMode == mode;
+    return GestureDetector(
+      onTap: () {
+        rebuildState(() {
+          _selectedNavMode = mode;
+        });
+        unawaited(_checkAndFetchRoute());
+      },
+      child: CircleAvatar(
+        backgroundColor: isSelected ? Colors.blueAccent : Colors.grey.withValues(alpha: 0.2),
+        child: Icon(icon, color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87)),
+      ),
+    );
+  }
+
+  Widget _buildModeSelector(bool isDark) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _buildModeIcon('walking', Icons.directions_walk, isDark),
+        _buildModeIcon('cycling', Icons.directions_bike, isDark),
+        _buildModeIcon('driving', Icons.directions_car, isDark),
+        _buildModeIcon('heavy', Icons.local_shipping, isDark),
+      ],
+    );
+  }
+
+  Widget _buildRoutingDetailCard(bool isDark) {
+    final provider = Provider.of<MapProvider>(context);
+    final placeTitle = _selectedPlace?.name ?? 'Destination';
+    final placeSubtitle = _selectedPlace?.address ?? '';
+    
+    final textColor = isDark ? Colors.white : Colors.black;
+    final subTextColor = isDark ? Colors.white54 : Colors.black54;
+    final mattePillBase = isDark ? const Color(0xFF1E2129) : const Color(0xFFF2F2F7);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12, left: 16, right: 16, bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 🚀 1. HEADER ROW (Share, Title, Close)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildPremiumCircleButton(
+                icon: CupertinoIcons.share,
+                iconColor: textColor,
+                bgColor: mattePillBase,
+                size: 44,
+                onTap: () { 
+                  AppHaptics.lightImpact();
+                  final shareLink = 'https://maps.apple/p/~${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
+                  Clipboard.setData(ClipboardData(text: shareLink));
+                  _showPremiumNotification('Link copied successfully!');
+                },
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      placeTitle,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      placeSubtitle,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: subTextColor, fontSize: 13, fontWeight: FontWeight.w500),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              _buildPremiumCircleButton(
+                icon: Icons.close_rounded,
+                iconColor: textColor,
+                bgColor: mattePillBase,
+                size: 44,
+                onTap: () => _handleCancelRoute(context, provider),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // 🚀 2. TRANSPORT MODES (Properly Wired to MapProvider)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildGlassyTransportMode(context,
+                icon: Icons.directions_walk_rounded,
+                label: 'Walk',
+                isActive: provider.currentNavMode == 'walking',
+                onTap: () {
+                  AppHaptics.selectionClick();
+                  provider.currentNavMode = 'walking';
+                  provider.calculateAndDrawNativeRoute(context, 'walking');
+                }),
+              _buildGlassyTransportMode(context,
+                icon: Icons.two_wheeler_rounded,
+                label: 'Bike',
+                isActive: provider.currentNavMode == 'twowheeler',
+                onTap: () {
+                  AppHaptics.selectionClick();
+                  provider.currentNavMode = 'twowheeler';
+                  provider.calculateAndDrawNativeRoute(context, 'twowheeler');
+                }),
+              _buildGlassyTransportMode(context,
+                icon: CupertinoIcons.car_detailed,
+                label: 'Car',
+                isActive: provider.currentNavMode == 'driving',
+                onTap: () {
+                  AppHaptics.selectionClick();
+                  provider.currentNavMode = 'driving';
+                  provider.calculateAndDrawNativeRoute(context, 'driving');
+                }),
+              _buildGlassyTransportMode(context,
+                icon: Icons.local_shipping_rounded,
+                label: 'Heavy',
+                isActive: provider.currentNavMode == 'heavy',
+                onTap: () {
+                  AppHaptics.selectionClick();
+                  provider.currentNavMode = 'heavy';
+                  provider.calculateAndDrawNativeRoute(context, 'heavy');
+                }),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // 🚀 3. ORIGIN & DESTINATION BOX (Apple Maps Style)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: mattePillBase,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.my_location, color: Colors.blueAccent, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Current Location', style: TextStyle(color: subTextColor, fontSize: 12)),
+                          Text('Locating...', style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 9.0),
+                  child: Container(
+                    height: 16,
+                    decoration: BoxDecoration(
+                      border: Border(left: BorderSide(color: isDark ? Colors.white24 : Colors.black26, width: 2)),
+                    ),
+                  ),
+                ),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on, color: Colors.redAccent, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Destination', style: TextStyle(color: subTextColor, fontSize: 12)),
+                          Text(placeTitle, style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: InkWell(
+                    onTap: () { AppHaptics.selectionClick(); },
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.add_circle_outline, color: Colors.blueAccent, size: 18),
+                        SizedBox(width: 8),
+                        Text('Add Stop', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSheetContent(bool isDark, double progress,
       {bool isExpanded = false}) {
     final provider = Provider.of<MapProvider>(context);
-    if (_searchCtrl.text.isNotEmpty &&
-        (_selectedPlace == null || provider.isAddingStopMode)) {
-      return Container(
+    
+    Widget contentView;
+    if (_currentMode == SheetMode.placeDetail || _currentMode == SheetMode.routing) {
+      contentView = _buildRoutingDetailCard(isDark);
+      return contentView;
+    } else if (_searchCtrl.text.isNotEmpty || _isSearching) {
+      contentView = Container(
         key: const ValueKey('searchResultsView'),
         child: _buildSearchResultsView(isDark, isExpanded: isExpanded),
       );
+    } else {
+      contentView = Container(
+        key: const ValueKey('exploreView'),
+        child: _buildUnifiedExploreView(isDark, progress,
+            isExpandedList: isExpanded),
+      );
     }
-    return Container(
-      key: const ValueKey('exploreView'),
-      child: _buildUnifiedExploreView(isDark, progress,
-          isExpandedList: isExpanded),
-    );
-  }
-
-  Widget _buildNearbyTile(
-    IconData icon,
-    List<Color> colors,
-    String label,
-    bool isDark,
-    bool isLast,
-  ) {
+        
     return Column(
       children: [
-        RidelBounceButton(
-          onTap: () {
-            AppHaptics.selectionClick();
-            _submitSearch(null, label);
-          },
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-            leading: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: colors,
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: colors.first.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(icon, color: Colors.white, size: 18),
-            ),
-            title: Text(
-              label,
-              style: TextStyle(
-                color: isDark ? Colors.white : Colors.black,
-                fontWeight: FontWeight.w500,
-                fontSize: 15,
-              ),
-            ),
-            trailing: Icon(
-              Icons.chevron_right_rounded,
-              color: isDark ? Colors.white24 : Colors.black12,
-              size: 20,
-            ),
-          ),
-        ),
-        if (!isLast)
-          Divider(
-            height: 1,
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.05)
-                : Colors.black.withValues(alpha: 0.05),
-            indent: 60,
-          ),
+        contentView,
+        if (!provider.isAddingStopMode) _buildReportIssueFooter(isDark),
       ],
     );
   }
@@ -1516,12 +1564,13 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
             color: isDark
                 ? const Color(0xFF1E2129)
                 : const Color(0xFFF2F2F7), // Match your premium dark card color
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(24),
             border: Border.all(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.05)
                     : Colors.transparent),
           ),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
               _buildVerticalNearbyTile(context,
@@ -1546,6 +1595,12 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                   icon: Icons.directions_subway_rounded,
                   color: Colors.blueAccent,
                   title: 'Metro',
+                  isDark: isDark),
+              _buildDivider(isDark),
+              _buildVerticalNearbyTile(context,
+                  icon: Icons.directions_bus_rounded,
+                  color: Colors.green,
+                  title: 'Bus Stops',
                   isDark: isDark),
               _buildDivider(isDark),
               _buildVerticalNearbyTile(context,

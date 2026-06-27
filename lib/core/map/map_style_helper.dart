@@ -2,37 +2,61 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ridel/core/config/app_config.dart';
 
 // 🚀 NATIVE THEMES ONLY
 enum MapThemeType { light, dark, satellite }
 
 class MapStyleHelper {
   static const String _dataUriPrefix = 'data:application/json;charset=utf-8,';
-  static final Set<String> heavyLayerIds = {}; // 🚀 Adaptive LOD collection
 
   static Future<String> getOlaStyle(bool isSystemDark,
-      {MapThemeType? themeType,
-      bool showPOIs = true,
-      bool show3D = false}) async {
-    final MapThemeType resolvedTheme = themeType ?? (isSystemDark ? MapThemeType.dark : MapThemeType.light);
-    final bool useDark = (resolvedTheme == MapThemeType.dark || resolvedTheme == MapThemeType.satellite);
+      {MapThemeType? themeType}) async {
+    // 🚀 SATELLITE MODE INTERCEPTOR
+    if (themeType == MapThemeType.satellite) {
+      const String satelliteStyle = '''
+      {
+        "version": 8,
+        "sources": {
+          "satellite-raster": {
+            "type": "raster",
+            "tiles": [
+              "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            ],
+            "tileSize": 256
+          }
+        },
+        "layers": [
+          {
+            "id": "satellite-base",
+            "type": "raster",
+            "source": "satellite-raster",
+            "minzoom": 0,
+            "maxzoom": 22
+          }
+        ]
+      }
+      ''';
+      return kIsWeb
+          ? "$_dataUriPrefix${Uri.encodeComponent(satelliteStyle)}"
+          : satelliteStyle;
+    }
+    final bool useDark =
+        themeType != null ? (themeType == MapThemeType.dark) : isSystemDark;
+    final String styleName =
+        useDark ? "default-dark-standard" : "default-light-standard";
 
-    debugPrint("🚀 MapStyleHelper running: resolvedTheme=$resolvedTheme, useDark=$useDark");
-
-    final String styleName = useDark ? "default-dark-standard" : "default-light-standard";
-    final String cacheKey = "ola_v346_AUDIT_${resolvedTheme.name}_pois_${showPOIs}_3d_$show3D";
+    // 🚀 CACHE KEY v311 (Direct Ola URL enforcement)
+    final String cacheKey = "ola_v311_$styleName";
 
     final prefs = await SharedPreferences.getInstance();
     final String? cachedStyle = prefs.getString(cacheKey);
 
     if (cachedStyle != null) {
-      // ggshield-ignore
-      return cachedStyle.replaceAll(          RegExp(r'(key|api_key)=[^&"]+'),
-          'api_key=${['LXLK4', 'nwQMwac', 'pTZhol7', 'QHc3RP', 'et3tUOk', 'b76reivs'].join('')}');
+      return cachedStyle;
     }
 
-    // HARDCODED FIX for 401: AppConfig.olaMapsKey was returning 0.0.1
-    final String apiKey = ['LXLK4', 'nwQMwac', 'pTZhol7', 'QHc3RP', 'et3tUOk', 'b76reivs'].join('');
+    final String apiKey = AppConfig.olaMapsKey;
     if (apiKey.isEmpty) {
       debugPrint('CRITICAL: Ola API Key is missing');
       throw Exception('CRITICAL: Ola API Key is missing');
@@ -52,68 +76,21 @@ class MapStyleHelper {
 
     Map<String, dynamic> styleData = json.decode(response.body);
 
-    // ═══════════════════════════════════════════════════════════
-    // 🔍 PHASE 1: DATA AUDIT — DO NOT SKIP
-    // Dump ALL properties of transit/metro/subway layers from tile source
-    // to identify the EXACT property key for line name/color.
-    // ═══════════════════════════════════════════════════════════
-    if (styleData['layers'] != null && styleData['layers'] is List) {
-      int auditCount = 0;
-      debugPrint(
-          '╔══════════════════════════════════════════════════════════╗');
-      debugPrint('║  🔍 PHASE 1: TRANSIT/METRO/SUBWAY LAYER DATA AUDIT     ║');
-      debugPrint(
-          '╚══════════════════════════════════════════════════════════╝');
-      for (var layer in styleData['layers']) {
-        if (layer is! Map) continue;
-        if (auditCount >= 10) break;
-
-        final String layerId = (layer['id'] as String? ?? '').toLowerCase();
-        final String sourceLayer =
-            (layer['source-layer'] as String? ?? '').toLowerCase();
-        final String layerType = (layer['type'] as String? ?? '');
-
-        // Check if the filter array contains 'transit', 'subway', or 'metro'
-        String filterStr = '';
-        if (layer['filter'] != null) {
-          filterStr = json.encode(layer['filter']).toLowerCase();
+    void removeNulls(dynamic node) {
+      if (node is Map) {
+        node.removeWhere((key, value) => value == null || value == "null");
+        for (var value in node.values) {
+          removeNulls(value);
         }
-
-        bool isTransitRelated = layerId.contains('transit') ||
-            layerId.contains('metro') ||
-            layerId.contains('subway') ||
-            sourceLayer.contains('transit') ||
-            filterStr.contains('transit') ||
-            filterStr.contains('subway') ||
-            filterStr.contains('metro');
-
-        if (isTransitRelated) {
-          auditCount++;
-          debugPrint(
-              '┌─── AUDIT FEATURE #$auditCount ───────────────────────────');
-          debugPrint('│ id:           ${layer['id']}');
-          debugPrint('│ type:         $layerType');
-          debugPrint('│ source:       ${layer['source']}');
-          debugPrint('│ source-layer: ${layer['source-layer']}');
-          debugPrint(
-              '│ filter:       ${layer['filter'] != null ? json.encode(layer['filter']) : 'NONE'}');
-          debugPrint(
-              '│ paint:        ${layer['paint'] != null ? json.encode(layer['paint']) : 'NONE'}');
-          debugPrint(
-              '│ layout:       ${layer['layout'] != null ? json.encode(layer['layout']) : 'NONE'}');
-          debugPrint('│ minzoom:      ${layer['minzoom']}');
-          debugPrint('│ maxzoom:      ${layer['maxzoom']}');
-          debugPrint(
-              '└────────────────────────────────────────────────────────');
+      } else if (node is List) {
+        for (var item in node) {
+          removeNulls(item);
         }
       }
-      debugPrint(
-          '════════════════════════════════════════════════════════════');
-      debugPrint(
-          '🔍 AUDIT COMPLETE: Found $auditCount transit/metro/subway layers');
-      debugPrint(
-          '════════════════════════════════════════════════════════════');
     }
+    
+    // 🚀 Recursively sanitize entire JSON to prevent WebGL crashes
+    removeNulls(styleData);
 
     // 1. Sprites & Glyphs URL Fix (Direct to Ola Maps with API Key)
     if (styleData['sprite'] != null) {
@@ -152,471 +129,162 @@ class MapStyleHelper {
           }
         }
       });
-      
-      if (resolvedTheme == MapThemeType.satellite) {
-        styleData['sources']['ridel-satellite'] = {
-          "type": "raster",
-          "tiles": ["https://ridel.ridel.workers.dev/api/satellite/{z}/{y}/{x}"],
-          "tileSize": 256,
-          "maxzoom": 19
-        };
-      }
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // 🚀 3. ULTRA-PREMIUM APPLE-AESTHETIC LAYER ARCHITECTURE
-    // ═══════════════════════════════════════════════════════════
-    // Rule: Switch on layer['type'] FIRST, then check IDs.
-    // This makes it scientifically impossible to apply an invalid
-    // paint property to a MapLibre layer.
-    //
-    // ISSUE 1: Liquid Glass Tube metro lines with authentic colors
-    // ISSUE 3: Full Light/Dark mode audit with Apple-grade palette
-    // ═══════════════════════════════════════════════════════════
+    // 🚀 3. LAYER OPTIMIZATION + COLOR INJECTION
     if (styleData['layers'] != null && styleData['layers'] is List) {
-      List<dynamic> updatedLayers = [];
-      
-      // 🚀 SATELLITE BASE INJECTION
-      if (resolvedTheme == MapThemeType.satellite) {
-        updatedLayers.add({
-          "id": "ridel-satellite-base",
-          "type": "raster",
-          "source": "ridel-satellite"
-        });
-      }
-      
-      List<dynamic> transitLayers = [];
-      List<dynamic> symbolLayers = [];
-      for (var layer in styleData['layers']) {
-        if (layer is! Map) continue;
-
-        final String id = (layer['id'] as String? ?? '').toLowerCase();
+      final List<dynamic> rawLayers = styleData['layers'];
+      styleData['layers'] = rawLayers.where((layer) {
+        if (layer is! Map) return true;
+        final String id = layer['id']?.toString().toLowerCase() ?? '';
         final String sourceLayer =
-            (layer['source-layer'] as String? ?? '').toLowerCase();
-        final String type = (layer['type'] as String? ?? '');
+            layer['source-layer']?.toString().toLowerCase() ?? '';
+        final String type = layer['type']?.toString().toLowerCase() ?? '';
 
-        // ── DECLUTTER: Remove 3D models only ──
+        // 1. Remove 3D Models
         if (id.contains('3d_model') || sourceLayer.contains('3d_model')) {
-          continue;
+          return false;
         }
 
-        // ── Remove heavy POI clutter (shops, ATMs, food) but KEEP symbol labels ──
-        bool isClutter = id.contains('shop') ||
-            id.contains('food') ||
-            id.contains('restaurant') ||
-            id.contains('atm') ||
-            id.contains('business');
-        if (isClutter &&
-            type != 'symbol' &&
-            !id.contains('transit') &&
-            !id.contains('station')) {
-          continue;
-        }
+        // 2. PREMIUM PERMANENT DECLUTTERING
+        bool isEssential = id.contains('road') ||
+            id.contains('street') ||
+            id.contains('place') ||
+            id.contains('city') ||
+            id.contains('state') ||
+            id.contains('country') ||
+            id.contains('neighborhood');
 
-        // ── Ensure paint map exists (create for symbol layers that lack one) ──
-        if (layer['paint'] == null || layer['paint'] is! Map) {
-          if (type == 'symbol') {
-            layer['paint'] = <String, dynamic>{};
-          } else {
-            updatedLayers.add(layer);
-            continue;
-          }
-        }
-        final paint = layer['paint'] as Map<String, dynamic>;
+        if (!isEssential) {
+          bool isFuel = id.contains('fuel') ||
+              id.contains('gas') ||
+              id.contains('petrol') ||
+              id.contains('gas_station') ||
+              sourceLayer.contains('fuel') ||
+              sourceLayer.contains('gas') ||
+              sourceLayer.contains('petrol');
 
-        // ════════════════════════════════════════════════════
-        // 1. BACKGROUND — The canvas foundation
-        // ════════════════════════════════════════════════════
-        if (type == 'background') {
-          paint['background-color'] = useDark ? '#1C1C1E' : '#F2F2F7'; // Apple Dark/Light Base
-        }
-
-        // ════════════════════════════════════════════════════
-        // 2. FILL LAYERS — Polygons (Water, Parks, Land, Buildings)
-        //    Apple Maps uses very subtle, desaturated tones
-        // ════════════════════════════════════════════════════
-        else if (type == 'fill') {
-          if (id.contains('water') ||
-              id.contains('ocean') ||
-              id.contains('river') ||
-              id.contains('lake') ||
-              id.contains('reservoir')) {
-            paint['fill-color'] = useDark ? '#0A0A14' : '#A2C1D6';
-          } else if (id.contains('park') ||
-              id.contains('forest') ||
-              id.contains('grass') ||
-              id.contains('garden') ||
-              id.contains('recreation') ||
-              id.contains('pitch') ||
-              id.contains('meadow') ||
-              id.contains('wood')) {
-            paint['fill-color'] = useDark ? '#1D2A24' : '#C1DFC4';
-            paint['fill-opacity'] = useDark ? 0.6 : 0.8;
-          } else if (id.contains('building')) {
-            heavyLayerIds.add(id); // 🚀 Add 2D buildings to LOD tracker
-            paint['fill-color'] = useDark ? '#2C2C2E' : '#E5E5EA';
-            if (show3D) {
-              layer['type'] = 'fill-extrusion';
-              paint.clear();
-              paint['fill-extrusion-height'] = [
-                "coalesce",
-                ["get", "height"],
-                ["get", "render_height"],
-                12.0
-              ];
-              paint['fill-extrusion-base'] = [
-                "coalesce",
-                ["get", "min_height"],
-                0.0
-              ];
-              paint['fill-extrusion-color'] = useDark ? '#2C2C2E' : '#E5E5EA';
-              paint.remove('fill-outline-color');
-            } else {
-              layer['type'] = 'fill';
-              paint['fill-color'] = useDark ? '#2C2C2E' : '#E5E5EA';
-              paint['fill-outline-color'] = useDark ? '#1C1C1E' : '#D1D1D6';
+          if (isFuel) {
+            if (!layer.containsKey('layout') || layer['layout'] is! Map) {
+              layer['layout'] = <String, dynamic>{};
             }
+            layer['layout']['visibility'] = 'none';
           } else {
-            // Mute everything else
-            paint['fill-color'] = useDark ? '#1C1C1E' : '#F2F2F7';
-          }
-        }
+            bool isClutter = id.contains('poi') ||
+                id.contains('shop') ||
+                id.contains('food') ||
+                id.contains('restaurant') ||
+                id.contains('amenity') ||
+                id.contains('commercial') ||
+                id.contains('atm') ||
+                id.contains('business') ||
+                sourceLayer.contains('poi') ||
+                sourceLayer.contains('shop') ||
+                sourceLayer.contains('food') ||
+                sourceLayer.contains('restaurant') ||
+                sourceLayer.contains('amenity') ||
+                sourceLayer.contains('commercial') ||
+                sourceLayer.contains('atm') ||
+                sourceLayer.contains('business');
 
-        // ════════════════════════════════════════════════════
-        // 3. FILL-EXTRUSION LAYERS — 3D Buildings
-        // ════════════════════════════════════════════════════
-        else if (type == 'fill-extrusion') {
-          if (id.contains('building')) {
-            heavyLayerIds.add(id); // 🚀 Add 3D buildings to LOD tracker
-            if (show3D) {
-              layer['type'] = 'fill-extrusion';
-              paint.clear();
-              paint['fill-extrusion-height'] = [
-                "coalesce",
-                ["get", "height"],
-                ["get", "render_height"],
-                12.0
-              ];
-              paint['fill-extrusion-base'] = [
-                "coalesce",
-                ["get", "min_height"],
-                0.0
-              ];
-              paint['fill-extrusion-color'] = useDark ? '#334152' : '#E5E5EA';
-              paint.remove('fill-outline-color');
-            } else {
-              layer['type'] = 'fill';
-              paint.clear();
-              paint['fill-color'] = useDark ? '#334152' : '#E5E5EA';
-              paint['fill-opacity'] = useDark ? 1.0 : 0.85;
-              paint['fill-outline-color'] = useDark ? '#1D2633' : '#D1D1D6';
+            if (isClutter) {
+              return false; // Remove layer completely
             }
           }
         }
 
-        // ════════════════════════════════════════════════════
-        // 4. LINE LAYERS — The Visual Hierarchy Engine
-        //    This is the most critical section. Metro lines
-        //    must POP, highways must be visible, minor streets
-        //    must fade into the background.
-        // ════════════════════════════════════════════════════
-        else if (type == 'line') {
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          // 4a. METRO & SUBWAY — PHASE 3 RIGID IMPLEMENTATION
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          // AUDIT RESULT: Tile property key = "color"
-          // Values are hex codes (#FFDF00) or CSS names (yellow, blue)
-          // NOT line names like "Yellow Line".
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          if (id.contains('metro') ||
-              id.contains('subway') ||
-              id.contains('transit')) {
-            // 1. HARDCODED MATCH LOGIC — NO coalesce, NO ["get", "colour"],
-            //    NO ["get", "name"]. STRICTLY our palette.
-            paint['line-color'] = [
-              "match",
-              ["get", "color"], // THE KEY IDENTIFIED IN PHASE 1
+        // RULE C (Metro/Transit - Icons Only, No Text): Clean up transit stations
+        bool isTransit = id.contains('transit') ||
+            id.contains('station') ||
+            id.contains('railway') ||
+            id.contains('subway') ||
+            id.contains('metro');
 
-              // ── YELLOW LINE ──
-              // Tile values: #FFDF00, #ffff00, #ffa500, yellow
-              "#FFDF00", useDark ? "#FFD60A" : "#FFCC00",
-              "#ffff00", useDark ? "#FFD60A" : "#FFCC00",
-              "#ffa500", useDark ? "#FFD60A" : "#FFCC00",
-              "yellow", useDark ? "#FFD60A" : "#FFCC00",
+        if (isTransit && type == 'symbol') {
+          if (layer.containsKey('layout') && layer['layout'] is Map) {
+            final Map<String, dynamic> layout = layer['layout'];
+            layout.remove('text-field');
+          }
+        }
 
-              // ── BLUE LINE ──
-              // Tile values: #1e90ff, blue, #0000ff, #4169E1, #3281c4, #4169e1
-              "#1e90ff", useDark ? "#0A84FF" : "#007AFF",
-              "blue", useDark ? "#0A84FF" : "#007AFF",
-              "#0000ff", useDark ? "#0A84FF" : "#007AFF",
-              "#4169E1", useDark ? "#0A84FF" : "#007AFF",
-              "#3281c4", useDark ? "#0A84FF" : "#007AFF",
-              "#4169e1", useDark ? "#0A84FF" : "#007AFF",
+        // 🚀 3. APPLE-GRADE COLOR INJECTION
+        if (layer.containsKey('paint') && layer['paint'] is Map) {
+          final Map<String, dynamic> paint = layer['paint'];
 
-              // ── RED LINE ──
-              // Tile values: #ff0000, red, #FF4040
-              "#ff0000", useDark ? "#FF453A" : "#FF3B30",
-              "red", useDark ? "#FF453A" : "#FF3B30",
-              "#FF4040", useDark ? "#FF453A" : "#FF3B30",
-
-              // ── GREEN LINE ──
-              // Tile values: #009933, #12C900, #53b848, #008000, #00ff00, green
-              "#009933", useDark ? "#32D74B" : "#34C759",
-              "#12C900", useDark ? "#32D74B" : "#34C759",
-              "#53b848", useDark ? "#32D74B" : "#34C759",
-              "#008000", useDark ? "#32D74B" : "#34C759",
-              "#00ff00", useDark ? "#32D74B" : "#34C759",
-              "green", useDark ? "#32D74B" : "#34C759",
-
-              // ── VIOLET / PURPLE LINE ──
-              // Tile values: #e542de, #CC338B, #800080, #CD00DE, #9400d3, #553592
-              "#e542de", useDark ? "#BF5AF2" : "#AF52DE",
-              "#CC338B", useDark ? "#BF5AF2" : "#AF52DE",
-              "#800080", useDark ? "#BF5AF2" : "#AF52DE",
-              "#CD00DE", useDark ? "#BF5AF2" : "#AF52DE",
-              "#9400d3", useDark ? "#BF5AF2" : "#AF52DE",
-              "#553592", useDark ? "#BF5AF2" : "#AF52DE",
-
-              // ── PINK LINE ──
-              // Tile values: #FC8EAC, #ffc0cb, #ff748c
-              "#FC8EAC", useDark ? "#FF375F" : "#FF2D55",
-              "#ffc0cb", useDark ? "#FF375F" : "#FF2D55",
-              "#ff748c", useDark ? "#FF375F" : "#FF2D55",
-
-              // ── ORANGE LINE (+ Airport Express) ──
-              // Tile values: orange, #F47421, #FF8C00
-              "orange", useDark ? "#FF9F0A" : "#FF9500",
-              "#F47421", useDark ? "#FF9F0A" : "#FF9500",
-              "#FF8C00", useDark ? "#FF9F0A" : "#FF9500",
-
-              // ── AQUA / CYAN LINE ──
-              // Tile values: aqua, #7FFFD4, #00FFFF
-              "aqua", useDark ? "#64D2FF" : "#5AC8FA",
-              "#7FFFD4", useDark ? "#64D2FF" : "#5AC8FA",
-              "#00FFFF", useDark ? "#64D2FF" : "#5AC8FA",
-
-              // ── GRAY LINE ──
-              // Tile values: #838996, gray
-              "#838996", useDark ? "#98989D" : "#8E8E93",
-              "gray", useDark ? "#98989D" : "#8E8E93",
-
-              // ── DEFAULT FALLBACK ──
-              "#999999"
-            ];
-
-            // 2. EXPLICIT OPACITY — 1.0 as per Phase 3 spec
-            paint['line-opacity'] = 1.0;
-
-            // 3. FIXED WIDTH — 2.5 as per Phase 3 spec
-            paint['line-width'] = 2.5;
-
-            // 4. DASHED TRACK — [2, 3] as per Phase 3 spec
-            paint['line-dasharray'] = [2, 3];
-
-            paint.remove('line-blur');
-            if (layer['layout'] == null) layer['layout'] = {};
-            layer['layout']['line-cap'] = 'butt';
-            layer['layout']['line-join'] = 'miter';
-
-            // 🚀 SATELLITE TRANSPARENCY OVERRIDE
-            if (resolvedTheme == MapThemeType.satellite) {
-              // STRICT RULE: We must read the dynamically mutated type from the map object!
-              final String currentType = layer['type'] as String? ?? ''; 
-              
-              if (currentType == 'fill') {
-                paint['fill-opacity'] = 0.0;
-                paint.remove('fill-extrusion-opacity');
-              } else if (currentType == 'fill-extrusion') {
-                paint['fill-extrusion-opacity'] = 0.0;
-                paint.remove('fill-opacity');
-              } else if (currentType == 'background') {
-                paint['background-color'] = 'rgba(0,0,0,0)';
-                paint['background-opacity'] = 0.0;
+          if (useDark) {
+            if (type == 'background') {
+              paint['background-color'] = '#181A1F';
+            } else if ((id.contains('landuse') || id.contains('building')) &&
+                type == 'fill') {
+              paint['fill-color'] = '#1E2128';
+            } else if (id.contains('water') && type == 'fill') {
+              paint['fill-color'] = '#14202A';
+            } else if ((id.contains('park') || id.contains('green')) &&
+                type == 'fill') {
+              paint['fill-color'] = '#1A2421';
+            } else if ((id.contains('road') || sourceLayer.contains('road')) &&
+                type == 'line') {
+              if (paint.containsKey('line-color')) {
+                if (id.contains('highway') ||
+                    id.contains('primary') ||
+                    id.contains('trunk')) {
+                  paint['line-color'] = '#3A404A'; // Major roads
+                } else {
+                  paint['line-color'] = '#2D323A'; // Regular roads
+                }
+              }
+            } else if ((id.contains('railway') || id.contains('transit')) &&
+                type == 'line') {
+              if (paint.containsKey('line-color')) {
+                paint['line-color'] = '#454C59';
               }
             }
-
-            transitLayers.add(layer);
-            continue;
-          }
-
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          // 4b. HIGHWAYS & ARTERIAL ROADS
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          else if (id.contains('highway') || id.contains('primary')) {
-            paint['line-color'] = useDark ? '#3A3A3C' : '#FFFFFF';
-            paint['line-width'] = ["interpolate", ["linear"], ["zoom"], 12, 1.5, 18, 8.0];
-          } 
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          // 4c. EVERYTHING ELSE (Minor streets)
-          // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          else {
-            // Fade out minor streets to reduce clutter
-            paint['line-color'] = useDark ? '#2C2C2E' : '#EAEAEA';
-            paint['line-width'] = ["interpolate", ["linear"], ["zoom"], 14, 0.5, 18, 4.0];
-          }
-        }
-
-        // ════════════════════════════════════════════════
-        // 5. SYMBOL LAYERS — Text Labels, POI Icons, Street Names
-        //    Readable text over any background with premium halos.
-        // ════════════════════════════════════════════════
-        else if (type == 'symbol') {
-          // Visibility control
-          if (layer['layout'] == null) layer['layout'] = <String, dynamic>{};
-
-          final layerId = id.toLowerCase();
-
-          // 1. ESSENTIAL NAVIGATION (Always Visible)
-          // Includes: Roads, highways, streets, cities, towns, metro, transit, airports, stations
-          bool isEssential = layerId.contains('road') ||
-              layerId.contains('street') ||
-              layerId.contains('highway') ||
-              layerId.contains('place') ||
-              layerId.contains('city') ||
-              layerId.contains('town') ||
-              layerId.contains('village') ||
-              layerId.contains('transit') ||
-              layerId.contains('station') ||
-              layerId.contains('metro') ||
-              layerId.contains('airport');
-
-          // 2. COMMERCIAL POIs (Toggled by user)
-          // Includes: Shops, restaurants, hotels, cafes, general POIs
-          bool isPOI = layerId.contains('poi') ||
-              layerId.contains('shop') ||
-              layerId.contains('restaurant') ||
-              layerId.contains('food') ||
-              layerId.contains('hotel') ||
-              layerId.contains('cafe') ||
-              layerId.contains('amenity') ||
-              layerId.contains('commercial');
-
-          // Apply Visibility Logic
-          if (isEssential) {
-            layer['layout']['visibility'] = 'visible'; // Never hide navigation
-          } else if (isPOI) {
-            layer['layout']['visibility'] =
-                showPOIs ? 'visible' : 'none'; // Controlled by toggle
           } else {
-            // Default fallback for anything else
-            layer['layout']['visibility'] = showPOIs ? 'visible' : 'none';
-          }
-
-          // 🚀 Add to LOD tracking for dynamic performance toggling
-          if (isPOI) {
-            heavyLayerIds.add(layerId);
-          }
-
-          // 1. Strict Collision Detection (Forces map to hide overlapping text/icons)
-          layer['layout']['text-allow-overlap'] = false;
-          layer['layout']['icon-allow-overlap'] = false;
-          layer['layout']['text-ignore-placement'] = false;
-          layer['layout']['icon-ignore-placement'] = false;
-
-          // 2. Add breathing room between symbols
-          layer['layout']['symbol-spacing'] = 300;
-          layer['layout']['text-padding'] = 2.0;
-
-          // 3. Zoom-Based Filtering (Hierarchy)
-          // If it's a minor POI (shop, restaurant), force it to only show at high zoom levels
-          if (id.contains('poi') ||
-              id.contains('shop') ||
-              id.contains('restaurant')) {
-            layer['minzoom'] =
-                15.5; // Only show when zoomed in close to street level
-          } else if (id.contains('station') || id.contains('transit')) {
-            layer['minzoom'] = 13.0; // Show major transit hubs earlier
-          }
-
-          // ✨ 4. PREMIUM TYPOGRAPHY & SAFE POIS
-          // A. Safe POI Restoration (Only kill explicitly empty/broken icons)
-          if (layer['layout'].containsKey('icon-image')) {
-            String iconVal = layer['layout']['icon-image'].toString().trim();
-            if (iconVal.isEmpty || iconVal == '""' || iconVal == "''" || iconVal == '[]') {
-              layer['layout'].remove('icon-image');
-            } else {
-              // Shrink valid icons slightly for a refined look
-              layer['layout']['icon-size'] = 0.65; 
-              paint['icon-opacity'] = useDark ? 0.8 : 0.9;
+            if (type == 'background') {
+              paint['background-color'] =
+                  '#E0E4E8'; // Distinctly visible cool grey
+            } else if ((id.contains('landuse') || id.contains('building')) &&
+                type == 'fill') {
+              paint['fill-color'] =
+                  '#D4D9DF'; // Slightly darker grey for buildings
+            } else if (id.contains('water') && type == 'fill') {
+              paint['fill-color'] = '#96C1E3'; // Clear, recognizable sky blue
+            } else if ((id.contains('park') || id.contains('green')) &&
+                type == 'fill') {
+              paint['fill-color'] = '#B7D9BA'; // Fresh, clear pastel green
+            } else if ((id.contains('road') || sourceLayer.contains('road')) &&
+                type == 'line') {
+              if (paint.containsKey('line-color')) {
+                paint['line-color'] =
+                    '#FFFFFF'; // Pure white makes roads pop out
+              }
+            } else if ((id.contains('railway') || id.contains('transit')) &&
+                type == 'line') {
+              if (paint.containsKey('line-color')) {
+                paint['line-color'] = '#4F5D73'; // Sharp slate grey
+              }
             }
           }
-
-          // B. Typography Enhancements (Fixes the floating text issue)
-          paint['text-color'] = useDark ? '#EBEBF5' : '#1C1C1E';
-          
-          // Add a thick halo matching the background to make text readable anywhere
-          paint['text-halo-color'] = useDark ? '#1C1C1E' : '#F2F2F7';
-          paint['text-halo-width'] = 2.0;
-          paint['text-halo-blur'] = 0.5;
-
-          // Anchor text neatly below the POI point, rather than overlapping it
-          layer['layout']['text-anchor'] = 'top';
-          layer['layout']['text-offset'] = [0.0, 0.8]; // Push text slightly down
-          layer['layout']['text-size'] = 11.5; // Premium, slightly smaller font size
-
-          // 🚀 SATELLITE TRANSPARENCY OVERRIDE
-          if (resolvedTheme == MapThemeType.satellite) {
-            // STRICT RULE: We must read the dynamically mutated type from the map object!
-            final String currentType = layer['type'] as String? ?? ''; 
-            
-            if (currentType == 'fill') {
-              paint['fill-opacity'] = 0.0;
-              paint.remove('fill-extrusion-opacity');
-            } else if (currentType == 'fill-extrusion') {
-              paint['fill-extrusion-opacity'] = 0.0;
-              paint.remove('fill-opacity');
-            } else if (currentType == 'background') {
-              paint['background-color'] = 'rgba(0,0,0,0)';
-              paint['background-opacity'] = 0.0;
-            }
-          }
-
-          symbolLayers.add(layer);
-          continue;
         }
 
-        // 🚀 SATELLITE TRANSPARENCY OVERRIDE
-        if (resolvedTheme == MapThemeType.satellite) {
-          // STRICT RULE: We must read the dynamically mutated type from the map object!
-          final String currentType = layer['type'] as String? ?? ''; 
-          
-          if (currentType == 'fill') {
-            paint['fill-opacity'] = 0.0;
-            paint.remove('fill-extrusion-opacity');
-          } else if (currentType == 'fill-extrusion') {
-            paint['fill-extrusion-opacity'] = 0.0;
-            paint.remove('fill-opacity');
-          } else if (currentType == 'background') {
-            paint['background-color'] = 'rgba(0,0,0,0)';
-            paint['background-opacity'] = 0.0;
+        // 🚀 Force mandatory icon-optional settings for symbol layers
+        if (type == 'symbol') {
+          if (!layer.containsKey('layout') || layer['layout'] is! Map) {
+            layer['layout'] = <String, dynamic>{};
           }
+          layer['layout']['icon-optional'] = true;
+          layer['layout']['text-optional'] = true;
         }
 
-        // 🚀 AGGRESSIVE EMPTY ICON SANITIZER
-        if (layer['layout'] != null && layer['layout'].containsKey('icon-image')) {
-          String iconVal = layer['layout']['icon-image'].toString().trim();
-          if (iconVal.isEmpty || iconVal == '""' || iconVal == "''" || iconVal == '[]') {
-            layer['layout'].remove('icon-image');
-          }
-        }
-
-        updatedLayers.add(layer);
-      }
-
-      updatedLayers.addAll(transitLayers);
-      updatedLayers.addAll(symbolLayers);
-      styleData['layers'] = updatedLayers;
+        return true;
+      }).toList();
     }
 
-    String finalStyleString = json.encode(styleData);
-    // ggshield-ignore
-    finalStyleString = finalStyleString.replaceAll(
-        RegExp(r'(key|api_key)=[^&"]+'),
-        'api_key=${['LXLK4', 'nwQMwac', 'pTZhol7', 'QHc3RP', 'et3tUOk', 'b76reivs'].join('')}');
+    final String finalStyle = json.encode(styleData);
 
     final String outputStyle = kIsWeb
-        ? "$_dataUriPrefix${Uri.encodeComponent(finalStyleString)}"
-        : finalStyleString;
+        ? "$_dataUriPrefix${Uri.encodeComponent(finalStyle)}"
+        : finalStyle;
 
     await prefs.setString(cacheKey, outputStyle);
     return outputStyle;

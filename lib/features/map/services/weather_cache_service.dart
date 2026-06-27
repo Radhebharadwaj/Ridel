@@ -141,6 +141,7 @@ class WeatherCacheService {
       final dataStr = json.encode({
         'temp': weather.temp,
         'weatherCode': weather.weatherCode,
+        'condition': weather.condition,
         'aqi': weather.aqi,
         'tempMax': weather.tempMax,
         'tempMin': weather.tempMin,
@@ -155,7 +156,7 @@ class WeatherCacheService {
             .map((d) => {'date': d.date, 'maxTemp': d.maxTemp, 'minTemp': d.minTemp, 'conditionCode': d.conditionCode, 'conditionText': d.conditionText, 'conditionIcon': d.conditionIcon})
             .toList(),
       });
-      await prefs.setString('weather_cache_$gridId', dataStr);
+      await prefs.setString('weather_cache_v2_$gridId', dataStr);
     } catch (e) {
       debugPrint("Failed to save weather to disk: $e");
     }
@@ -164,7 +165,7 @@ class WeatherCacheService {
   Future<WeatherModel?> _loadFromDisk(String gridId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final dataStr = prefs.getString('weather_cache_$gridId');
+      final dataStr = prefs.getString('weather_cache_v2_$gridId');
       if (dataStr != null) {
         final data = json.decode(dataStr);
         final hourlyRaw = data['hourly'] as List<dynamic>? ?? [];
@@ -172,6 +173,7 @@ class WeatherCacheService {
         return WeatherModel(
           temp: (data['temp'] as num?)?.toDouble() ?? 0.0,
           weatherCode: (data['weatherCode'] as num?)?.toInt() ?? 0,
+          condition: data['condition']?.toString() ?? "Unknown",
           aqi: (data['aqi'] as num?)?.toInt() ?? 50,
           tempMax: (data['tempMax'] as num?)?.toDouble() ?? 0.0,
           tempMin: (data['tempMin'] as num?)?.toDouble() ?? 0.0,

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/cupertino.dart';
-import 'package:ridel/core/config/app_config.dart';
 
 final http.Client _apiClient = http.Client();
 const Duration _apiTimeout = Duration(seconds: 15);
@@ -29,6 +28,7 @@ class HourlyWeather {
 class WeatherModel {
   final double temp;
   final int weatherCode;
+  final String condition;
   final int aqi;
   final double tempMax;
   final double tempMin;
@@ -42,6 +42,7 @@ class WeatherModel {
   WeatherModel({
     required this.temp,
     required this.weatherCode,
+    required this.condition,
     required this.aqi,
     required this.tempMax,
     required this.tempMin,
@@ -52,6 +53,40 @@ class WeatherModel {
     required this.feelsLike,
     required this.uvIndex,
   });
+
+  factory WeatherModel.fromJson(Map<String, dynamic> json) {
+    // Handle both nested {data: {...}} and flat responses gracefully
+    final data = json['data'] ?? json; 
+
+    return WeatherModel(
+      temp: (data['temp'] as num?)?.toDouble() ?? 0.0,
+      feelsLike: (data['feelsLike'] as num?)?.toDouble() ?? 0.0,
+      weatherCode: (data['weatherCode'] as num?)?.toInt() ?? 0,
+      condition: data['condition']?.toString() ?? "--",
+      humidity: (data['humidity'] as num?)?.toInt() ?? 0,
+      windSpeed: (data['windSpeed'] as num?)?.toDouble() ?? 0.0,
+      uvIndex: (data['uvIndex'] as num?)?.toDouble() ?? 0.0,
+      tempMax: (data['tempMax'] as num?)?.toDouble() ?? 0.0,
+      tempMin: (data['tempMin'] as num?)?.toDouble() ?? 0.0,
+      aqi: (data['aqi'] as num?)?.toInt() ?? 0,
+      
+      // 🚀 STRICT ARRAY PARSING TO FIX '0°' BUG
+      hourly: (data['hourly'] as List<dynamic>?)?.map((h) => HourlyWeather(
+        h['time']?.toString() ?? '',
+        (h['temp'] as num?)?.toDouble() ?? 0.0,
+        (h['code'] as num?)?.toInt() ?? 0,
+      )).toList() ?? [],
+      
+      daily: (data['daily'] as List<dynamic>?)?.map((d) => ForecastDayModel(
+        d['date']?.toString() ?? '',
+        (d['maxTemp'] as num?)?.toDouble() ?? 0.0,
+        (d['minTemp'] as num?)?.toDouble() ?? 0.0,
+        (d['conditionCode'] as num?)?.toInt() ?? 0,
+        d['conditionText']?.toString() ?? '',
+        d['conditionIcon']?.toString() ?? '',
+      )).toList() ?? [],
+    );
+  }
 }
 
 class WeatherService {
@@ -63,88 +98,7 @@ class WeatherService {
 
 
   static WeatherModel _parseWeatherData(Map<String, dynamic> data) {
-    List<ForecastDayModel> parsedDaily = [];
-    if (data['daily'] != null) {
-      for (var d in data['daily']) {
-        final dayInfo = d['day'] ?? {};
-        final cond = dayInfo['condition'] ?? {};
-        parsedDaily.add(ForecastDayModel(
-          d['date']?.toString() ?? '',
-          (dayInfo['maxtemp_c'] as num?)?.toDouble() ?? 0.0,
-          (dayInfo['mintemp_c'] as num?)?.toDouble() ?? 0.0,
-          (cond['code'] as num?)?.toInt() ?? 0,
-          cond['text']?.toString() ?? '',
-          cond['icon']?.toString() ?? '',
-        ));
-      }
-    }
-
-    List<HourlyWeather> parsedHourly = [];
-    if (data['daily'] != null && data['daily'].isNotEmpty) {
-      final today = data['daily'][0];
-      if (today['hour'] != null) {
-        for (var h in today['hour']) {
-          final cond = h['condition'] ?? {};
-          parsedHourly.add(HourlyWeather(
-            h['time']?.toString() ?? '',
-            (h['temp_c'] as num?)?.toDouble() ?? (h['temp'] as num?)?.toDouble() ?? 0.0,
-            (cond['code'] as num?)?.toInt() ?? (h['code'] as num?)?.toInt() ?? 0,
-          ));
-        }
-      }
-    }
-
-    int finalAqi = 50;
-    if (data['current'] != null && data['current']['air_quality'] != null) {
-      var aq = data['current']['air_quality'];
-      if (aq['pm2_5'] != null) {
-         double pm25 = (aq['pm2_5'] as num).toDouble();
-         if (pm25 <= 30) { finalAqi = ((pm25 / 30) * 50).round(); }
-         else if (pm25 <= 60) { finalAqi = (50 + ((pm25 - 30) / 30) * 50).round(); }
-         else if (pm25 <= 90) { finalAqi = (100 + ((pm25 - 60) / 30) * 100).round(); }
-         else if (pm25 <= 120) { finalAqi = (200 + ((pm25 - 90) / 30) * 100).round(); }
-         else if (pm25 <= 250) { finalAqi = (300 + ((pm25 - 120) / 130) * 100).round(); }
-         else { finalAqi = (400 + ((pm25 - 250) / 100) * 100).clamp(400, 500).round(); }
-      } else if (aq['us-epa-index'] != null) {
-        int epa = (aq['us-epa-index'] as num).toInt();
-        switch (epa) {
-          case 1: finalAqi = 42; break;
-          case 2: finalAqi = 75; break;
-          case 3: finalAqi = 135; break;
-          case 4: finalAqi = 180; break;
-          case 5: finalAqi = 250; break;
-          case 6: finalAqi = 400; break;
-        }
-      }
-    } else if (data['aqi'] != null) {
-      int rawAqi = (data['aqi'] as num).toInt();
-      if (rawAqi >= 1 && rawAqi <= 6) {
-        switch (rawAqi) {
-          case 1: finalAqi = 42; break;
-          case 2: finalAqi = 75; break;
-          case 3: finalAqi = 135; break;
-          case 4: finalAqi = 180; break;
-          case 5: finalAqi = 250; break;
-          case 6: finalAqi = 400; break;
-        }
-      } else {
-        finalAqi = rawAqi;
-      }
-    }
-
-    return WeatherModel(
-      temp: (data['temp'] as num?)?.toDouble() ?? 0.0,
-      weatherCode: (data['condition'] as num?)?.toInt() ?? 0,
-      aqi: finalAqi,
-      tempMax: parsedDaily.isNotEmpty ? parsedDaily.first.maxTemp : 0.0,
-      tempMin: parsedDaily.isNotEmpty ? parsedDaily.first.minTemp : 0.0,
-      daily: parsedDaily,
-      hourly: parsedHourly,
-      humidity: (data['humidity'] as num?)?.toInt() ?? 0,
-      windSpeed: (data['windSpeed'] as num?)?.toDouble() ?? 0.0,
-      feelsLike: (data['feelsLike'] as num?)?.toDouble() ?? 0.0,
-      uvIndex: (data['uvIndex'] as num?)?.toDouble() ?? 0.0,
-    );
+    return WeatherModel.fromJson(data);
   }
 
   static final Map<String, Future<WeatherModel?>> _activeRequests = {};
@@ -174,8 +128,9 @@ class WeatherService {
 
   static Future<WeatherModel?> _fetchWeatherInternal(double lat, double lon, String query) async {
     try {
+      final int timestamp = DateTime.now().millisecondsSinceEpoch;
       final url = Uri.parse(
-          'https://ridel.ridel.workers.dev/api/weather?lat=$lat&lng=$lon');
+          'https://ridel.ridel.workers.dev/api/weather?lat=$lat&lng=$lon&t=$timestamp');
 
       debugPrint('🚀 Sending Weather Request to: $url');
 
@@ -183,7 +138,6 @@ class WeatherService {
         url,
         headers: {
           'Content-Type': 'application/json',
-          'admin-secret': AppConfig.appSecretPasskey,
         },
       ).timeout(_apiTimeout);
 
@@ -206,7 +160,7 @@ class WeatherService {
           return null;
         }
       } else {
-        debugPrint('❌ HTTP ERROR: ${response.statusCode} | ${response.body}');
+        debugPrint('❌ HTTP ERROR: ${response.statusCode}');
         return null;
       }
     } catch (e) {
@@ -256,8 +210,6 @@ class WeatherService {
         url,
         headers: {
           'Content-Type': 'application/json',
-          'admin-secret':
-              AppConfig.appSecretPasskey, // 🔒 Wapas secure path lag gaya
         },
       ).timeout(_apiTimeout);
 
@@ -280,7 +232,7 @@ class WeatherService {
           return null;
         }
       } else {
-        debugPrint('❌ HTTP ERROR: ${response.statusCode} | ${response.body}');
+        debugPrint('❌ HTTP ERROR: ${response.statusCode}');
         return null;
       }
     } catch (e) {

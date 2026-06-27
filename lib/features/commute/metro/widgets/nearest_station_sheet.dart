@@ -328,7 +328,7 @@ class _NearestStationSheetContentState
           // 🚀 SEARCH BAR
           Container(
             margin:
-                const EdgeInsets.only(top: 0, left: 20, right: 20, bottom: 12),
+                const EdgeInsets.only(top: 105.0, left: 20, right: 20, bottom: 12),
             height: 48,
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF1E2129) : const Color(0xFFF2F2F7),
@@ -478,7 +478,7 @@ class _NearestStationSheetContentState
                                   color: Colors.grey, fontSize: 15)))
                       : ListView.builder(
                           padding: const EdgeInsets.only(
-                              top: 8, bottom: 20, left: 20, right: 20),
+                              top: 12, bottom: 20, left: 20, right: 20),
                           physics: const BouncingScrollPhysics(),
                           itemCount: _displayLocations.length,
                           itemBuilder: (context, index) {
@@ -551,7 +551,7 @@ class _NearestStationSheetContentState
           curve: Curves.easeOutCubic,
           // Similar padding as Notification Sheet
           padding:
-              const EdgeInsets.only(left: 8, right: 16, top: 12, bottom: 12),
+              const EdgeInsets.only(left: 6, right: 14, top: 10, bottom: 10),
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF1E2129) : Colors.white,
             // 🚀 Perfect Pill Shape
@@ -571,7 +571,7 @@ class _NearestStationSheetContentState
                 color: isSelected
                     ? accentColor.withValues(alpha: 0.15)
                     : Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-                blurRadius: isSelected ? 20 : 12,
+                blurRadius: isSelected ? 20 : 6,
                 offset: const Offset(0, 4),
               )
             ],
@@ -583,7 +583,7 @@ class _NearestStationSheetContentState
               children: [
                 // 🚀 ICON CONTAINER
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: isDark
                         ? const Color(0xFF121419)
@@ -604,7 +604,7 @@ class _NearestStationSheetContentState
                           : (isDark
                               ? Colors.white70
                               : Colors.black87), // Not selected par neutral
-                      size: 18),
+                      size: 16),
                 ),
                 const SizedBox(width: 12),
 
@@ -634,7 +634,7 @@ class _NearestStationSheetContentState
                       style: GoogleFonts.inter(
                         color: textColor,
                         fontWeight: FontWeight.w700,
-                        fontSize: 14,
+                        fontSize: 13,
                       ),
                       maxLines: 1,
                     ),

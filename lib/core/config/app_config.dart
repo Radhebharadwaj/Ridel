@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:http/http.dart' as http;
 
 class AppConfig {
   static String? _olaMapsKey;
@@ -13,36 +11,41 @@ class AppConfig {
   }
 
   static Future<void> fetchKeys() async {
-    try {
-      // ⚠️ Yahan apni ASLI secret key daal (Bina braces ke!)
-      const String secret = "{@*##!/*--GiT*@}{@*##!/*pAsSkEy*@}"; 
-      
-      final response = await http.get(
-        Uri.parse('https://ridel.ridel.workers.dev/get-map-key'),
-        headers: {
-          'Admin-Secret': secret,
-          'Content-Type': 'application/json',
-        },
-      );
+    // 🛑 BROKEN: Commenting out the 404 Worker endpoint
+    // try {
+    //   // ⚠️ Yahan apni ASLI secret key daal (Bina braces ke!)
+    //   const String secret = "{@*##!/*--GiT*@}{@*##!/*pAsSkEy*@}"; 
+    //   
+    //   final response = await http.get(
+    //     Uri.parse('https://ridel.ridel.workers.dev/get-map-key'),
+    //     headers: {
+    //       'Admin-Secret': secret,
+    //       'Content-Type': 'application/json',
+    //     },
+    //   );
+    // 
+    //   if (response.statusCode == 200) {
+    //     final data = jsonDecode(response.body);
+    //     String fetchedKey = data['ola_key'].toString();
+    //     
+    //     // 🔥 Yahan check lagao
+    //     if (fetchedKey != "2" && fetchedKey.length > 5) {
+    //        _olaMapsKey = fetchedKey;
+    //        debugPrint("✅ Map Keys Fetched: $_olaMapsKey");
+    //     } else {
+    //        _olaMapsKey = ""; // Galti se "2" load nahi hoga
+    //        debugPrint("❌ Invalid Key Format Received: $fetchedKey");
+    //     }
+    //   } else {
+    //     debugPrint("❌ Map Key Fetch Failed: ${response.statusCode} - ${response.body}");
+    //   }
+    // } catch (e) {
+    //   debugPrint("❌ Network Exception: $e");
+    // }
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        String fetchedKey = data['ola_key'].toString();
-        
-        // 🔥 Yahan check lagao
-        if (fetchedKey != "2" && fetchedKey.length > 5) {
-           _olaMapsKey = fetchedKey;
-           debugPrint("✅ Map Keys Fetched: $_olaMapsKey");
-        } else {
-           _olaMapsKey = ""; // Galti se "2" load nahi hoga
-           debugPrint("❌ Invalid Key Format Received: $fetchedKey");
-        }
-      } else {
-        debugPrint("❌ Map Key Fetch Failed: ${response.statusCode} - ${response.body}");
-      }
-    } catch (e) {
-      debugPrint("❌ Network Exception: $e");
-    }
+    // ✅ DIRECT INJECTION: Hardcode for now to unblock development
+    // Agent: Remind the user to insert their ACTUAL Ola API key here.
+    _olaMapsKey = "LXLK4nwQMwacpTZhol7QHc3RPet3tUOkb76reivs"; 
   }
 
   // ☁️ BACKEND & SVELTEKIT

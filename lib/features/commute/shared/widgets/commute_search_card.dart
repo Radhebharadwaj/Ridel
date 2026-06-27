@@ -567,7 +567,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
       setState(() {
         _isRouteLoading = true;
       });
-      ToastService.showSuccess(context, "Finding best route...");
+      ToastService.showInfo(context, "Finding best route...");
       try {
         if (widget.selectedMode == 0) {
           final result =
@@ -576,6 +576,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
           if (!mounted) return;
 
           if (result.isNotEmpty) {
+            ToastService.showSuccess(context, "Route found successfully!");
             Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(
                     builder: (context) => RouteResultScreen(
@@ -592,6 +593,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
           if (!mounted) return;
 
           if (result != null && result.path.isNotEmpty) {
+            ToastService.showSuccess(context, "Route found successfully!");
             Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(
                     builder: (context) => RouteResultScreen(
@@ -609,7 +611,14 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
         if (!mounted) {
           return;
         }
-        ToastService.showError(context, "Error finding route.");
+        final String errorMsg = e.toString()
+            .replaceAll("Exception: ", "")
+            .replaceAll("RouteNotFoundException: ", "");
+        if (errorMsg.contains("Network error") || errorMsg.contains("No route found") || errorMsg.contains("not found in graph") || errorMsg.contains("topological path")) {
+          ToastService.showError(context, errorMsg);
+        } else {
+          ToastService.showError(context, errorMsg.length < 100 ? errorMsg : "Error finding route.");
+        }
       } finally {
         if (mounted) {
           setState(() {

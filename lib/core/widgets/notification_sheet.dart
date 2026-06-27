@@ -34,7 +34,7 @@ class _NotificationSheetContentState extends State<NotificationSheetContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 16.0),
+        const SizedBox(height: 105.0),
           // 🚀 DYNAMIC FILTERS: Scroll par gayab honge, rukne par aayenge
           AnimatedSize(
             duration: const Duration(milliseconds: 300),
@@ -147,7 +147,7 @@ class _NotificationSheetContentState extends State<NotificationSheetContent> {
 
                   return ListView.builder(
                     padding: const EdgeInsets.only(
-                        left: 20, right: 20, top: 4, bottom: 40),
+                        left: 20, right: 20, top: 16, bottom: 40),
                     physics: const BouncingScrollPhysics(),
                     itemCount: displayList.length,
                     itemBuilder: (context, index) {

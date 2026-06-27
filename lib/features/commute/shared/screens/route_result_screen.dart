@@ -29,7 +29,8 @@ import 'package:ridel/core/utils/ridel_bounce_button.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/app_shadows.dart';
 import 'package:ridel/features/commute/shared/widgets/facilities_sheet.dart';
-import 'package:ridel/core/widgets/branded_loader.dart';
+
+import 'package:ridel/core/widgets/ridel_loading_dots.dart';
 
 class RouteResultScreen extends StatefulWidget {
   final String fromStation;
@@ -73,8 +74,27 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
     super.initState();
     _currentFrom = widget.fromStation;
     _currentTo = widget.toStation;
-    _currentRoutesData = widget.routesData;
-    _activeRouteData = widget.routesData != null && widget.routesData!.isNotEmpty ? widget.routesData!.first : null;
+    
+    // SMART SORT LOGIC: Apply custom sorting before rendering the list
+    if (widget.routesData != null && widget.routesData!.length > 1) {
+      List<RouteResult> sorted = List.from(widget.routesData!);
+      sorted.sort((a, b) {
+        int timeDiff = (a.totalTimeMin - b.totalTimeMin).abs();
+        if (timeDiff <= 10) {
+          int aTransfers = a.path.where((s) => s.type == StationType.interchange).length;
+          int bTransfers = b.path.where((s) => s.type == StationType.interchange).length;
+          if (aTransfers != bTransfers) {
+            return aTransfers.compareTo(bTransfers);
+          }
+        }
+        return a.totalTimeMin.compareTo(b.totalTimeMin);
+      });
+      _currentRoutesData = sorted;
+    } else {
+      _currentRoutesData = widget.routesData;
+    }
+    
+    _activeRouteData = _currentRoutesData != null && _currentRoutesData!.isNotEmpty ? _currentRoutesData!.first : null;
     _initLiveTracking();
   }
 
@@ -236,6 +256,12 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
+        final String errorMsg = e.toString().replaceAll("Exception: ", "");
+        if (errorMsg.contains("Network error") || errorMsg.contains("No route found")) {
+          ToastService.showError(context, errorMsg);
+        } else {
+          ToastService.showError(context, "Error finding route.");
+        }
       }
     }
   }
@@ -536,7 +562,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
         boxShadow: AppShadows.cardFloating,
       ),
       child: const Center(
-        child: BrandedLoader(isFullScreen: false),
+        child: PremiumDotLoader(),
       ),
     );
   }

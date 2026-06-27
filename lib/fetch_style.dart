@@ -18,7 +18,7 @@ void main() async {
         }
       }
     } else {
-      debugPrint(response.body);
+//      debugPrint("Received map style");
     }
   } catch (e) {
     debugPrint("Error: $e");

@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
+import 'package:ridel/features/commute/shared/services/database_helper.dart';
 import 'package:ridel/core/map/map_style_helper.dart';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/services/place_service.dart';
@@ -2209,6 +2210,142 @@ class MapProvider extends ChangeNotifier {
     }
     _nearbyCircles.clear();
     _nearbyLabels.clear();
+  }
+
+  // =========================================================================
+  // 🚀 SPATIAL SEARCH ENGINE (Zero-API Local RAM Cache)
+  // =========================================================================
+  double _degreesToRadians(double degrees) {
+    return degrees * math.pi / 180;
+  }
+
+  double _calculateHaversine(double lat1, double lon1, double lat2, double lon2) {
+    const double r = 6371; // Earth's radius in kilometers
+    final double dLat = _degreesToRadians(lat2 - lat1);
+    final double dLon = _degreesToRadians(lon2 - lon1);
+    final double a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_degreesToRadians(lat1)) *
+            math.cos(_degreesToRadians(lat2)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    final double c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return r * c;
+  }
+
+  Future<List<Map<String, dynamic>>> getNearestStops(double userLat, double userLng, String type, {int limit = 15}) async {
+    final int mode = (type.toLowerCase() == 'metro' || type.toLowerCase() == 'metro stations') ? 0 : 1;
+    final List<Map<String, dynamic>> allStops = await DatabaseHelper.instance.getStopsByMode(mode);
+    
+    List<Map<String, dynamic>> stopsWithDistance = [];
+    for (var stop in allStops) {
+      double stopLat = double.tryParse((stop['lat'] ?? stop['LAT'] ?? '0').toString()) ?? 0.0;
+      double stopLng = double.tryParse((stop['lon'] ?? stop['LON'] ?? stop['lng'] ?? stop['LNG'] ?? '0').toString()) ?? 0.0;
+      
+      // Skip invalid coordinates
+      if (stopLat == 0.0 && stopLng == 0.0) continue;
+      
+      double distance = _calculateHaversine(userLat, userLng, stopLat, stopLng);
+      stopsWithDistance.add({
+        ...stop,
+        'calculated_distance': distance,
+      });
+    }
+    
+    stopsWithDistance.sort((a, b) => (a['calculated_distance'] as double).compareTo(b['calculated_distance'] as double));
+    return stopsWithDistance.take(limit).toList();
+  }
+
+  Future<void> showNearbyStopsOnMap(String type) async {
+    final userLoc = engine.locService?.currentPosition;
+    if (userLoc == null) {
+      debugPrint("❌ GPS Unavailable for nearby stops");
+      return;
+    }
+
+    _setLoading(true);
+    try {
+      // 🚀 1. Instant RAM Fetch (Zero API)
+      final nearestStops = await getNearestStops(userLoc.latitude, userLoc.longitude, type);
+
+      if (nearestStops.isEmpty) {
+        debugPrint("⚠️ No stops found nearby for $type.");
+        return;
+      }
+
+      // 🚀 2. Build GeoJSON
+      final Map<String, dynamic> geoJson = {
+        "type": "FeatureCollection",
+        "features": nearestStops.map((stop) {
+          double stopLat = double.tryParse((stop['lat'] ?? stop['LAT'] ?? '0').toString()) ?? 0.0;
+          double stopLng = double.tryParse((stop['lon'] ?? stop['LON'] ?? stop['lng'] ?? stop['LNG'] ?? '0').toString()) ?? 0.0;
+          return {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [stopLng, stopLat] // MapLibre needs [Lng, Lat]
+            },
+            "properties": {
+              "id": stop['stop_id'] ?? stop['STOP_ID'],
+              "name": stop['stop_name'] ?? stop['STOP_NAME'] ?? stop['name'],
+              "icon": (type.toLowerCase() == 'metro' || type.toLowerCase() == 'metro stations') ? 'metro_icon' : 'bus_icon' 
+            }
+          };
+        }).toList()
+      };
+
+      // 🚀 3. Render on Map
+      await controller?.removeLayer('nearby-stops-layer');
+      await controller?.removeSource('nearby-stops-source');
+
+      await controller?.addGeoJsonSource('nearby-stops-source', geoJson);
+      await controller?.addSymbolLayer(
+        'nearby-stops-source',
+        'nearby-stops-layer',
+        const SymbolLayerProperties(
+          iconImage: ['get', 'icon'],
+          iconSize: 1.2,
+          iconAllowOverlap: true,
+          textField: ['get', 'name'],
+          textSize: 12.0,
+          textOffset: [0, 1.5],
+          textColor: '#FFFFFF',
+          textHaloColor: '#000000',
+          textHaloWidth: 1.0,
+        ),
+      );
+
+      // 4. Zoom bounds to fit nearby stops
+      double minLat = 90.0, maxLat = -90.0;
+      double minLng = 180.0, maxLng = -180.0;
+      for (var stop in nearestStops) {
+        double stopLat = double.tryParse((stop['lat'] ?? stop['LAT'] ?? '0').toString()) ?? 0.0;
+        double stopLng = double.tryParse((stop['lon'] ?? stop['LON'] ?? stop['lng'] ?? stop['LNG'] ?? '0').toString()) ?? 0.0;
+        minLat = math.min(minLat, stopLat);
+        maxLat = math.max(maxLat, stopLat);
+        minLng = math.min(minLng, stopLng);
+        maxLng = math.max(maxLng, stopLng);
+      }
+      
+      await controller?.animateCamera(
+        CameraUpdate.newLatLngBounds(
+          LatLngBounds(
+            southwest: LatLng(minLat - 0.005, minLng - 0.005),
+            northeast: LatLng(maxLat + 0.005, maxLng + 0.005),
+          ),
+          left: 50,
+          top: 100,
+          right: 50,
+          bottom: 380,
+        ),
+        duration: const Duration(milliseconds: 1000),
+      );
+
+    } catch (e) {
+      debugPrint("❌ Error showing nearby stops: $e");
+    } finally {
+      _setLoading(false);
+      notifyListeners();
+    }
   }
 
   void updateMapCenter(LatLng center, double zoom) {

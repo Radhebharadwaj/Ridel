@@ -203,7 +203,7 @@ class MasterSearchService {
       ).timeout(const Duration(seconds: 4));
 
       debugPrint("🔍 DEBUG API STATUS: ${response.statusCode}");
-      debugPrint("🔍 DEBUG API BODY: ${response.body}");
+      debugPrint("🔍 DEBUG API BODY: [REMOVED FOR PERFORMANCE]");
 
       if (response.statusCode != 200) {
         debugPrint(

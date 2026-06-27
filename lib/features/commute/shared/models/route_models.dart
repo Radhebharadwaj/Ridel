@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
 
+class RouteNotFoundException implements Exception {
+  final String message;
+  RouteNotFoundException(this.message);
+  @override
+  String toString() => message;
+}
+
 enum StationType { source, normal, interchange, destination }
 
 class RouteStation {

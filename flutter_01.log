@@ -1,0 +1,97 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter run -d chrome --web-port=5000
+
+## exception
+
+DartDevelopmentServiceException: DartDevelopmentServiceException: Failed to start Dart Development Service
+
+```
+```
+
+## flutter doctor
+
+```
+[32m[✓][39m Flutter (Channel stable, 3.38.7, on
+    Pop!_OS 24.04 LTS
+    6.17.9-76061709-generic, locale
+    en_US.UTF-8) [192ms]
+    [32m•[39m Flutter version 3.38.7 on channel
+      stable at
+      /home/radhe/radhe/flutter
+    [32m•[39m Upstream repository
+      https://github.com/flutter/flutter
+      .git
+    [32m•[39m Framework revision 3b62efc2a3 (5
+      months ago), 2026-01-13 13:47:42
+      -0800
+    [32m•[39m Engine revision 78fc3012e4
+    [32m•[39m Dart version 3.10.7
+    [32m•[39m DevTools version 2.51.1
+    [32m•[39m Feature flags: enable-web,
+      enable-linux-desktop,
+      enable-macos-desktop,
+      enable-windows-desktop,
+      enable-android, enable-ios,
+      cli-animations,
+      enable-native-assets,
+      omit-legacy-version-file,
+      enable-lldb-debugging
+
+[32m[✓][39m Android toolchain - develop for
+    Android devices (Android SDK version
+    36.1.0) [8.7s]
+    [32m•[39m Android SDK at
+      /home/radhe/Android/Sdk
+    [32m•[39m Emulator version 36.3.10.0
+      (build_id 14472402) (CL:N/A)
+    [32m•[39m Platform android-36, build-tools
+      36.1.0
+    [32m•[39m Java binary at:
+      /usr/lib/jvm/java-21-openjdk-amd64
+      /bin/java
+      This JDK is specified in your
+      Flutter configuration.
+      To change the current JDK, run:
+      `flutter config
+      --jdk-dir="path/to/jdk"`.
+    [32m•[39m Java version OpenJDK Runtime
+      Environment (build
+      21.0.10+7-Ubuntu-124.04)
+    [32m•[39m All Android licenses accepted.
+
+[32m[✓][39m Chrome - develop for the web [18ms]
+    [32m•[39m CHROME_EXECUTABLE =
+      /usr/bin/brave-browser
+
+[32m[✓][39m Linux toolchain - develop for Linux
+    desktop [1,243ms]
+    [32m•[39m Ubuntu clang version 18.1.3
+      (1ubuntu1)
+    [32m•[39m cmake version 3.28.3
+    [32m•[39m ninja version 1.11.1
+    [32m•[39m pkg-config version 1.8.1
+    [33m![39m Unable to access driver
+      information using 'eglinfo'.
+      It is likely available from your
+      distribution (e.g.: apt install
+      mesa-utils)
+
+[32m[✓][39m Connected device (2 available)
+    [233ms]
+    [32m•[39m Linux (desktop) • linux  •
+      linux-x64      • Pop!_OS 24.04 LTS
+      6.17.9-76061709-generic
+    [32m•[39m Chrome (web)    • chrome •
+      web-javascript • Brave Browser
+      148.1.90.121
+
+[32m[✓][39m Network resources [671ms]
+    [32m•[39m All expected network resources are
+      available.
+
+[32m•[39m No issues found!
+```

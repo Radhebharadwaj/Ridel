@@ -126,11 +126,6 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
     }
   }
 
-  void _handleAddPlaceTap() {
-    AppHaptics.lightImpact();
-    widget.onRequestSearch('CUSTOM');
-  }
-
   void _handleLongPress(String type) {
     AppHaptics.heavyImpact();
     showCupertinoModalPopup(
@@ -278,55 +273,6 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
                                 ],
                               ),
                             ),
-                            Builder(builder: (context) {
-                              final isAddingStop =
-                                  context.watch<MapProvider>().isAddingStopMode;
-                              final thirdLabel =
-                                  isAddingStop ? "Drop Pin" : "Add Place";
-                              final thirdIcon = isAddingStop
-                                  ? Icons.location_on_rounded
-                                  : CupertinoIcons.add;
-                              final thirdColor = isAddingStop
-                                  ? Colors.amber.shade600
-                                  : const Color(0xFF0A84FF);
-                              final thirdBg = isAddingStop
-                                  ? Colors.amber.shade600
-                                      .withValues(alpha: 0.12)
-                                  : const Color(0xFF0A84FF)
-                                      .withValues(alpha: 0.12);
-
-                              return Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _buildPremiumCircleButton(
-                                    icon: thirdIcon,
-                                    iconColor: thirdColor,
-                                    bgColor: thirdBg,
-                                    size: 52.0,
-                                    iconSize: 26.0,
-                                    onTap: () {
-                                      if (isAddingStop) {
-                                        AppHaptics.heavyImpact();
-                                        context
-                                            .read<MapProvider>()
-                                            .setDropPinMode(true);
-                                        widget.onDropPinTapped?.call();
-                                      } else {
-                                        _handleAddPlaceTap();
-                                      }
-                                    },
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(thirdLabel,
-                                      style: TextStyle(
-                                          color: isDark
-                                              ? Colors.white70
-                                              : Colors.black54,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500)),
-                                ],
-                              );
-                            }),
                           ],
                         ),
                       ),

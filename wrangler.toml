@@ -1,5 +1,5 @@
 name = "ridel"
-main = "cloudflare_fcm_worker.js"
+main = "worker/index.ts"
 compatibility_date = "2026-06-07"
 
 [vars]
