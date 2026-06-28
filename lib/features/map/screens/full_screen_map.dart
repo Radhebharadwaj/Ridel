@@ -934,7 +934,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           tiltGesturesEnabled: true,
 
                           // 🚀 Dynamic Location Tracking Reverted
-                          myLocationEnabled: Provider.of<MapProvider>(context, listen: false).showNativeBlueDot,
+                          myLocationEnabled: !context.select<MapProvider, bool>((p) => p.hideNativeBlueDot),
                           myLocationTrackingMode:
                               Provider.of<MapProvider>(context, listen: false)
                                       .isAutoTracking

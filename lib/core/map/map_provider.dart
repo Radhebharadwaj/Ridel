@@ -152,7 +152,9 @@ class MapProvider extends ChangeNotifier {
       engine.mapUIState.value == MapUIState.idle ||
       engine.mapUIState.value == MapUIState.placeSelected;
 
-  bool get hideNativeBlueDot => currentRouteResult != null && currentNavMode.isNotEmpty;
+  bool get hideNativeBlueDot =>
+      engine.mapUIState.value == MapUIState.navigating ||
+      engine.mapUIState.value == MapUIState.routeDrawn;
 
   double get customPuckOpacity =>
       (engine.mapUIState.value == MapUIState.navigating ||
@@ -188,7 +190,6 @@ class MapProvider extends ChangeNotifier {
   Future<void> updatePuckVisibility() async {
     await _updatePuckGeoJson(
         _lastPuckLocation, _lastPuckBearing, customPuckOpacity);
-    // Opacity hack removed per architectural review
     notifyListeners();
   }
 
@@ -404,8 +405,6 @@ class MapProvider extends ChangeNotifier {
 
         if (currentLocation != null) {
           final heading = engine.locService?.currentPosition?.heading ?? 0.0;
-
-          // Step A (Kill Native Dot using MapLibre widget rebuilding)
 
           _navPuckSymbol = await controller!.addSymbol(
             SymbolOptions(
@@ -732,7 +731,11 @@ class MapProvider extends ChangeNotifier {
       try {
         await controller!.addLineLayer(sourceId, layerId, props, belowLayerId: 'com.mapbox.annotations.points');
       } catch (e) {
-        debugPrint("🗺️ LINE DRAW ERROR for $layerId: $e");
+        try {
+          await controller!.addLineLayer(sourceId, layerId, props);
+        } catch (e) {
+          debugPrint("🗺️ LINE DRAW ERROR for $layerId: $e");
+        }
       }
     }
 
@@ -1400,9 +1403,6 @@ class MapProvider extends ChangeNotifier {
       if (_navPuckSymbol != null && controller != null) {
         await controller!.removeSymbol(_navPuckSymbol!);
         _navPuckSymbol = null;
-
-        // Step C (Restore Native Dot)
-        // Dot opacity is now handled by myLocationEnabled rebuilding
       }
     }
     
