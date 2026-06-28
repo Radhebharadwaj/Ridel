@@ -119,6 +119,7 @@ class MapProvider extends ChangeNotifier {
   Circle? _currentMarker;
   Circle? _originMarker;
   Symbol? _droppedPinSymbol;
+  Symbol? _navPuckSymbol;
 
   Timer? _geocodeDebounceTimer; // 🚀 FIX: Timer for debouncing API calls
   AnimationController? _pinAnimController;
@@ -374,6 +375,29 @@ class MapProvider extends ChangeNotifier {
             routeResult; // 🚨 Ensure this is added so Bottom Sheet gets data
         await drawNativeRoute(routeResult.allRoutesCoordinates);
         debugPrint("✅ [ROUTE ENGINE] Native MapLibre Draw Success!");
+
+        if (currentLocation != null) {
+          final heading = engine.locService?.currentPosition?.heading ?? 0.0;
+          _navPuckSymbol = await controller!.addSymbol(
+            SymbolOptions(
+              geometry: LatLng(currentLocation!.latitude, currentLocation!.longitude),
+              iconImage: 'nav_puck',
+              iconSize: 0.25, // 🚀 Shrinks puck to match pin size
+              iconRotate: heading,
+              iconAnchor: 'center',
+              zIndex: 999,    // 🚀 VALID parameter to force to top layer
+              iconOpacity: 0.0, // For the fade-in effect
+            ),
+          );
+
+          // 🚀 FIX: Smooth Fade-In Loop
+          for (double i = 0.2; i <= 1.0; i += 0.2) {
+            await Future.delayed(const Duration(milliseconds: 60));
+            if (_navPuckSymbol != null && controller != null) {
+              await controller!.updateSymbol(_navPuckSymbol!, SymbolOptions(iconOpacity: i));
+            }
+          }
+        }
 
         isRouteCalculated = true;
         engine.setUIState(MapUIState.routeDrawn);
@@ -1329,6 +1353,21 @@ class MapProvider extends ChangeNotifier {
     _liveLocationSub?.cancel();
     _liveLocationSub = null;
     intermediateStops.clear();
+    
+    if (_navPuckSymbol != null && controller != null) {
+      // 🚀 FIX: Smooth Fade-Out Loop before removal
+      for (double i = 0.8; i >= 0.0; i -= 0.2) {
+        await Future.delayed(const Duration(milliseconds: 60));
+        if (_navPuckSymbol != null && controller != null) {
+          await controller!.updateSymbol(_navPuckSymbol!, SymbolOptions(iconOpacity: i));
+        }
+      }
+      if (_navPuckSymbol != null && controller != null) {
+        await controller!.removeSymbol(_navPuckSymbol!);
+        _navPuckSymbol = null;
+      }
+    }
+    
     // 1. Clear MapLibre Native Layers (Lines AND ETA Pills)
     if (controller != null) {
       if (_drawnRoutesCount > 0 || isRouteCalculated) {
@@ -1715,6 +1754,16 @@ class MapProvider extends ChangeNotifier {
               engine.mapUIState.value == MapUIState.routeDrawn) {
             updateNavigationPuck(
                 LatLng(pos.latitude, pos.longitude), pos.heading);
+
+            if (_navPuckSymbol != null && isActiveNavigation && controller != null) {
+              controller!.updateSymbol(
+                _navPuckSymbol!,
+                SymbolOptions(
+                  geometry: LatLng(pos.latitude, pos.longitude), // Update position
+                  iconRotate: pos.heading, // 🚀 Update rotation
+                ),
+              );
+            }
           }
         });
       }
@@ -1897,6 +1946,7 @@ class MapProvider extends ChangeNotifier {
           iconSize: 1.0,
           iconAnchor: 'bottom',
           iconRotate: 15.0, // Head tilted right
+          zIndex: 998,
         ),
       );
 
@@ -2638,6 +2688,7 @@ class MapProvider extends ChangeNotifier {
             iconSize: 1.0,
             iconAnchor: 'bottom',
             iconRotate: 15.0, // Head tilted right
+            zIndex: 998,
           ),
         );
 

@@ -582,6 +582,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             } catch (_) {}
 
                             try {
+                              final ByteData puckBytes = await rootBundle.load('assets/images/nav_puck.png');
+                              await safeAddImage('nav_puck', puckBytes.buffer.asUint8List());
+                            } catch (_) {}
+
+                            try {
                               final Uint8List transparentPixel =
                                   Uint8List.fromList([
                                 137,
@@ -893,6 +898,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                       iconImage: 'custom_pin',
                                       iconSize: 1.5,
                                       iconAnchor: 'bottom',
+                                      zIndex: 998,
                                     ),
                                   );
 

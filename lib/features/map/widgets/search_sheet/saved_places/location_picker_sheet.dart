@@ -86,6 +86,12 @@ class _AnimatedMapPinState extends State<AnimatedMapPin>
                   spreadRadius: 2,
                   offset: const Offset(0, 4),
                 ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                  offset: const Offset(0, 4),
+                ),
               ],
             ),
             child: const Icon(

@@ -75,16 +75,6 @@ extension _PremiumDetailsExt on _MapSearchSheetState {
             .min, // 🚨 CRITICAL: Forces the sheet to hug the content tightly at the bottom
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Drag Indicator (Single)
-          Center(
-              child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(2)))),
-          const SizedBox(height: 16),
-
           // 2. Title & Buttons Row
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -193,39 +183,38 @@ extension _PremiumDetailsExt on _MapSearchSheetState {
               _buildGlassyTransportMode(context,
                   icon: Icons.directions_walk_rounded,
                   label: 'Walk',
-                  isActive: provider.currentNavMode == 'walking', onTap: () {
+                  isActive: provider.currentNavMode == 'walking' && provider.currentRouteResult != null, 
+                  onTap: () {
                 AppHaptics.selectionClick();
                 provider.currentNavMode = 'walking';
-                provider.calculateAndDrawNativeRoute(
-                    context, provider.currentNavMode);
+                provider.calculateAndDrawNativeRoute(context, provider.currentNavMode);
               }),
               _buildGlassyTransportMode(context,
                   icon: Icons.two_wheeler_rounded,
                   label: 'Bike',
-                  isActive: provider.currentNavMode == 'bicycling' ||
-                      provider.currentNavMode == 'twowheeler', onTap: () {
+                  isActive: (provider.currentNavMode == 'bicycling' || provider.currentNavMode == 'twowheeler') && provider.currentRouteResult != null, 
+                  onTap: () {
                 AppHaptics.selectionClick();
                 provider.currentNavMode = 'twowheeler';
-                provider.calculateAndDrawNativeRoute(
-                    context, provider.currentNavMode);
+                provider.calculateAndDrawNativeRoute(context, provider.currentNavMode);
               }),
               _buildGlassyTransportMode(context,
                   icon: CupertinoIcons.car_detailed,
                   label: 'Car',
-                  isActive: provider.currentNavMode == 'driving', onTap: () {
+                  isActive: provider.currentNavMode == 'driving' && provider.currentRouteResult != null, 
+                  onTap: () {
                 AppHaptics.selectionClick();
                 provider.currentNavMode = 'driving';
-                provider.calculateAndDrawNativeRoute(
-                    context, provider.currentNavMode);
+                provider.calculateAndDrawNativeRoute(context, provider.currentNavMode);
               }),
               _buildGlassyTransportMode(context,
                   icon: Icons.local_shipping_rounded,
                   label: 'Heavy',
-                  isActive: provider.currentNavMode == 'heavy', onTap: () {
+                  isActive: provider.currentNavMode == 'heavy' && provider.currentRouteResult != null, 
+                  onTap: () {
                 AppHaptics.selectionClick();
                 provider.currentNavMode = 'heavy';
-                provider.calculateAndDrawNativeRoute(
-                    context, provider.currentNavMode);
+                provider.calculateAndDrawNativeRoute(context, provider.currentNavMode);
               }),
             ],
           ),

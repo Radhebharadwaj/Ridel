@@ -1,0 +1,32 @@
+--- lib/features/map/map_engine/controllers/map_camera_controller.dart
++++ lib/features/map/map_engine/controllers/map_camera_controller.dart
+@@ -486,6 +486,28 @@
+     }
+   }
+ 
++  Future<void> frameRoute(List<LatLng> points, {double bottomPadding = 400.0}) async {
++    if (points.isEmpty) return;
++    
++    double minLat = points.first.latitude, maxLat = points.first.latitude;
++    double minLng = points.first.longitude, maxLng = points.first.longitude;
++    for (var p in points) {
++      if (p.latitude < minLat) minLat = p.latitude;
++      if (p.latitude > maxLat) maxLat = p.latitude;
++      if (p.longitude < minLng) minLng = p.longitude;
++      if (p.longitude > maxLng) maxLng = p.longitude;
++    }
++
++    await map.animateCamera(
++      CameraUpdate.newLatLngBounds(
++        LatLngBounds(southwest: LatLng(minLat, minLng), northeast: LatLng(maxLat, maxLng)),
++        left: 50,
++        right: 50,
++        top: 120,
++        bottom: bottomPadding,
++      ),
++      duration: const Duration(milliseconds: 1200),
++    );
++  }
++
+   void onLocateMeTapped(bool is3DMode, bool isDrivingMode) async {
+     _userCustomizedCamera = false;

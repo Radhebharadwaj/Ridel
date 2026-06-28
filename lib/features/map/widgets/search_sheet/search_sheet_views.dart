@@ -455,7 +455,7 @@ if (showRecentSearches)
 
                                                   rebuildState(() {
                                                     _selectedPlace = place;
-                                                    _currentMode = SheetMode.placeDetail;
+                                                    _currentMode = SheetMode.search;
                                                     _showSearchList = false;
                                                     _isSearching = false;
                                                   });
@@ -1307,33 +1307,6 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
     );
   }
 
-  Widget _buildModeIcon(String mode, IconData icon, bool isDark) {
-    final isSelected = _selectedNavMode == mode;
-    return GestureDetector(
-      onTap: () {
-        rebuildState(() {
-          _selectedNavMode = mode;
-        });
-        unawaited(_checkAndFetchRoute());
-      },
-      child: CircleAvatar(
-        backgroundColor: isSelected ? Colors.blueAccent : Colors.grey.withValues(alpha: 0.2),
-        child: Icon(icon, color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87)),
-      ),
-    );
-  }
-
-  Widget _buildModeSelector(bool isDark) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _buildModeIcon('walking', Icons.directions_walk, isDark),
-        _buildModeIcon('cycling', Icons.directions_bike, isDark),
-        _buildModeIcon('driving', Icons.directions_car, isDark),
-        _buildModeIcon('heavy', Icons.local_shipping, isDark),
-      ],
-    );
-  }
 
   Widget _buildRoutingDetailCard(bool isDark) {
     final provider = Provider.of<MapProvider>(context);
@@ -1525,22 +1498,27 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
     final provider = Provider.of<MapProvider>(context);
     
     Widget contentView;
-    if (_currentMode == SheetMode.placeDetail || _currentMode == SheetMode.routing) {
+    if (_currentMode == SheetMode.routing || _showDirections) {
       contentView = _buildRoutingDetailCard(isDark);
-      return contentView;
+    } else if (_selectedPlace != null) {
+      // PIN DROPPED: Force the Explore View (which renders Transport Modes)
+      contentView = Container(
+        key: const ValueKey('exploreView'),
+        child: _buildUnifiedExploreView(isDark, progress, isExpandedList: isExpanded),
+      );
     } else if (_searchCtrl.text.isNotEmpty || _isSearching) {
+      // SEARCHING: Show suggestions
       contentView = Container(
         key: const ValueKey('searchResultsView'),
         child: _buildSearchResultsView(isDark, isExpanded: isExpanded),
       );
     } else {
+      // DEFAULT IDLE STATE
       contentView = Container(
         key: const ValueKey('exploreView'),
-        child: _buildUnifiedExploreView(isDark, progress,
-            isExpandedList: isExpanded),
+        child: _buildUnifiedExploreView(isDark, progress, isExpandedList: isExpanded),
       );
     }
-        
     return Column(
       children: [
         contentView,

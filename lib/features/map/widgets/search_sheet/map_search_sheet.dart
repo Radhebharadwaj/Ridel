@@ -426,6 +426,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
     // 2. Clear the UI and Map
     provider.cancelAndClearRoute();
+    setState(() {
+      _selectedPlace = null;
+      _currentMode = SheetMode.search;
+      _isSearchExpanded = false;
+      _searchCtrl.clear();
+    });
     provider.setDropPinMode(false); // 🚨 CRITICAL FIX
     provider.setAddingStopMode(false); // 🚨 CRITICAL FIX
 
@@ -517,15 +523,18 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       // 4. Fly Camera
       if (lat != 0.0 && lng != 0.0) {
         await safeProvider.cancelAndClearRoute(resetCamera: false);
-        if (!mounted) return;
-        safeProvider.setTargetDestination(LatLng(lat, lng));
+        safeProvider.setDestinationSelected(true);
+        safeProvider.engine.setUIState(MapUIState.placeSelected);
         setState(() {
+          _currentMode = SheetMode.search;
           _selectedPlace = place;
-          _currentMode = SheetMode.placeDetail; // 🚀 SWITCH MODE
+          _isSearchExpanded = false;
           _showSearchList = false;
           _searchResults.clear(); // 🚀 CLEAR LIST TO PREVENT OVERRIDE
           _isSearching = false;
         });
+        if (!mounted) return;
+        safeProvider.setTargetDestination(LatLng(lat, lng));
         if (_sheetController.isAttached) {
           _sheetController.animateTo(
             _safeMinSize,
@@ -660,9 +669,15 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           _selectedPlace = placeToSubmit;
           _showSearchList = false;
           _showDirections = false;
-          _currentMode = SheetMode.placeDetail;
+          _currentMode = SheetMode.search;
           _isLoadingDetails = true;
+          _isSearchExpanded = false;
         });
+
+        if (!mounted) return;
+        final provider = Provider.of<MapProvider>(context, listen: false);
+        provider.setDestinationSelected(true);
+        provider.engine.setUIState(MapUIState.placeSelected);
 
         await _searchService.saveToHistory(placeToSubmit);
         if (!mounted) return;
@@ -723,6 +738,13 @@ class _MapSearchSheetState extends State<MapSearchSheet>
               // Update provider with valid data
               final provider = Provider.of<MapProvider>(context, listen: false);
               await provider.cancelAndClearRoute(resetCamera: false);
+              provider.setDestinationSelected(true);
+              provider.engine.setUIState(MapUIState.placeSelected);
+              setState(() {
+                _currentMode = SheetMode.search;
+                _selectedPlace = placeToSubmit;
+                _isSearchExpanded = false;
+              });
               provider.setTargetDestination(validLatLng);
               provider.addNativeDestinationPin(validLatLng);
 
@@ -840,6 +862,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           _currentRoute = null;
           _showSearchList = true;
           _isNavSheetExpanded = false;
+          _currentMode = SheetMode.search;
         });
       }
 
@@ -867,12 +890,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           }
           unawaited(_checkAndFetchRoute());
         } else if (!_showDirections) {
+          provider.setDestinationSelected(true);
+          provider.engine.setUIState(MapUIState.placeSelected);
           setState(() {
             _selectedPlace = tappedPlace;
             _searchCtrl.text = tappedPlace.name;
             _showSearchList = false;
             _showDirections = false;
-            _currentMode = SheetMode.placeDetail;
+            _currentMode = SheetMode.search;
             _isLoadingDetails = true;
           });
           if (_sheetController.isAttached) {
@@ -1525,9 +1550,21 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                               children: [
                                                                 // Bottom Layer: Scrollable Content
                                                                 Positioned.fill(
-                                                                  child:
-                                                                      ScrollConfiguration(
-                                                                    behavior: ScrollConfiguration.of(
+                                                                  child: ShaderMask(
+                                                                    shaderCallback: (Rect bounds) {
+                                                                      // Calculate exact normalized stop for the dynamic header
+                                                                      final fadeStop = (dynamicHeaderHeight / bounds.height).clamp(0.0, 1.0);
+                                                                      final fadeStart = (fadeStop - 0.05).clamp(0.0, 1.0); 
+                                                                      return LinearGradient(
+                                                                        begin: Alignment.topCenter,
+                                                                        end: Alignment.bottomCenter,
+                                                                        colors: const [Colors.transparent, Colors.transparent, Colors.black, Colors.black],
+                                                                        stops: [0.0, fadeStart, fadeStop, 1.0],
+                                                                      ).createShader(bounds);
+                                                                    },
+                                                                    blendMode: BlendMode.dstIn,
+                                                                    child: ScrollConfiguration(
+                                                                      behavior: ScrollConfiguration.of(
                                                                             context)
                                                                         .copyWith(
                                                                       scrollbars:
@@ -1596,6 +1633,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                     ),
                                                                   ),
                                                                 ),
+                                                              ),
                                                                 // Top Layer: Floating Header with Gradient Fade
                                                                 Positioned(
                                                                   top: 0,
@@ -1627,14 +1665,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                             Curves.easeInCubic,
                                                                         switchOutCurve:
                                                                             Curves.easeOutCubic,
-                                                                        child: (_currentMode == SheetMode.placeDetail)
-                                                                            ? const SizedBox.shrink()
-                                                                            : (_showDirections
-                                                                                ? _buildDirectionsHeader(dynamicHeaderHeight,
-                                                                                    isDark)
-                                                                                : (_selectedPlace != null
-                                                                                    ? _buildSelectedPlaceHeader(dynamicHeaderHeight, progress, isDark)
-                                                                                    : _buildSearchHeader(dynamicHeaderHeight, progress, isDark))),
+                                                                        child: _showDirections
+                                                                            ? _buildDirectionsHeader(dynamicHeaderHeight,
+                                                                                isDark)
+                                                                            : (_selectedPlace != null
+                                                                                ? _buildSelectedPlaceHeader(dynamicHeaderHeight, progress, isDark)
+                                                                                : _buildSearchHeader(dynamicHeaderHeight, progress, isDark)),
                                                                       ),
                                                                     ),
                                                                   ),
