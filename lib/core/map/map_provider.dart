@@ -152,6 +152,8 @@ class MapProvider extends ChangeNotifier {
       engine.mapUIState.value == MapUIState.idle ||
       engine.mapUIState.value == MapUIState.placeSelected;
 
+  bool get hideNativeBlueDot => currentRouteResult != null && currentNavMode.isNotEmpty;
+
   double get customPuckOpacity =>
       (engine.mapUIState.value == MapUIState.navigating ||
               engine.mapUIState.value == MapUIState.routeDrawn)
@@ -186,7 +188,7 @@ class MapProvider extends ChangeNotifier {
   Future<void> updatePuckVisibility() async {
     await _updatePuckGeoJson(
         _lastPuckLocation, _lastPuckBearing, customPuckOpacity);
-    engine.camera?.setBlueDotOpacity(showNativeBlueDot ? 1.0 : 0.0);
+    // Opacity hack removed per architectural review
     notifyListeners();
   }
 
@@ -274,15 +276,21 @@ class MapProvider extends ChangeNotifier {
 
   // State flag for UI
   bool isRouteCalculated = false;
+  bool isCalculatingRoute = false;
 
   Future<void> calculateAndDrawNativeRoute(
     BuildContext context,
     String mode,
   ) async {
+    isCalculatingRoute = true;
+    notifyListeners();
+    
     debugPrint("🚀 [ROUTE ENGINE] Triggered for mode: $mode");
 
     if (targetDestination == null) {
       debugPrint("❌ [ROUTE ENGINE] Failed: targetDestination is null.");
+      isCalculatingRoute = false;
+      notifyListeners();
       return;
     }
 
@@ -307,6 +315,8 @@ class MapProvider extends ChangeNotifier {
         origin = LatLng(pos.latitude, pos.longitude);
       } catch (e) {
         debugPrint("🚨 GPS ERROR: Cannot calculate route without origin. $e");
+        isCalculatingRoute = false;
+        notifyListeners();
         return;
       }
     }
@@ -316,7 +326,11 @@ class MapProvider extends ChangeNotifier {
 
     // 🚨 CRITICAL: Clear old routes and UI state before fetching new ones
     await clearNativeRoute(preserveState: true);
-    if (controller == null) return;
+    if (controller == null) {
+      isCalculatingRoute = false;
+      notifyListeners();
+      return;
+    }
 
     _currentRouteResult = null;
     notifyListeners();
@@ -334,6 +348,11 @@ class MapProvider extends ChangeNotifier {
     try {
       // Fetch route from Route Engine.
       debugPrint("⏳ [ROUTE ENGINE] Waiting for Route Engine API...");
+      
+      final safeContext = ToastService.navigatorKey.currentContext;
+      if (safeContext != null && safeContext.mounted) {
+        ToastService.showLoading(safeContext, "Finding route...");
+      }
 
       RouteResult? routeResult;
 
@@ -373,16 +392,26 @@ class MapProvider extends ChangeNotifier {
         _currentRouteResult = routeResult;
         _lastRouteData =
             routeResult; // 🚨 Ensure this is added so Bottom Sheet gets data
+
+        // 🚀 Remove existing puck so it can be re-added on top of the new route
+        if (_navPuckSymbol != null && controller != null) {
+          await controller!.removeSymbol(_navPuckSymbol!);
+          _navPuckSymbol = null;
+        }
+
         await drawNativeRoute(routeResult.allRoutesCoordinates);
         debugPrint("✅ [ROUTE ENGINE] Native MapLibre Draw Success!");
 
         if (currentLocation != null) {
           final heading = engine.locService?.currentPosition?.heading ?? 0.0;
+
+          // Step A (Kill Native Dot using MapLibre widget rebuilding)
+
           _navPuckSymbol = await controller!.addSymbol(
             SymbolOptions(
               geometry: LatLng(currentLocation!.latitude, currentLocation!.longitude),
               iconImage: 'nav_puck',
-              iconSize: 0.25, // 🚀 Shrinks puck to match pin size
+              iconSize: 0.40, // 🚀 Scaled up to perfectly match destination pins
               iconRotate: heading,
               iconAnchor: 'center',
               zIndex: 999,    // 🚀 VALID parameter to force to top layer
@@ -413,9 +442,13 @@ class MapProvider extends ChangeNotifier {
       final context = ToastService.navigatorKey.currentContext;
       if (context != null && context.mounted) {
         ToastService.showError(
-            context, "Poor internet connection. Please try again.");
+            context, "Network is slow. Route failed.");
       }
       return;
+    } finally {
+      isCalculatingRoute = false;
+      ToastService.dismiss();
+      notifyListeners();
     }
   }
 
@@ -697,7 +730,7 @@ class MapProvider extends ChangeNotifier {
     Future<void> safeAddLineLayer(
         String sourceId, String layerId, LineLayerProperties props) async {
       try {
-        await controller!.addLineLayer(sourceId, layerId, props);
+        await controller!.addLineLayer(sourceId, layerId, props, belowLayerId: 'com.mapbox.annotations.points');
       } catch (e) {
         debugPrint("🗺️ LINE DRAW ERROR for $layerId: $e");
       }
@@ -1334,6 +1367,8 @@ class MapProvider extends ChangeNotifier {
                   milliseconds: 1200), // Smooth 1.2s premium flight
             );
 
+            // Wait for the flight to finish smoothly BEFORE locking the tracking
+            await Future.delayed(const Duration(milliseconds: 1250));
             // Reset tracking mode after animation
             await setTrackingMode(
               MyLocationTrackingMode.tracking,
@@ -1365,6 +1400,9 @@ class MapProvider extends ChangeNotifier {
       if (_navPuckSymbol != null && controller != null) {
         await controller!.removeSymbol(_navPuckSymbol!);
         _navPuckSymbol = null;
+
+        // Step C (Restore Native Dot)
+        // Dot opacity is now handled by myLocationEnabled rebuilding
       }
     }
     
@@ -1466,24 +1504,23 @@ class MapProvider extends ChangeNotifier {
     currentNavMode = 'driving';
 
     // 🚀 Cinematic Camera Reset
-    if (resetCamera && controller != null && currentLocation != null) {
-      controller!.animateCamera(
+    if (resetCamera && currentLocation != null && controller != null) {
+      // 🚀 FIX: Smoothly fly back to the user FIRST
+      await controller!.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
-            target: currentLocation!,
-            zoom: 15.0, // Comfortable default zoom
-            tilt: 0.0, // Strictly reset to flat 2D
-            bearing: 0.0, // Strictly reset rotation
+            target: LatLng(currentLocation!.latitude, currentLocation!.longitude),
+            zoom: 15.0,
+            tilt: 0.0,
+            bearing: 0.0,
           ),
         ),
-        duration:
-            const Duration(milliseconds: 1200), // Smooth 1.2s premium flight
+        duration: const Duration(milliseconds: 1200),
       );
-
-      // Reset modes
-      await setTrackingMode(
-        MyLocationTrackingMode.tracking,
-      );
+      
+      // Wait for the flight to finish smoothly BEFORE locking the tracking
+      await Future.delayed(const Duration(milliseconds: 1250));
+      await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
     }
 
     // 🌟 Explicitly Restore All Dimmed/Hidden Background Layers & Hide Puck
@@ -1900,6 +1937,10 @@ class MapProvider extends ChangeNotifier {
   Future<void> handleMapTap(Point<double> point, LatLng latLng) async {
     if (!_isMapReady) return;
 
+    if (engine.mapController != null) {
+      await engine.mapController!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+    }
+
     await cancelAndClearRoute(resetCamera: false);
 
     AppHaptics.heavyImpact();
@@ -1922,9 +1963,6 @@ class MapProvider extends ChangeNotifier {
     // 1. Trigger Bottom Sheet UI Rebuild FIRST
     notifyListeners();
 
-    // 2. Ensure native tracking is dead so it doesn't fight the flight
-    await engine.mapController
-        ?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
     // 3. Execute the flight to the PIN coordinates (tappedCoordinates), NOT user location instantly!
     await engine.mapController?.animateCamera(
       CameraUpdate.newLatLngZoom(latLng, 16.0),
@@ -2376,6 +2414,7 @@ class MapProvider extends ChangeNotifier {
         maxLng = math.max(maxLng, stopLng);
       }
       
+      await controller?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
       await controller?.animateCamera(
         CameraUpdate.newLatLngBounds(
           LatLngBounds(
@@ -2483,6 +2522,7 @@ class MapProvider extends ChangeNotifier {
         double maxLng = math.max(currentLoc.longitude, stationLoc.longitude);
 
         try {
+          await controller?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
           await controller?.animateCamera(
             CameraUpdate.newLatLngBounds(
               LatLngBounds(
@@ -2649,6 +2689,12 @@ class MapProvider extends ChangeNotifier {
 
   Future<void> flyToPlace(double lat, double lng) async {
     if (!_isMapReady) return;
+    
+    // 1. Break the tracking lock FIRST to prevent snap-backs
+    if (controller != null) {
+      await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+    }
+
     final target = LatLng(lat, lng);
     targetDestination = target;
 
@@ -2661,16 +2707,15 @@ class MapProvider extends ChangeNotifier {
     notifyListeners(); // 🧭 Triggers Consumer → AnimatedMapPin overlay appears
 
     try {
-      // 1. Force native layer to drop tracking immediately
-      await controller
-          ?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
-
-      // 2. CRITICAL FIX: Event loop breaker to safely disengage WebGL tracking lock
-      await Future.delayed(const Duration(milliseconds: 150));
-
-      await controller?.animateCamera(
-        CameraUpdate.newLatLngZoom(target, 16.0),
-        duration: const Duration(milliseconds: 1000),
+      // 2. Smoothly fly to the destination
+      await controller!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(lat, lng),
+            zoom: 15.0, // Or your preferred zoom level
+          ),
+        ),
+        duration: const Duration(milliseconds: 1200),
       );
 
       // Clear existing pin if any
@@ -2819,6 +2864,7 @@ class MapProvider extends ChangeNotifier {
         );
 
         try {
+          await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
           await controller!.animateCamera(
             CameraUpdate.newLatLngBounds(
               LatLngBounds(

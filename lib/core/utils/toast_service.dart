@@ -7,6 +7,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:ridel/core/widgets/ridel_loading_dots.dart';
 
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/main.dart';
@@ -59,6 +60,25 @@ class ToastService {
         onTap: onTap);
   }
 
+  static void showLoading(BuildContext context, String message,
+      {String? title}) {
+    _showApplePill(context,
+        type: ToastType.info,
+        title: title ?? "Loading",
+        message: message,
+        isLoading: true);
+  }
+
+  static void dismiss() {
+    if (_overlayEntry != null) {
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+      _isShowing = false;
+      _currentShowingMessage = null;
+      _processQueue();
+    }
+  }
+
   static void showActionToast(
     BuildContext context, {
     required String message,
@@ -100,6 +120,7 @@ class ToastService {
     VoidCallback? onActionTap,
     bool isDynamicTransportToast = false,
     Function(String)? onTapUpdateOrigin,
+    bool isLoading = false,
   }) {
     // 🚨 ANTI-SPAM FILTER: Do not queue if it's currently showing OR already in the queue
     if ((_isShowing && _currentShowingMessage == message) || 
@@ -117,6 +138,7 @@ class ToastService {
       'onActionTap': onActionTap,
       'isDynamicTransportToast': isDynamicTransportToast,
       'onTapUpdateOrigin': onTapUpdateOrigin,
+      'isLoading': isLoading,
     });
     
     _processQueue();
@@ -137,6 +159,7 @@ class ToastService {
 
     final isDynamicTransportToast = request['isDynamicTransportToast'] as bool? ?? false;
     final onTapUpdateOrigin = request['onTapUpdateOrigin'] as Function(String)?;
+    final isLoading = request['isLoading'] as bool? ?? false;
 
     _currentShowingMessage = message;
 
@@ -168,6 +191,7 @@ class ToastService {
         onActionTap: onActionTap,
         isDynamicTransportToast: isDynamicTransportToast,
         onTapUpdateOrigin: onTapUpdateOrigin,
+        isLoading: isLoading,
         onDismiss: () {
           _overlayEntry?.remove();
           _overlayEntry = null;
@@ -202,17 +226,19 @@ class _ApplePillWidget extends StatefulWidget {
   final VoidCallback onDismiss;
   final bool isDynamicTransportToast;
   final Function(String)? onTapUpdateOrigin;
+  final bool isLoading;
 
   const _ApplePillWidget({
     required this.type,
     required this.title,
     required this.message,
+    required this.onDismiss,
     this.onTap,
     this.actionLabel,
     this.onActionTap,
-    required this.onDismiss,
     this.isDynamicTransportToast = false,
     this.onTapUpdateOrigin,
+    this.isLoading = false,
   });
 
   @override
@@ -240,13 +266,16 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // 🌟 Ab scale nahi badlega launch par, sirf slide hoke aayega (Zero Glitch)
       if (mounted) setState(() => _isEntering = false);
-      _startTimer();
     });
+
+    if (!widget.isLoading) {
+      _startTimer();
+    }
     globalTransportMode.addListener(_onTransportModeChanged);
   }
 
   void _onTransportModeChanged() {
-    if (!_isEntering && mounted) {
+    if (!_isEntering && mounted && !widget.isLoading) {
       _startTimer();
     }
   }
@@ -470,15 +499,25 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: _getIconColor().withValues(alpha: 0.15),
+                                if (widget.isLoading)
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.white.withValues(alpha: 0.15),
+                                    ),
+                                    child: const PremiumDotLoader(color: Colors.white),
+                                  )
+                                else
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: _getIconColor().withValues(alpha: 0.15),
+                                    ),
+                                    child: Icon(_getIcon(),
+                                        color: _getIconColor(), size: 16),
                                   ),
-                                  child: Icon(_getIcon(),
-                                      color: _getIconColor(), size: 16),
-                                ),
                                 const SizedBox(width: 12),
                                 Flexible(
                                   child: Column(

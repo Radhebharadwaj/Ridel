@@ -27,7 +27,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/core/config/app_config.dart';
 import 'package:ridel/main.dart';
-
 class FullScreenMapPage extends StatefulWidget {
   final ValueNotifier<double> searchSheetProgressNotifier;
   final bool isMapTabActive;
@@ -830,6 +829,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             final mapProvider = Provider.of<MapProvider>(
                                 context,
                                 listen: false);
+
+                            // 1. Break tracking immediately to avoid snap-back on pin drop
+                            if (mapProvider.controller != null) {
+                              await mapProvider.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+                            }
 
                             if (mapProvider.mapSelectionPlaceType != null) {
                               mapProvider.setTargetDestination(latLng);

@@ -83,9 +83,10 @@ class RouteVisualizer {
 
     Future<void> safeAddLineLayer(String sourceId, String layerId, LineLayerProperties props) async {
       try {
-        await controller.addLineLayer(sourceId, layerId, props, belowLayerId: 'ultimate-pin-layer');
+        await controller.addLineLayer(sourceId, layerId, props, belowLayerId: 'com.mapbox.annotations.symbols');
       } catch (_) {
         try {
+          // Fallback if the symbols layer isn't initialized yet
           await controller.addLineLayer(sourceId, layerId, props);
         } catch (e) {
           debugPrint('Ignored safeAddLineLayer Error: $e');
