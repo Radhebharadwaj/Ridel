@@ -168,18 +168,30 @@ class MapProvider extends ChangeNotifier {
     try {
       final bool isVisible = opacity > 0.0;
 
-      final geoJsonFeature = isVisible
+      final Map<String, dynamic> puckGeoJson = isVisible
           ? {
-              "type": "Feature",
-              "geometry": {
-                "type": "Point",
-                "coordinates": [location.longitude, location.latitude]
-              },
-              "properties": {"bearing": bearing}
+              "type": "FeatureCollection",
+              "features": [
+                {
+                  "type": "Feature",
+                  "geometry": {
+                    "type": "Point",
+                    "coordinates": [location.longitude, location.latitude] // 🚀 STRICTLY LNG, LAT
+                  },
+                  "properties": {
+                    "rotation": (bearing).toDouble(), // 🚀 STRICTLY NON-NULL DOUBLE
+                  }
+                }
+              ]
             }
           : {"type": "FeatureCollection", "features": []};
 
-      await controller!.setGeoJsonSource("nav_puck_source", geoJsonFeature);
+      try {
+        await controller!.addSource("nav_puck_source", GeojsonSourceProperties(data: puckGeoJson));
+      } catch (e) {
+        await controller!.setGeoJsonSource("nav_puck_source", puckGeoJson);
+      }
+      
       _lastPuckLocation = location;
       _lastPuckBearing = bearing;
     } catch (e) {
@@ -192,6 +204,8 @@ class MapProvider extends ChangeNotifier {
         _lastPuckLocation, _lastPuckBearing, customPuckOpacity);
     notifyListeners();
   }
+
+
 
   Future<void> showNavigationPuck(LatLng location, double bearing) async {
     await _updatePuckGeoJson(location, bearing, customPuckOpacity);
@@ -216,20 +230,22 @@ class MapProvider extends ChangeNotifier {
     }
     double targetBearing = _lastPuckBearing + diff;
 
-    // 2. Animate Camera to Follow User & Rotate Map ONLY if actively navigating
-    if (engine.mapUIState.value == MapUIState.navigating &&
-        controller != null &&
-        isAutoTracking) {
-      controller!.animateCamera(
-        CameraUpdate.newCameraPosition(CameraPosition(
-          target: location,
-          bearing: targetBearing, // THIS ROTATES THE MAP WITH THE USER
-          tilt: 50.0, // Keep the 3D perspective
-          zoom: 18.0, // Zoomed in for navigation
-        )),
-        duration: const Duration(
-            seconds: 1), // Smooth 1-second animation between GPS ticks
-      );
+    // 2. Camera Tracking Logic (wrapped in boolean guard)
+    if (isAutoTracking && controller != null) {
+      try {
+        controller!.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: location,
+              bearing: newBearing,
+              zoom: 16.5,
+              tilt: 45.0,
+            ),
+          ),
+        );
+      } catch (e) {
+        debugPrint("Camera animation error: $e");
+      }
     }
 
     // 3. Update Puck Rotation (Tween on Web, Instant on Native)
@@ -405,26 +421,7 @@ class MapProvider extends ChangeNotifier {
 
         if (currentLocation != null) {
           final heading = engine.locService?.currentPosition?.heading ?? 0.0;
-
-          _navPuckSymbol = await controller!.addSymbol(
-            SymbolOptions(
-              geometry: LatLng(currentLocation!.latitude, currentLocation!.longitude),
-              iconImage: 'nav_puck',
-              iconSize: 0.40, // 🚀 Scaled up to perfectly match destination pins
-              iconRotate: heading,
-              iconAnchor: 'center',
-              zIndex: 999,    // 🚀 VALID parameter to force to top layer
-              iconOpacity: 0.0, // For the fade-in effect
-            ),
-          );
-
-          // 🚀 FIX: Smooth Fade-In Loop
-          for (double i = 0.2; i <= 1.0; i += 0.2) {
-            await Future.delayed(const Duration(milliseconds: 60));
-            if (_navPuckSymbol != null && controller != null) {
-              await controller!.updateSymbol(_navPuckSymbol!, SymbolOptions(iconOpacity: i));
-            }
-          }
+          await _updatePuckGeoJson(currentLocation!, heading, 1.0);
         }
 
         isRouteCalculated = true;
@@ -503,18 +500,21 @@ class MapProvider extends ChangeNotifier {
     if (targetLoc != null) {
       await showNavigationPuck(targetLoc, pos?.heading ?? 0.0);
 
-      // 2. Animate Camera to 3D Perspective (Tilt/Pitch)
-      await controller!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: targetLoc,
-            zoom: 18.0, // Deep zoom for navigation
-            tilt: 50.0, // 3D Pitch angle
-            bearing: pos?.heading ?? 0.0,
+      try {
+        await controller!.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: targetLoc,
+              zoom: 18.0, // Deep zoom for navigation
+              tilt: 50.0, // 3D Pitch angle
+              bearing: pos?.heading ?? 0.0,
+            ),
           ),
-        ),
-        duration: const Duration(milliseconds: 1200),
-      );
+          duration: const Duration(milliseconds: 1200),
+        );
+      } catch (e) {
+        debugPrint("animateCamera Error: $e");
+      }
     }
 
     // 3. THE MAGIC: Lock camera to compass and change puck to Directional Triangle
@@ -545,17 +545,24 @@ class MapProvider extends ChangeNotifier {
     }
 
     if (targetLoc != null) {
-      await controller!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: targetLoc,
-            zoom: 18.0,
-            tilt: 50.0,
-            bearing: pos?.heading ?? 0.0,
+      try {
+        await controller!.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: targetLoc,
+              zoom: 18.0,
+              tilt: 50.0,
+              bearing: pos?.heading ?? 0.0,
+            ),
           ),
-        ),
-        duration: const Duration(milliseconds: 800),
-      );
+          duration: const Duration(milliseconds: 800),
+        );
+      } catch (e) {
+        debugPrint("animateCamera Error: $e");
+      }
+      try {
+        await setTrackingMode(MyLocationTrackingMode.trackingCompass);
+      } catch (_) {}
     }
   }
 
@@ -642,6 +649,11 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<bool> handleRouteClick(Point<double> point, LatLng coordinates) async {
+    // 1. Guard clause: Do nothing if actively navigating
+    if (isActiveNavigation || engine.mapUIState.value == MapUIState.navigating) {
+      return false;
+    }
+
     if (controller == null ||
         _drawnRoutesCount <= 1 ||
         _currentRouteResult == null) {
@@ -655,45 +667,52 @@ class MapProvider extends ChangeNotifier {
       altLayerIds.add(
           'alt-walk-layer-$i'); // CRITICAL: Makes walking routes clickable!
     }
-    final features = await controller!.queryRenderedFeatures(
-      point,
-      altLayerIds,
-      null,
-    );
+    
+    try {
+      // 2. Safely query features
+      final features = await controller!.queryRenderedFeatures(
+        point,
+        altLayerIds,
+        null,
+      );
 
-    if (features.isNotEmpty) {
-      AppHaptics.selectionClick();
-      final feature = features.first;
-      int tappedIndex = 0;
-      if (feature is Map &&
-          feature['properties'] is Map &&
-          feature['properties']['index'] != null) {
-        tappedIndex = feature['properties']['index'];
+      if (features.isNotEmpty) {
+        AppHaptics.selectionClick();
+        final feature = features.first;
+        int tappedIndex = 0;
+        if (feature is Map &&
+            feature['properties'] is Map &&
+            feature['properties']['index'] != null) {
+          tappedIndex = feature['properties']['index'];
+        }
+
+        final tappedAlt = _currentRouteResult!.alternativeRoutes[tappedIndex];
+        final currentPrimary = _currentRouteResult!.coordinates;
+
+        // Swap routes visually
+        List<List<LatLng>> updatedRoutes = List.from(
+          _currentRouteResult!.allRoutesCoordinates,
+        );
+        updatedRoutes[0] = tappedAlt;
+        updatedRoutes[tappedIndex + 1] = currentPrimary;
+
+        final newResult = RouteResult(
+          allRoutesCoordinates: updatedRoutes,
+          distanceKm: _currentRouteResult!.distanceKm,
+          durationMins: _currentRouteResult!.durationMins,
+          steps: _currentRouteResult!.steps,
+          firstInstruction: _currentRouteResult!.firstInstruction,
+          fetchedAt: _currentRouteResult!.fetchedAt,
+          trafficGradientStops: _currentRouteResult!.trafficGradientStops,
+        );
+
+        _currentRouteResult = newResult;
+        await drawNativeRoute(newResult.allRoutesCoordinates);
+        return true; // Handled ghost line tap
       }
-
-      final tappedAlt = _currentRouteResult!.alternativeRoutes[tappedIndex];
-      final currentPrimary = _currentRouteResult!.coordinates;
-
-      // Swap routes visually
-      List<List<LatLng>> updatedRoutes = List.from(
-        _currentRouteResult!.allRoutesCoordinates,
-      );
-      updatedRoutes[0] = tappedAlt;
-      updatedRoutes[tappedIndex + 1] = currentPrimary;
-
-      final newResult = RouteResult(
-        allRoutesCoordinates: updatedRoutes,
-        distanceKm: _currentRouteResult!.distanceKm,
-        durationMins: _currentRouteResult!.durationMins,
-        steps: _currentRouteResult!.steps,
-        firstInstruction: _currentRouteResult!.firstInstruction,
-        fetchedAt: _currentRouteResult!.fetchedAt,
-        trafficGradientStops: _currentRouteResult!.trafficGradientStops,
-      );
-
-      _currentRouteResult = newResult;
-      await drawNativeRoute(newResult.allRoutesCoordinates);
-      return true; // Handled ghost line tap
+    } catch (e) {
+      // 3. Catch missing layer exceptions silently
+      debugPrint("Ignored Map Click: Layer does not exist yet.");
     }
     return false;
   }
@@ -729,13 +748,9 @@ class MapProvider extends ChangeNotifier {
     Future<void> safeAddLineLayer(
         String sourceId, String layerId, LineLayerProperties props) async {
       try {
-        await controller!.addLineLayer(sourceId, layerId, props, belowLayerId: 'com.mapbox.annotations.points');
+        await controller!.addLineLayer(sourceId, layerId, props, belowLayerId: 'nav_puck_layer');
       } catch (e) {
-        try {
-          await controller!.addLineLayer(sourceId, layerId, props);
-        } catch (e) {
-          debugPrint("🗺️ LINE DRAW ERROR for $layerId: $e");
-        }
+        debugPrint("🗺️ LINE DRAW ERROR for $layerId: $e");
       }
     }
 
@@ -848,48 +863,11 @@ class MapProvider extends ChangeNotifier {
       }
       final primaryCoords = allRoutes[0];
 
-      List<Map<String, dynamic>> features = [];
       final congestionData = _currentRouteResult?.congestion;
-
-      if (congestionData != null && congestionData.isNotEmpty) {
-        for (int i = 0; i < primaryCoords.length - 1; i++) {
-          int congestionIndex =
-              (i / primaryCoords.length * congestionData.length).floor();
-          if (congestionIndex >= congestionData.length) {
-            congestionIndex = congestionData.length - 1;
-          }
-
-          features.add({
-            "type": "Feature",
-            "properties": {
-              "index": 0,
-              "congestion": congestionData[congestionIndex]
-            },
-            "geometry": {
-              "type": "LineString",
-              "coordinates": [
-                [primaryCoords[i].longitude, primaryCoords[i].latitude],
-                [primaryCoords[i + 1].longitude, primaryCoords[i + 1].latitude]
-              ]
-            },
-          });
-        }
-      } else {
-        features.add({
-          "type": "Feature",
-          "properties": {"index": 0, "congestion": "low"},
-          "geometry": {
-            "type": "LineString",
-            "coordinates":
-                primaryCoords.map((p) => [p.longitude, p.latitude]).toList()
-          },
-        });
-      }
-
-      final geoJson = {
-        "type": "FeatureCollection",
-        "features": features,
-      };
+      final geoJson = await compute(_buildPrimaryGeoJson, {
+        'coords': primaryCoords,
+        'congestion': congestionData,
+      });
 
       try {
         final bool isWalking = currentNavMode == 'walking';
@@ -966,40 +944,6 @@ class MapProvider extends ChangeNotifier {
       }
     }
 
-    // 4. FIX Z-INDEX RENDER SEQUENCE
-    // Ensure destination pin and nav puck render strictly on top
-    if (targetDestination != null) {
-      await clearNativeDestinationPin();
-
-      // Enforce rendering sequence for WebGL
-      await Future.delayed(const Duration(milliseconds: 150));
-
-      try {
-        // Step 3: Bring Nav Puck to Front
-        try {
-          await controller!.removeLayer('nav_puck_layer');
-        } catch (_) {}
-
-        try {
-          await controller!.addSymbolLayer(
-            'nav_puck_source',
-            'nav_puck_layer',
-            const SymbolLayerProperties(
-              iconImage: 'nav_puck',
-              iconPitchAlignment: 'map',
-              iconRotationAlignment: 'map',
-              iconAllowOverlap: true,
-              iconIgnorePlacement: true,
-              iconSize: 1.0,
-              iconOpacity: 1.0,
-              iconRotate: ['get', 'bearing'],
-            ),
-          );
-        } catch (_) {}
-      } catch (e) {
-        debugPrint("🗺️ Failed to enforce render sequence: $e");
-      }
-    }
 
     // 5. Adjust Camera to fit the PRIMARY route
     if (allRoutes.isNotEmpty) {
@@ -1230,6 +1174,7 @@ class MapProvider extends ChangeNotifier {
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
           ),
+          belowLayerId: 'nav_puck_layer',
         );
       } catch (_) {}
     }
@@ -1271,9 +1216,43 @@ class MapProvider extends ChangeNotifier {
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
           ),
+          belowLayerId: 'nav_puck_layer',
         );
       } catch (e) {
         debugPrint("🗺️ INTERMEDIATE PIN DROP ERROR: $e");
+      }
+    }
+
+    // 9. FIX Z-INDEX RENDER SEQUENCE (Puck MUST be top-most)
+    if (targetDestination != null) {
+      await clearNativeDestinationPin();
+      
+      // Step D: Strictly remove the puck layer
+      try {
+        await controller!.removeLayer("nav_puck_layer");
+      } catch (_) {}
+      
+      // Step E: Re-add the puck's SymbolLayer at the very end
+      try {
+        // Re-inject image before adding layer
+        final bytes = await rootBundle.load('assets/images/nav_puck.png');
+        await controller!.addImage('nav_puck', bytes.buffer.asUint8List());
+
+        await controller!.addSymbolLayer(
+          "nav_puck_source", 
+          "nav_puck_layer",
+          const SymbolLayerProperties(
+            iconImage: 'nav_puck',
+            iconSize: 0.35, // 🚀 REVERTED TO PERFECT SIZE
+            iconAllowOverlap: true,
+            iconIgnorePlacement: true,
+            iconRotate: ['get', 'rotation'], 
+            iconRotationAlignment: 'map', // MUST BE MAP
+            iconPitchAlignment: 'map',    // Keeps it stable in 3D
+          ),
+        );
+      } catch (e) {
+        debugPrint("Puck Top Layer error: $e");
       }
     }
 
@@ -1281,6 +1260,22 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<void> clearNativeRoute({bool preserveState = false}) async {
+    // 1. LOCK THE STREAM IMMEDIATELY AND EXECUTE KILL-SWITCH (Before any awaits)
+    if (!preserveState) {
+      isActiveNavigation = false; 
+      engine.setUIState(MapUIState.idle);
+
+      final emptyGeoJson = {"type": "FeatureCollection", "features": []};
+      try {
+        await controller?.setGeoJsonSource("nav_puck_source", emptyGeoJson);
+      } catch (_) {}
+
+      try {
+        await controller?.removeLayer("nav_puck_layer");
+        await controller?.removeSource("nav_puck_source");
+      } catch (_) {}
+    }
+
     if (_drawnRoutesCount == 0) {
       return; // Do not spam the bridge if already clear
     }
@@ -1350,9 +1345,9 @@ class MapProvider extends ChangeNotifier {
         await _toggleFocusModeLayers(false);
         await hideNavigationPuck();
 
-        isActiveNavigation = false; // Reset navigation state
-        engine.setUIState(MapUIState.idle);
+        // Native blue dot is reactively restored by hideNativeBlueDot getter. No controller call needed.
         await updatePuckVisibility();
+
 
         // 🚨 Cinematic Camera Reset
         if (controller != null && currentLocation != null) {
@@ -1392,19 +1387,8 @@ class MapProvider extends ChangeNotifier {
     _liveLocationSub = null;
     intermediateStops.clear();
     
-    if (_navPuckSymbol != null && controller != null) {
-      // 🚀 FIX: Smooth Fade-Out Loop before removal
-      for (double i = 0.8; i >= 0.0; i -= 0.2) {
-        await Future.delayed(const Duration(milliseconds: 60));
-        if (_navPuckSymbol != null && controller != null) {
-          await controller!.updateSymbol(_navPuckSymbol!, SymbolOptions(iconOpacity: i));
-        }
-      }
-      if (_navPuckSymbol != null && controller != null) {
-        await controller!.removeSymbol(_navPuckSymbol!);
-        _navPuckSymbol = null;
-      }
-    }
+    // Hide the static puck layer
+    await hideNavigationPuck();
     
     // 1. Clear MapLibre Native Layers (Lines AND ETA Pills)
     if (controller != null) {
@@ -1787,20 +1771,16 @@ class MapProvider extends ChangeNotifier {
           _locServiceSub == null &&
           engine.locService != null) {
         _locServiceSub = engine.locService!.engineLocationStream.listen((pos) {
+          if (!isActiveNavigation && engine.mapUIState.value == MapUIState.idle) {
+            // If the stream fires while navigation is off, mercilessly kill the layer again.
+            controller?.removeLayer("nav_puck_layer").catchError((_) {});
+            return; // 🚀 ABORT: Do not update puck logic!
+          }
+
           if (engine.mapUIState.value == MapUIState.navigating ||
               engine.mapUIState.value == MapUIState.routeDrawn) {
             updateNavigationPuck(
                 LatLng(pos.latitude, pos.longitude), pos.heading);
-
-            if (_navPuckSymbol != null && isActiveNavigation && controller != null) {
-              controller!.updateSymbol(
-                _navPuckSymbol!,
-                SymbolOptions(
-                  geometry: LatLng(pos.latitude, pos.longitude), // Update position
-                  iconRotate: pos.heading, // 🚀 Update rotation
-                ),
-              );
-            }
           }
         });
       }
@@ -2400,6 +2380,7 @@ class MapProvider extends ChangeNotifier {
           textHaloColor: '#000000',
           textHaloWidth: 1.0,
         ),
+        belowLayerId: 'nav_puck_layer',
       );
 
       // 4. Zoom bounds to fit nearby stops
@@ -2690,9 +2671,13 @@ class MapProvider extends ChangeNotifier {
   Future<void> flyToPlace(double lat, double lng) async {
     if (!_isMapReady) return;
     
-    // 1. Break the tracking lock FIRST to prevent snap-backs
-    if (controller != null) {
-      await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+    try {
+      // 1. Break the tracking lock FIRST to prevent snap-backs
+      if (controller != null) {
+        await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+      }
+    } catch (e) {
+      debugPrint("⚠️ flyToPlace Error updating tracking mode: $e");
     }
 
     final target = LatLng(lat, lng);
@@ -3113,4 +3098,49 @@ LatLng _getBestAlternateTagLocation(
     }
   }
   return bestPoint;
+}
+
+Map<String, dynamic> _buildPrimaryGeoJson(Map<String, dynamic> data) {
+  final coords = data['coords'] as List<LatLng>;
+  final congestionData = data['congestion'] as List<String>?;
+
+  List<Map<String, dynamic>> features = [];
+
+  if (congestionData != null && congestionData.isNotEmpty) {
+    for (int i = 0; i < coords.length - 1; i++) {
+      int congestionIndex = (i / coords.length * congestionData.length).floor();
+      if (congestionIndex >= congestionData.length) {
+        congestionIndex = congestionData.length - 1;
+      }
+
+      features.add({
+        "type": "Feature",
+        "properties": {
+          "index": 0,
+          "congestion": congestionData[congestionIndex]
+        },
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [coords[i].longitude, coords[i].latitude],
+            [coords[i + 1].longitude, coords[i + 1].latitude]
+          ]
+        },
+      });
+    }
+  } else {
+    features.add({
+      "type": "Feature",
+      "properties": {"index": 0, "congestion": "low"},
+      "geometry": {
+        "type": "LineString",
+        "coordinates": coords.map((p) => [p.longitude, p.latitude]).toList()
+      },
+    });
+  }
+
+  return {
+    "type": "FeatureCollection",
+    "features": features,
+  };
 }

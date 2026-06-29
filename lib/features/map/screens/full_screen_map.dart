@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/core/map/map_style_helper.dart';
+import 'package:ridel/features/map/map_engine/map_engine.dart';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
@@ -508,9 +509,19 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           "🛠️ DEBUG INITIAL CAMERA: Lat:$safeLat, Lng:$safeLng");
 
                       return RepaintBoundary(
-                        child: MapLibreMap(
-                          key: const ValueKey('ridel_main_map'),
-                          styleString: _loadedMapStyle!,
+                        child: Listener(
+                          behavior: HitTestBehavior.translucent,
+                          onPointerDown: (PointerDownEvent event) {
+                            // 🚀 INSTANT KILL-SWITCH: The millisecond the user's thumb hits the map, 
+                            // kill the camera auto-tracking loop so they can pan freely.
+                            final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                            if (mapProvider.isAutoTracking) {
+                              mapProvider.setAutoTracking(false);
+                            }
+                          },
+                          child: MapLibreMap(
+                            key: const ValueKey('ridel_main_map'),
+                            styleString: _loadedMapStyle!,
                           minMaxZoomPreference:
                               const MinMaxZoomPreference(3.0, 18.5),
                           cameraTargetBounds: CameraTargetBounds(
@@ -581,9 +592,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             } catch (_) {}
 
                             try {
-                              final ByteData puckBytes = await rootBundle.load('assets/images/nav_puck.png');
-                              await safeAddImage('nav_puck', puckBytes.buffer.asUint8List());
-                            } catch (_) {}
+                              final ByteData bytes = await rootBundle.load('assets/images/nav_puck.png'); // Verify your asset path
+                              final Uint8List imageData = bytes.buffer.asUint8List();
+                              await controller.addImage('nav_puck', imageData);
+                              _addedImages.add('nav_puck');
+                              debugPrint("✅ Nav Puck Image successfully injected into MapLibre");
+                            } catch (e) {
+                              debugPrint("❌ Failed to load Nav Puck Image: $e");
+                            }
 
                             try {
                               final Uint8List transparentPixel =
@@ -830,6 +846,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 context,
                                 listen: false);
 
+                            // 🚀 STRICT GUARD CLAUSE: Prevent accidental pin drops during active routing
+                            if (mapProvider.isActiveNavigation || mapProvider.engine.mapUIState.value == MapUIState.navigating) {
+                              debugPrint("Map click ignored: Active navigation shield is ON.");
+                              return; 
+                            }
+
                             // 1. Break tracking immediately to avoid snap-back on pin drop
                             if (mapProvider.controller != null) {
                               await mapProvider.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
@@ -858,6 +880,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             final mapProvider = Provider.of<MapProvider>(
                                 context,
                                 listen: false);
+
+                            // 🚀 STRICT GUARD CLAUSE: Prevent accidental pin drops during active routing
+                            if (mapProvider.isActiveNavigation || mapProvider.engine.mapUIState.value == MapUIState.navigating) {
+                              debugPrint("Map long-click ignored: Active navigation shield is ON.");
+                              return; 
+                            }
 
                             // 🚀 Free the camera from blue dot
                             mapProvider.setAutoTracking(false);
@@ -977,6 +1005,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             }
                             _onCameraMove(position);
                           },
+                        ),
                         ),
                       );
                     },

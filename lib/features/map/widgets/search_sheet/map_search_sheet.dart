@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:provider/provider.dart';
@@ -1162,6 +1163,34 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     _locationPickerController.dispose();
     super.dispose();
   }
+  
+  Widget _buildGlassyBackground({
+    required bool isDark,
+    required Color sheetBgColor,
+    required BorderRadius premiumRadius,
+    required Color sheetBorderColor,
+    required Widget child,
+  }) {
+    final innerContainer = Container(
+      decoration: BoxDecoration(
+        color: sheetBgColor,
+        borderRadius: premiumRadius,
+        border: Border(top: BorderSide(color: sheetBorderColor, width: 1.0)),
+      ),
+      child: child,
+    );
+    
+    if (kIsWeb) {
+      return innerContainer;
+    } else {
+      return RepaintBoundary(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
+          child: innerContainer,
+        ),
+      );
+    }
+  }
 
   Widget _buildDynamicDragHandle(bool isDark) {
     return MouseRegion(
@@ -1197,7 +1226,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<MapProvider>(context);
+    final provider = Provider.of<MapProvider>(context, listen: false);
+    final isActiveNavigation = context.select<MapProvider, bool>((p) => p.isActiveNavigation);
     final screenSize = MediaQuery.sizeOf(context);
     final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final bool isKeyboardOpen = keyboardHeight > 0;
@@ -1214,7 +1244,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
     // Header height is computed inside the builder where progress is available
 
-    final isNav = provider.isActiveNavigation;
+    final isNav = isActiveNavigation;
     final navCollapsedHeight = 110.0 + MediaQuery.paddingOf(context).bottom;
     final navExpandedHeight = screenSize.height * 0.90;
 
@@ -1280,10 +1310,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           opacity: (isKeyboardOpen && widget.isMapTabActive) ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 300),
           child: (isKeyboardOpen && widget.isMapTabActive)
-              ? BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                  child: Container(color: Colors.black.withValues(alpha: 0.3)),
-                )
+              ? (kIsWeb
+                  ? Container(color: Colors.black.withValues(alpha: 0.85))
+                  : RepaintBoundary(
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                        child: Container(color: Colors.black.withValues(alpha: 0.3)),
+                      ),
+                    ))
               : const SizedBox.shrink(),
         ),
         Align(
@@ -1291,13 +1325,13 @@ class _MapSearchSheetState extends State<MapSearchSheet>
             child: AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOutQuart,
-                height: provider.isActiveNavigation
+                height: isActiveNavigation
                     ? null
                     : (isKeyboardOpen ? expandedHeight : defaultIdleHeight),
                 padding: EdgeInsets.zero,
                 child: SlideTransition(
                   position: _slideAnimation,
-                  child: provider.isActiveNavigation
+                  child: isActiveNavigation
                       ? _buildNavigationDashboardOverlay(isDark)
                       : NotificationListener<Notification>(
                           onNotification: (notification) {
@@ -1413,7 +1447,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                     final double currentSideMargin = lerpDouble(28.0, 0.0, morphFactor) ?? 28.0;
                                     final double currentBottomMargin = lerpDouble(44.0, 0.0, morphFactor) ?? 44.0;
                                     
-                                    final dynamicHeaderHeight = provider.isActiveNavigation
+                                    final dynamicHeaderHeight = isActiveNavigation
                                         ? (_isNavSheetExpanded ? navExpandedHeight - 40 : navCollapsedHeight)
                                         : (_showDirections ? 190.0 : (lerpDouble(70.0, 76.0, morphFactor) ?? 70.0));
 
@@ -1525,28 +1559,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                         // CRITICAL: MUST CLIP THE BLUR TO MATCH CORNERS
                                                         borderRadius:
                                                             premiumRadius,
-                                                        child: BackdropFilter(
-                                                          // CRITICAL: THE BLUR ITSELF
-                                                          filter:
-                                                              ImageFilter.blur(
-                                                                  sigmaX: 35.0,
-                                                                  sigmaY: 35.0),
-                                                          child: Container(
-                                                            // INNER CONTAINER: TRANSLUCENT COLOR & BORDER ONLY
-                                                            decoration:
-                                                                BoxDecoration(
-                                                              color:
-                                                                  sheetBgColor,
-                                                              borderRadius:
-                                                                  premiumRadius,
-                                                              border: Border(
-                                                                  top: BorderSide(
-                                                                      color:
-                                                                          sheetBorderColor,
-                                                                      width:
-                                                                          1.0)),
-                                                            ),
-                                                            child: Stack(
+                                                        child: _buildGlassyBackground(
+                                                          isDark: isDark,
+                                                          sheetBgColor: sheetBgColor,
+                                                          premiumRadius: premiumRadius,
+                                                          sheetBorderColor: sheetBorderColor,
+                                                          child: Stack(
                                                               children: [
                                                                 // Bottom Layer: Scrollable Content
                                                                 Positioned.fill(
@@ -1596,7 +1614,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                               AnimatedOpacity(
                                                                             duration:
                                                                                 const Duration(milliseconds: 150),
-                                                                            opacity: (!provider.isActiveNavigation && progress > 0.05)
+                                                                            opacity: (!isActiveNavigation && progress > 0.05)
                                                                                 ? 1.0
                                                                                 : 0.0,
                                                                             child: AnimatedSwitcher(
@@ -1613,7 +1631,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                                   ),
                                                                                 );
                                                                               },
-                                                                              child: (!provider.isActiveNavigation && progress > 0.05)
+                                                                              child: (!isActiveNavigation && progress > 0.05)
                                                                                   ? _buildSheetContent(isDark, progress, isExpanded: isKeyboardOpen)
                                                                                   : const SizedBox.shrink(),
                                                                             ),
@@ -1681,7 +1699,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                         ),
                                                       ),
                                                     ),
-                                                  ),
                                                   Positioned(
                                                     top: -7.5,
                                                     left: 0,

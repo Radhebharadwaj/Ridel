@@ -30,17 +30,19 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
 
   Widget _buildUnifiedExploreView(bool isDark, double progress,
       {bool isExpandedList = false}) {
-    final provider = Provider.of<MapProvider>(context);
+    final provider = context.read<MapProvider>();
+    final isAddingStopMode = provider.isAddingStopMode;
+    final isEditingHistory = provider.isEditingHistory;
     final iconColor = isDark ? Colors.white70 : Colors.black87;
     final isFocused = _searchFocus.hasFocus;
     final isEmpty = _searchCtrl.text.isEmpty;
     final isSelected = _selectedPlace != null;
 
-    final showTransportModes = isSelected && !provider.isAddingStopMode;
+    final showTransportModes = isSelected && !isAddingStopMode;
     final showQuickActions =
-        !isFocused && isEmpty && (!isSelected || provider.isAddingStopMode);
-    final showRecentSearches = (!isSelected || provider.isAddingStopMode) &&
-        (_isSearchExpanded || isFocused || provider.isEditingHistory) &&
+        !isFocused && isEmpty && (!isSelected || isAddingStopMode);
+    final showRecentSearches = (!isSelected || isAddingStopMode) &&
+        (_isSearchExpanded || isFocused || isEditingHistory) &&
         isEmpty;
 
 
@@ -1309,7 +1311,8 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
 
 
   Widget _buildRoutingDetailCard(bool isDark) {
-    final provider = Provider.of<MapProvider>(context);
+    final provider = context.read<MapProvider>();
+    final currentNavMode = provider.currentNavMode;
     final placeTitle = _selectedPlace?.name ?? 'Destination';
     final placeSubtitle = _selectedPlace?.address ?? '';
     
@@ -1385,7 +1388,7 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
               _buildGlassyTransportMode(context,
                 icon: Icons.directions_walk_rounded,
                 label: 'Walk',
-                isActive: provider.currentNavMode == 'walking',
+                isActive: currentNavMode == 'walking',
                 onTap: () {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'walking';
@@ -1394,7 +1397,7 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
               _buildGlassyTransportMode(context,
                 icon: Icons.two_wheeler_rounded,
                 label: 'Bike',
-                isActive: provider.currentNavMode == 'twowheeler',
+                isActive: currentNavMode == 'twowheeler',
                 onTap: () {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'twowheeler';
@@ -1403,7 +1406,7 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
               _buildGlassyTransportMode(context,
                 icon: CupertinoIcons.car_detailed,
                 label: 'Car',
-                isActive: provider.currentNavMode == 'driving',
+                isActive: currentNavMode == 'driving',
                 onTap: () {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'driving';
@@ -1412,7 +1415,7 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
               _buildGlassyTransportMode(context,
                 icon: Icons.local_shipping_rounded,
                 label: 'Heavy',
-                isActive: provider.currentNavMode == 'heavy',
+                isActive: currentNavMode == 'heavy',
                 onTap: () {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'heavy';
@@ -1495,7 +1498,8 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
 
   Widget _buildSheetContent(bool isDark, double progress,
       {bool isExpanded = false}) {
-    final provider = Provider.of<MapProvider>(context);
+    final provider = context.read<MapProvider>();
+    final isAddingStopMode = provider.isAddingStopMode;
     
     Widget contentView;
     if (_currentMode == SheetMode.routing || _showDirections) {
@@ -1522,7 +1526,7 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
     return Column(
       children: [
         contentView,
-        if (!provider.isAddingStopMode) _buildReportIssueFooter(isDark),
+        if (!isAddingStopMode) _buildReportIssueFooter(isDark),
       ],
     );
   }
