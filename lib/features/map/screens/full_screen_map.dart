@@ -23,9 +23,8 @@ import 'package:ridel/features/map/widgets/quick_action_buttons.dart';
 import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
 import 'package:geolocator/geolocator.dart';
 
-import 'package:ridel/features/profile/services/profile_repository.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:ridel/core/utils/toast_service.dart';
+import 'package:ridel/core/utils/location_guard.dart';
 import 'package:ridel/core/config/app_config.dart';
 import 'package:ridel/main.dart';
 class FullScreenMapPage extends StatefulWidget {
@@ -64,7 +63,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   bool _showPOIs = true;
 
-  Symbol? _heroSymbol;
+
 
   // 🚀 ADAPTIVE LOD CONTROLLER
   bool _isPerformanceMode = false;
@@ -337,96 +336,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     }
   }
 
-  void _showHeroBottomSheet(String name, LatLng coordinates) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final ctrl = Provider.of<MapProvider>(context, listen: false).controller ??
-        _tempController;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.2),
-      isScrollControlled: true,
-      builder: (context) {
-        return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Container(
-            padding: const EdgeInsets.all(24.0),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.black.withValues(alpha: 0.6)
-                  : Colors.white.withValues(alpha: 0.6),
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(24.0)),
-              border: Border(
-                  top: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.2), width: 1.0)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white30 : Colors.black26,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  name,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white : Colors.black87,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "Coordinates: ${coordinates.latitude.toStringAsFixed(4)}, ${coordinates.longitude.toStringAsFixed(4)}",
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? Colors.white54 : Colors.black54,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isDark ? Colors.white : Colors.black,
-                      foregroundColor: isDark ? Colors.black : Colors.white,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
-                      elevation: 0,
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text(
-                      'Search / Go',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ),
-                SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
-              ],
-            ),
-          ),
-        );
-      },
-    ).whenComplete(() {
-      if (ctrl != null && _heroSymbol != null) {
-        ctrl.removeSymbol(_heroSymbol!);
-        _heroSymbol = null;
-      }
-    });
-  }
-
   Future<void> _safeMoveCamera(LatLng target,
       {double? zoom, double? bearing, double? tilt, Duration? duration}) async {
     final mapController =
@@ -508,6 +417,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       debugPrint(
                           "🛠️ DEBUG INITIAL CAMERA: Lat:$safeLat, Lng:$safeLng");
 
+                      final bool showNativeBlueDot = context.select<MapProvider, bool>((p) => p.showNativeBlueDot);
+
                       return RepaintBoundary(
                         child: Listener(
                           behavior: HitTestBehavior.translucent,
@@ -522,6 +433,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           child: MapLibreMap(
                             key: const ValueKey('ridel_main_map'),
                             styleString: _loadedMapStyle!,
+                            myLocationEnabled: showNativeBlueDot,
+                            myLocationRenderMode: MyLocationRenderMode.normal, // 🚀 REMOVES UGLY GREY HALO/CONE
                           minMaxZoomPreference:
                               const MinMaxZoomPreference(3.0, 18.5),
                           cameraTargetBounds: CameraTargetBounds(
@@ -544,18 +457,20 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 listen: false);
                             mapProvider.engine.mapController = controller;
 
-                            // 🚀 One-time location fetch on map start
-                            Geolocator.getCurrentPosition(
-                                    locationSettings: const LocationSettings(
-                                        accuracy: LocationAccuracy.high))
-                                .then((pos) {
-                              final latLng =
-                                  LatLng(pos.latitude, pos.longitude);
+                            // Call proactive permission request and snap
+                            mapProvider.initializeMapAndPermissions();
+
+                            // 🚀 Use GlobalLocationService state instead of raw permission checks on mount
+                            final locService = Provider.of<GlobalLocationService>(
+                                context,
+                                listen: false);
+                            if (locService.currentPosition != null) {
+                              final latLng = LatLng(
+                                  locService.currentPosition!.latitude,
+                                  locService.currentPosition!.longitude);
                               controller.animateCamera(
                                   CameraUpdate.newLatLngZoom(latLng, 16.0));
-                            }).catchError((e) {
-                              debugPrint("Initial location error: $e");
-                            });
+                            }
                           },
                           onStyleLoadedCallback: () async {
                             final controller = _tempController;
@@ -892,62 +807,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             mapProvider.setUserPanning(true);
                             mapProvider.handleMapLongPress(coordinates);
 
-                            // 🚀 HERO POI INTERACTION
-                            final controller =
-                                mapProvider.controller ?? _tempController;
-                            if (controller != null && _showPOIs) {
-                              try {
-                                final features = await controller
-                                    .queryRenderedFeatures(point, [], null);
-                                Map? poi;
-                                for (var f in features) {
-                                  if (f is Map && f['properties'] != null) {
-                                    debugPrint(
-                                        'DEBUG TAPPED FEATURE PROPERTIES: ${f['properties']}');
-                                    if (f['properties']['name'] != null &&
-                                        f['geometry'] != null) {
-                                      poi ??=
-                                          f; // Store the first named feature but keep looping to print all
-                                    }
-                                  }
-                                }
-
-                                if (poi != null) {
-                                  final name =
-                                      poi['properties']['name'].toString();
-
-                                  AppHaptics.selectionClick();
-
-                                  // Remove old hero symbol if exists
-                                  if (_heroSymbol != null) {
-                                    await controller.removeSymbol(_heroSymbol!);
-                                  }
-
-                                  // Add enlarged Hero pin
-                                  _heroSymbol = await controller.addSymbol(
-                                    SymbolOptions(
-                                      geometry: coordinates,
-                                      iconImage: 'custom_pin',
-                                      iconSize: 1.5,
-                                      iconAnchor: 'bottom',
-                                      zIndex: 998,
-                                    ),
-                                  );
-
-                                  // Smoothly offset camera so sheet doesn't cover marker and zoom in
-                                  _safeMoveCamera(
-                                    LatLng(coordinates.latitude - 0.0025,
-                                        coordinates.longitude),
-                                    zoom: 16.5,
-                                  );
-
-                                  if (!mounted) return;
-                                  _showHeroBottomSheet(name, coordinates);
-                                }
-                              } catch (e) {
-                                debugPrint("POI Query error: $e");
-                              }
-                            }
                           },
                           initialCameraPosition: CameraPosition(
                               target: LatLng(safeLat, safeLng),
@@ -961,8 +820,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           zoomGesturesEnabled: true,
                           tiltGesturesEnabled: true,
 
-                          // 🚀 Dynamic Location Tracking Reverted
-                          myLocationEnabled: !context.select<MapProvider, bool>((p) => p.hideNativeBlueDot),
+                          // Removed duplicate myLocationEnabled
                           myLocationTrackingMode:
                               Provider.of<MapProvider>(context, listen: false)
                                       .isAutoTracking
@@ -970,8 +828,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                       ? MyLocationTrackingMode.tracking
                                       : MyLocationTrackingMode.trackingCompass)
                                   : MyLocationTrackingMode.none,
-                          trackCameraPosition: true,
-                          myLocationRenderMode: MyLocationRenderMode.normal,
+                          trackCameraPosition: false,
 
                           logoViewMargins: const Point(-5000, -5000),
                           attributionButtonMargins: const Point(-5000, -5000),
@@ -1503,13 +1360,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   Future<void> _handleLocateMeTapped(MapProvider mapProvider) async {
     debugPrint("🎯 [DEBUG] Locate Me button clicked!");
 
-    bool isGranted = await Permission.location.isGranted;
-    if (ProfileRepository.userCity.value == 'Location Disabled' || !isGranted) {
-      if (mounted) {
-        ToastService.showError(context, "Location permission is required.");
-      }
-      return;
-    }
+    // Use centralized LocationGuard for standard permission checking
+    bool hasPermission = await LocationGuard.checkAndRequestLocation(context);
+    if (!hasPermission) return;
 
     try {
       // 🚨 CRITICAL: Append .timeout to prevent infinite browser deadlock

@@ -59,7 +59,11 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     return;
   }
 
-  await Firebase.initializeApp();
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint("❌ Background Firebase Init Error: $e");
+  }
   final prefs = await SharedPreferences.getInstance();
   String? userName = prefs.getString('user_first_name');
 
@@ -122,8 +126,17 @@ Future<void> main() async {
       return true; 
     };
 
-    ThemeService.init();
-    await AppHaptics.init();
+    try {
+      ThemeService.init();
+    } catch (e) {
+      debugPrint("❌ ThemeService Error: $e");
+    }
+    
+    try {
+      await AppHaptics.init();
+    } catch (e) {
+      debugPrint("❌ AppHaptics Error: $e");
+    }
 
     bool isLoggedIn = false;
     // 1. Core Backend Initialization
@@ -136,8 +149,17 @@ Future<void> main() async {
       final supabaseClient = Supabase.instance.client;
       if (supabaseClient.auth.currentSession != null) {
         isLoggedIn = true;
-        DatabaseHelper.instance.initBackgroundSync();
-        AuthService().setupAndSaveDeviceToken();
+        try {
+          DatabaseHelper.instance.initBackgroundSync();
+        } catch (e) {
+          debugPrint("❌ DatabaseHelper Sync Error: $e");
+        }
+        
+        try {
+          AuthService().setupAndSaveDeviceToken();
+        } catch (e) {
+          debugPrint("❌ AuthService Token Error: $e");
+        }
         
         try {
           await AppConfig.fetchKeys();
@@ -160,7 +182,11 @@ Future<void> main() async {
     }
 
     // 2. Services that depend on Supabase being initialized
-    MetroService().initialize();
+    try {
+      MetroService().initialize();
+    } catch (e) {
+      debugPrint("❌ MetroService Error: $e");
+    }
 
     // 3. Firebase & Notifications
     try {
@@ -184,7 +210,12 @@ Future<void> main() async {
     } catch (e) {
       debugPrint("❌ Firebase Error: $e");
     }
-    await NotificationService().init();
+    
+    try {
+      await NotificationService().init();
+    } catch (e) {
+      debugPrint("❌ NotificationService Error: $e");
+    }
 
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(

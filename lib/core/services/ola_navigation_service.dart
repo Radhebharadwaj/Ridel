@@ -4,7 +4,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 class OlaNavigationService {
   // 🚀 THE BRIDGE: Ye same naam hum Android me use karenge
-  static const MethodChannel _channel = MethodChannel('com.ridel/ola_nav');
+  static const MethodChannel _channel = MethodChannel('in.ridel/ola_nav');
 
   // 🔥 3D Navigation Start karne ka command
   static Future<void> startNavigation({

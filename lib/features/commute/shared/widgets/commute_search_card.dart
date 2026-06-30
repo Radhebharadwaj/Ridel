@@ -11,6 +11,7 @@ import 'package:ridel/core/services/universal_mic_button.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/app_shadows.dart'; // 🚀 Added for premium shadows
 import 'package:ridel/core/utils/toast_service.dart';
+import 'package:ridel/core/utils/location_guard.dart';
 import 'package:ridel/core/widgets/ridel_sheet.dart';
 import 'package:ridel/features/commute/bus/services/bus_service.dart';
 import 'package:ridel/features/commute/metro/services/metro_service.dart';
@@ -485,22 +486,16 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
     AppHaptics.heavyImpact();
     setState(() => _fromCtrl.text = "Locating...");
 
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-        setState(() => _fromCtrl.text = "");
-        if (mounted) {
-          ToastService.showError(context, "Location permission is required.");
-        }
-        return;
-      }
+    bool hasPermission = await LocationGuard.checkAndRequestLocation(context);
+    if (!hasPermission) {
+      setState(() => _fromCtrl.text = "");
+      return;
     }
 
     if (!mounted) return;
     final locService =
         Provider.of<GlobalLocationService>(context, listen: false);
-
+        
     await locService.initializeEcoLocation(isManualTrigger: true);
     
     // 🚨 CRITICAL FIX: Recalculate the distances with the new fresh GPS coordinates!

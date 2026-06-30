@@ -23,37 +23,51 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future.delayed(
         const Duration(milliseconds: 1000)); // Slightly increased for animation
 
-    final session = Supabase.instance.client.auth.currentSession;
+    try {
+      // Use a Future with timeout in case of hanging async auth states, 
+      // and catch synchronous exceptions if Supabase isn't initialized.
+      final session = await Future.microtask(() => Supabase.instance.client.auth.currentSession)
+          .timeout(const Duration(seconds: 3));
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (session != null) {
-      // 🚀 Clean call to unified Token Manager
-      AuthService().setupAndSaveDeviceToken();
-      Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                const MainLayout(),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            transitionDuration: const Duration(milliseconds: 500),
-          ));
-    } else {
-      Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                const LoginScreen(),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            transitionDuration: const Duration(milliseconds: 500),
-          ));
+      if (session != null) {
+        // 🚀 Clean call to unified Token Manager
+        AuthService().setupAndSaveDeviceToken();
+        Navigator.pushReplacement(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  const MainLayout(),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                return FadeTransition(opacity: animation, child: child);
+              },
+              transitionDuration: const Duration(milliseconds: 500),
+            ));
+      } else {
+        _navigateToLogin();
+      }
+    } catch (e) {
+      debugPrint("❌ Splash Screen Auth Check Failed or Timed Out: $e");
+      if (mounted) {
+        _navigateToLogin();
+      }
     }
+  }
+
+  void _navigateToLogin() {
+    Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              const LoginScreen(),
+          transitionsBuilder:
+              (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 500),
+        ));
   }
 
   @override

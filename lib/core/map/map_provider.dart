@@ -30,6 +30,9 @@ class MapProvider extends ChangeNotifier {
   final RouteEngineService _routingService = RouteEngineService();
   int _routingSessionCounter = 0;
 
+  // 🚀 DYNAMIC DPI SCALER: Leaves Web untouched, boosts Mobile by 2x-2.5x
+  double get mapItemScale => kIsWeb ? 1.0 : 2.5; 
+
   // Multi-stop tracking
   List<PlaceModel> intermediateStops = [];
 
@@ -132,6 +135,52 @@ class MapProvider extends ChangeNotifier {
     // Yahan notifyListeners() mat lagana warna map lag karega
   }
 
+  Future<void> initializeMapAndPermissions() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return; // Prompt user to turn on GPS
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    
+    // PROACTIVE REQUEST ON FIRST LAUNCH
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    // INSTANT SNAP IF GRANTED
+    if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+      await _enableBlueDotAndSnapToUser(); 
+    }
+  }
+
+  Future<void> _enableBlueDotAndSnapToUser() async {
+    if (controller == null) return;
+
+    // 1. Turn on Native Blue Dot
+    try {
+      await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+    } catch (_) {}
+    
+    // 2. Fetch current position instantly (low accuracy for speed)
+    try {
+      Position pos = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium));
+      
+      // 3. Fly the camera to the user instantly
+      await controller!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(pos.latitude, pos.longitude),
+            zoom: 15.0,
+          )
+        )
+      );
+      
+      // 4. Start the high-accuracy background stream now
+      engine.locService?.startLiveTracking(); 
+    } catch (e) {
+      debugPrint("Could not fetch instant location: $e");
+    }
+  }
+
   // 2. Screen par user hai ya nahi, uski state
   bool _isUserVisibleOnScreen = true;
   bool get isUserVisibleOnScreen => _isUserVisibleOnScreen;
@@ -202,7 +251,6 @@ class MapProvider extends ChangeNotifier {
   Future<void> updatePuckVisibility() async {
     await _updatePuckGeoJson(
         _lastPuckLocation, _lastPuckBearing, customPuckOpacity);
-    notifyListeners();
   }
 
 
@@ -1118,7 +1166,7 @@ class MapProvider extends ChangeNotifier {
               iconImage: imageId.isNotEmpty
                   ? imageId
                   : 'custom-marker', // Fallback added
-              iconSize: 0.32,
+              iconSize: 0.32 * mapItemScale,
               iconAnchor: "center", // Centered perfectly on the route line
               symbolSortKey: i,
               symbolPlacement: "point",
@@ -1167,9 +1215,9 @@ class MapProvider extends ChangeNotifier {
         await controller!.addSymbolLayer(
           'ultimate-pin-source',
           'ultimate-pin-layer',
-          const SymbolLayerProperties(
+          SymbolLayerProperties(
             iconImage: 'custom_pin',
-            iconSize: 1.0,
+            iconSize: 1.0 * mapItemScale,
             iconAnchor: 'bottom',
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
@@ -1209,9 +1257,9 @@ class MapProvider extends ChangeNotifier {
         await controller!.addSymbolLayer(
           'intermediate-pins-source',
           'intermediate-pins-layer',
-          const SymbolLayerProperties(
+          SymbolLayerProperties(
             iconImage: 'intermediate_pin',
-            iconSize: 1.0,
+            iconSize: 1.0 * mapItemScale,
             iconAnchor: 'bottom',
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
@@ -1241,12 +1289,12 @@ class MapProvider extends ChangeNotifier {
         await controller!.addSymbolLayer(
           "nav_puck_source", 
           "nav_puck_layer",
-          const SymbolLayerProperties(
+          SymbolLayerProperties(
             iconImage: 'nav_puck',
-            iconSize: 0.35, // 🚀 REVERTED TO PERFECT SIZE
+            iconSize: 0.35 * mapItemScale, // 🚀 REVERTED TO PERFECT SIZE
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
-            iconRotate: ['get', 'rotation'], 
+            iconRotate: const ['get', 'rotation'], 
             iconRotationAlignment: 'map', // MUST BE MAP
             iconPitchAlignment: 'map',    // Keeps it stable in 3D
           ),
@@ -1750,6 +1798,8 @@ class MapProvider extends ChangeNotifier {
         ),
       ).listen((pos) {
         engine.navigation.processLocationUpdate(pos);
+      }, onError: (error) {
+        debugPrint("📍 [DEBUG] Map Provider GPS stream lost or glitched: $error");
       });
 
       AppHaptics.success();
@@ -1770,17 +1820,24 @@ class MapProvider extends ChangeNotifier {
       if (engine.isFullyBooted &&
           _locServiceSub == null &&
           engine.locService != null) {
+        DateTime? lastMapUpdate;
         _locServiceSub = engine.locService!.engineLocationStream.listen((pos) {
-          if (!isActiveNavigation && engine.mapUIState.value == MapUIState.idle) {
-            // If the stream fires while navigation is off, mercilessly kill the layer again.
-            controller?.removeLayer("nav_puck_layer").catchError((_) {});
-            return; // 🚀 ABORT: Do not update puck logic!
-          }
+          final now = DateTime.now();
+          // 🚀 ONLY UPDATE ENGINE AT MAX 30 FPS (Every ~33ms)
+          if (lastMapUpdate == null || now.difference(lastMapUpdate!).inMilliseconds > 33) {
+            lastMapUpdate = now;
+            
+            if (!isActiveNavigation && engine.mapUIState.value == MapUIState.idle) {
+              // If the stream fires while navigation is off, mercilessly kill the layer again.
+              controller?.removeLayer("nav_puck_layer").catchError((_) {});
+              return; // 🚀 ABORT: Do not update puck logic!
+            }
 
-          if (engine.mapUIState.value == MapUIState.navigating ||
-              engine.mapUIState.value == MapUIState.routeDrawn) {
-            updateNavigationPuck(
-                LatLng(pos.latitude, pos.longitude), pos.heading);
+            if (engine.mapUIState.value == MapUIState.navigating ||
+                engine.mapUIState.value == MapUIState.routeDrawn) {
+              updateNavigationPuck(
+                  LatLng(pos.latitude, pos.longitude), pos.heading);
+            }
           }
         });
       }
@@ -1961,7 +2018,7 @@ class MapProvider extends ChangeNotifier {
         SymbolOptions(
           geometry: latLng,
           iconImage: 'custom_pin',
-          iconSize: 1.0,
+          iconSize: 1.0 * mapItemScale,
           iconAnchor: 'bottom',
           iconRotate: 15.0, // Head tilted right
           zIndex: 998,
@@ -2369,13 +2426,13 @@ class MapProvider extends ChangeNotifier {
       await controller?.addSymbolLayer(
         'nearby-stops-source',
         'nearby-stops-layer',
-        const SymbolLayerProperties(
-          iconImage: ['get', 'icon'],
-          iconSize: 1.2,
+        SymbolLayerProperties(
+          iconImage: const ['get', 'icon'],
+          iconSize: 1.2 * mapItemScale,
           iconAllowOverlap: true,
-          textField: ['get', 'name'],
-          textSize: 12.0,
-          textOffset: [0, 1.5],
+          textField: const ['get', 'name'],
+          textSize: 12.0 * mapItemScale,
+          textOffset: const [0, 1.5],
           textColor: '#FFFFFF',
           textHaloColor: '#000000',
           textHaloWidth: 1.0,
@@ -2495,6 +2552,8 @@ class MapProvider extends ChangeNotifier {
           ),
         ).listen((pos) {
           engine.navigation.processLocationUpdate(pos);
+        }, onError: (error) {
+          debugPrint("📍 [DEBUG] Map Provider GPS stream lost or glitched: $error");
         });
 
         double minLat = math.min(currentLoc.latitude, stationLoc.latitude);
@@ -2715,7 +2774,7 @@ class MapProvider extends ChangeNotifier {
           SymbolOptions(
             geometry: target,
             iconImage: 'custom_pin',
-            iconSize: 1.0,
+            iconSize: 1.0 * mapItemScale,
             iconAnchor: 'bottom',
             iconRotate: 15.0, // Head tilted right
             zIndex: 998,

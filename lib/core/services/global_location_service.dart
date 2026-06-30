@@ -577,6 +577,8 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 3),
     ).listen((Position position) {
       _updatePositionAndSpeed(position);
+    }, onError: (error) {
+      debugPrint("📍 [DEBUG] GPS stream lost or glitched: $error");
     });
 
     if (!kIsWeb) {

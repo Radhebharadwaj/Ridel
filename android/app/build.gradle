@@ -18,7 +18,7 @@ android {
             dirs 'libs'
         }
     }
-    namespace "com.ridel"
+    namespace "in.ridel"
     
     // Flutter Extension properties ko direct access
     compileSdkVersion flutter.compileSdkVersion.toInteger()
@@ -35,7 +35,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.ridel"
+        applicationId "in.ridel"
         minSdkVersion flutter.minSdkVersion // 🚀 Fixed for Firebase & OLA SDK
         targetSdkVersion flutter.targetSdkVersion.toInteger()
         versionCode flutterVersionCode

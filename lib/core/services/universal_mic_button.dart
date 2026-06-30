@@ -28,11 +28,6 @@ class _UniversalMicButtonState extends State<UniversalMicButton> {
   @override
   void initState() {
     super.initState();
-    try {
-      SpeechService().init();
-    } catch (e) {
-      debugPrint("Mic Init Warning: $e");
-    }
   }
 
   void _toggleListening() async {

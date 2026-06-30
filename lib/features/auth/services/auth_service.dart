@@ -26,7 +26,7 @@ class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
   static const String _webClientId =
-      '141150485050-tb6is1kksj7j433hfrkho9aq4hh7bo98.apps.googleusercontent.com';
+      '1081269756368-kq5v96gjj5ses13ogtq5ea707diajrf3.apps.googleusercontent.com';
 
   final List<String> _blockedDomains = [
     'tempmail.com',
@@ -125,7 +125,6 @@ class AuthService {
     try {
       if (kIsWeb) {
         // 🚀 PERFECT FIX: Ensure path is exactly matching the wildcard
-        // Agar Uri.base.origin 'https://ridel.pages.dev' hai, toh usko exact slash ('/') ke sath append karo, taaki dashboard ke '/* ' wildcard se match kare.
         final String redirectUrl = Uri.base.origin.endsWith('/')
             ? Uri.base.origin
             : '${Uri.base.origin}/';
@@ -135,10 +134,11 @@ class AuthService {
             .signInWithOAuth(OAuthProvider.google, redirectTo: redirectUrl);
         return AuthResult(isSuccess: true);
       } else {
+        // 1. Initialize GoogleSignIn with the serverClientId
         final googleSignIn = GoogleSignIn.instance;
         await googleSignIn.initialize(serverClientId: _webClientId);
 
-        // 🚀 FIX: Warning hatayi aur exact wahi logic lagaya jo aapka pehle chal raha tha
+        // 2. Perform the sign-in flow
         final googleUser = await googleSignIn.authenticate();
 
         if (_isTempMail(googleUser.email)) {
@@ -148,16 +148,25 @@ class AuthService {
               errorMessage: 'Use your genuine Google account.');
         }
 
-        final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+        // 3. Capture both idToken and accessToken
+        final googleAuth = googleUser.authentication;
         final String? idToken = googleAuth.idToken;
 
         final clientAuth = await googleUser.authorizationClient
             .authorizeScopes(['email', 'profile']);
         final String accessToken = clientAuth.accessToken;
 
+        if (idToken == null || accessToken.isEmpty) {
+          debugPrint('❌ Google Auth Error: Missing ID Token or Access Token');
+          return AuthResult(
+              isSuccess: false,
+              errorMessage: 'Failed to retrieve Google authentication tokens.');
+        }
+
+        // 4. Authenticate with Supabase using both tokens
         final response = await _supabase.auth.signInWithIdToken(
             provider: OAuthProvider.google,
-            idToken: idToken!,
+            idToken: idToken,
             accessToken: accessToken);
 
         bool isNew = false;
@@ -171,6 +180,7 @@ class AuthService {
         return AuthResult(isSuccess: true, isNewUser: isNew);
       }
     } catch (e) {
+      debugPrint("❌ signInWithGoogle Exception: $e");
       return AuthResult(
           isSuccess: false, errorMessage: _translatePremiumError(e));
     }
