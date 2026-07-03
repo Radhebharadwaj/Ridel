@@ -485,8 +485,13 @@ class MapProvider extends ChangeNotifier {
       _setLoading(false);
       final context = ToastService.navigatorKey.currentContext;
       if (context != null && context.mounted) {
-        ToastService.showError(
-            context, "Network is slow. Route failed.");
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Route unavailable for this distance/mode."),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.redAccent,
+          ),
+        );
       }
       return;
     } finally {
@@ -1528,7 +1533,7 @@ class MapProvider extends ChangeNotifier {
     targetDestination = null;
     targetLocation = null;
     isCinematicSearch = false;
-    _tappedPlaceFromMap = null;
+    _activeDestination = null;
     _isDestinationSelected = false;
     isActiveNavigation = false;
     engine.setUIState(MapUIState.idle);
@@ -1595,8 +1600,8 @@ class MapProvider extends ChangeNotifier {
   String? currentRouteDistance;
   String? currentRouteETA;
 
-  PlaceModel? _tappedPlaceFromMap;
-  PlaceModel? get tappedPlaceFromMap => _tappedPlaceFromMap;
+  PlaceModel? _activeDestination;
+  PlaceModel? get activeDestination => _activeDestination;
 
   LatLng? _currentMapCenter;
   LatLng? get currentMapCenter => _currentMapCenter;
@@ -1955,14 +1960,14 @@ class MapProvider extends ChangeNotifier {
   ValueNotifier<MapUIState> get mapUIState => engine.mapUIState;
   MapUIState get currentUIState => engine.mapUIState.value;
 
-  void setTappedPlace(PlaceModel place) {
-    _tappedPlaceFromMap = place;
+  void setActiveDestination(PlaceModel place) {
+    _activeDestination = place;
     setDestinationSelected(true);
     notifyListeners();
   }
 
-  void clearTappedPlace() {
-    _tappedPlaceFromMap = null;
+  void clearActiveDestination() {
+    _activeDestination = null;
     notifyListeners();
   }
 
@@ -1985,19 +1990,25 @@ class MapProvider extends ChangeNotifier {
     // Set placeholder immediately to avoid blocking UI
     final temporaryPlace = PlaceModel(
       placeId: 'temp_${latLng.latitude}_${latLng.longitude}',
-      name: 'Fetching address...',
-      address: 'Please wait',
+      name: 'Dropped Pin',
+      address: '${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}',
       latitude: latLng.latitude,
       longitude: latLng.longitude,
       categories: const [],
     );
 
-    _tappedPlaceFromMap = temporaryPlace;
-    _isDestinationSelected = true;
+    // 🚀 FIX: Use the SAME unified setter as the Search flow to guarantee
+    // consistent notifyListeners() propagation and FAB state morphing.
+    setActiveDestination(temporaryPlace);
+
+    // Hydrate global destination coordinates for routing and MapControlsPill
+    targetLocation = latLng;
     targetDestination = latLng;
+
+    // Transition UI state machine to "placeSelected" (drives QuickActionButtons + MapControlsPill morphing)
     engine.setUIState(MapUIState.placeSelected);
 
-    // 1. Trigger Bottom Sheet UI Rebuild FIRST
+    // Single consolidated notification for all state changes above
     notifyListeners();
 
     // 3. Execute the flight to the PIN coordinates (tappedCoordinates), NOT user location instantly!
@@ -2060,7 +2071,7 @@ class MapProvider extends ChangeNotifier {
               latLng.longitude,
             )
             .timeout(const Duration(seconds: 8));
-        setTappedPlace(place);
+        setActiveDestination(place);
         saveNewSearch(place);
 
         final locService = engine.locService;
@@ -2102,7 +2113,7 @@ class MapProvider extends ChangeNotifier {
           longitude: latLng.longitude,
           categories: const [],
         );
-        setTappedPlace(fallback);
+        setActiveDestination(fallback);
       }
     });
   }
@@ -2126,7 +2137,7 @@ class MapProvider extends ChangeNotifier {
       await clearNativeDestinationPin();
     }
 
-    clearTappedPlace();
+    clearActiveDestination();
 
     // 🧭 State Machine: Full reset to idle
     await engine.resetUIState();
@@ -2151,10 +2162,10 @@ class MapProvider extends ChangeNotifier {
 
     // 🧠 SMART DESTINATION LOGIC: Check both Tapped Places AND Search Targets
     LatLng? destinationCoords;
-    if (tappedPlaceFromMap != null) {
+    if (activeDestination != null) {
       destinationCoords = LatLng(
-        tappedPlaceFromMap!.latitude,
-        tappedPlaceFromMap!.longitude,
+        activeDestination!.latitude,
+        activeDestination!.longitude,
       );
       debugPrint("📍 Using Tapped Place as destination: $destinationCoords");
     } else if (targetLocation != null) {
@@ -2225,6 +2236,15 @@ class MapProvider extends ChangeNotifier {
       debugPrint("❌ Exception in Calculate Route: $e");
       _lastError = "An error occurred while routing.";
       AppHaptics.error();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Route unavailable for this distance/mode."),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     } finally {
       _setLoading(false);
       notifyListeners();

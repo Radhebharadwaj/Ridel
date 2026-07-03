@@ -10,6 +10,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:ridel/core/widgets/app_header.dart';
 import 'package:ridel/main.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:ridel/core/services/global_location_service.dart';
+import 'package:ridel/features/commute/metro/map/metro_data_provider.dart';
 
 // 🚀 Naye Imports Welcome Flow ke liye
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -50,7 +53,33 @@ class _MainLayoutState extends State<MainLayout> {
     // 🚀 MASTER WELCOME FLOW TRIGGER
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _handleWelcomeFlow();
+      _checkAndTriggerColdBootLocation();
+      
+      // 🚀 TASK 3: Eager Pre-fetching (The Flash Speed Trick)
+      final locService = Provider.of<GlobalLocationService>(context, listen: false);
+      locService.addListener(_onLocationUpdated);
     });
+  }
+
+  void _onLocationUpdated() {
+    if (!mounted) return;
+    final locService = Provider.of<GlobalLocationService>(context, listen: false);
+    if (locService.currentPosition != null) {
+      // Silently trigger the fetch in background
+      Provider.of<MetroDataProvider>(context, listen: false).fetchMapData();
+      locService.removeListener(_onLocationUpdated);
+    }
+  }
+
+  // 🚀 TASK 2: COLD-BOOT HOOK
+  Future<void> _checkAndTriggerColdBootLocation() async {
+    final permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+      if (mounted) {
+        // Automatically trigger detection without asking user again
+        Provider.of<GlobalLocationService>(context, listen: false).autoDetectAndSetRegion();
+      }
+    }
   }
 
   // ==========================================================

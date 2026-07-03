@@ -487,31 +487,27 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                                 ? Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Shimmer.fromColors(
-                                        baseColor: isLightMode ? Colors.black12 : Colors.white.withValues(alpha: 0.1),
-                                        highlightColor: isLightMode ? Colors.black26 : Colors.white.withValues(alpha: 0.2),
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Container(
-                                              height: 20,
-                                              width: 30,
-                                              decoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(8),
-                                                color: Colors.white,
-                                              ),
+                                      Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Container(
+                                            height: 20,
+                                            width: 30,
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(8),
+                                              color: isLightMode ? Colors.black12 : Colors.white.withValues(alpha: 0.1),
                                             ),
-                                            const SizedBox(height: 6),
-                                            Container(
-                                              height: 10,
-                                              width: 45,
-                                              decoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(4),
-                                                color: Colors.white,
-                                              ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Container(
+                                            height: 10,
+                                            width: 45,
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(4),
+                                              color: isLightMode ? Colors.black12 : Colors.white.withValues(alpha: 0.1),
                                             ),
-                                          ],
-                                        ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   )

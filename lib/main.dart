@@ -105,7 +105,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 // 🚀 MAIN FUNCTION
 // ----------------------------------------------------------------------
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized(); // 🚀 MUST BE LINE 1
 
   try {
     await dotenv.load(fileName: ".env");
@@ -114,6 +113,7 @@ Future<void> main() async {
   }
 
   runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized(); // 🚀 MUST BE LINE 1
     FlutterNativeSplash.preserve(widgetsBinding: WidgetsBinding.instance);
 
     FlutterError.onError = (FlutterErrorDetails details) {
@@ -150,7 +150,7 @@ Future<void> main() async {
       if (supabaseClient.auth.currentSession != null) {
         isLoggedIn = true;
         try {
-          DatabaseHelper.instance.initBackgroundSync();
+          unawaited(DatabaseHelper.instance.initBackgroundSync());
         } catch (e) {
           debugPrint("❌ DatabaseHelper Sync Error: $e");
         }
@@ -162,7 +162,7 @@ Future<void> main() async {
         }
         
         try {
-          await AppConfig.fetchKeys();
+          unawaited(AppConfig.fetchKeys());
         } catch (e) {
           debugPrint("❌ Key Fetch Error: $e");
         }
@@ -171,7 +171,7 @@ Future<void> main() async {
       supabaseClient.auth.onAuthStateChange.listen((data) async {
         if (data.event == AuthChangeEvent.signedIn) {
           try {
-            await AppConfig.fetchKeys();
+            unawaited(AppConfig.fetchKeys());
           } catch (e) {
             debugPrint("❌ Key Fetch Error on Login: $e");
           }
@@ -188,34 +188,31 @@ Future<void> main() async {
       debugPrint("❌ MetroService Error: $e");
     }
 
-    // 3. Firebase & Notifications
-    try {
-      if (kIsWeb) {
-        await Firebase.initializeApp(
-          options: const FirebaseOptions(
-            apiKey: "AIzaSyCylXea35MHpJ4SlcODDAgB5wj6h5SgnzY",
-            authDomain: "pixra-ridel.firebaseapp.com",
-            projectId: "pixra-ridel",
-            storageBucket: "pixra-ridel.firebasestorage.app",
-            messagingSenderId: "20390923828",
-            appId: "1:20390923828:web:8206196e9cfd1b16790461",
-            measurementId: "G-NK274DS7S2",
-          ),
-        );
-      } else {
-        await Firebase.initializeApp();
-        FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    // 3. Defer Heavy Services to Unawaited Tasks
+    unawaited(Future(() async {
+      try {
+        if (kIsWeb) {
+          await Firebase.initializeApp(
+            options: const FirebaseOptions(
+              apiKey: "AIzaSyCylXea35MHpJ4SlcODDAgB5wj6h5SgnzY",
+              authDomain: "pixra-ridel.firebaseapp.com",
+              projectId: "pixra-ridel",
+              storageBucket: "pixra-ridel.firebasestorage.app",
+              messagingSenderId: "20390923828",
+              appId: "1:20390923828:web:8206196e9cfd1b16790461",
+              measurementId: "G-NK274DS7S2",
+            ),
+          );
+        } else {
+          await Firebase.initializeApp();
+          FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+        }
+        await NotificationService().init();
+        debugPrint("🔥 Firebase & Notifications Ready!");
+      } catch (e) {
+        debugPrint("❌ Firebase Error: $e");
       }
-      debugPrint("🔥 Firebase Ready!");
-    } catch (e) {
-      debugPrint("❌ Firebase Error: $e");
-    }
-    
-    try {
-      await NotificationService().init();
-    } catch (e) {
-      debugPrint("❌ NotificationService Error: $e");
-    }
+    }));
 
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -231,7 +228,7 @@ Future<void> main() async {
           ChangeNotifierProvider(create: (_) => MapProvider()),
           ChangeNotifierProvider(create: (_) => MetroDataProvider()),
           ChangeNotifierProvider(
-              create: (_) => GlobalLocationService()..initializeEcoLocation()),
+              create: (_) => GlobalLocationService()..autoDetectAndSetRegion()),
           ChangeNotifierProvider(create: (_) => AppNavigationProvider()),
           ChangeNotifierProvider(
               create: (_) => NotificationProvider(), lazy: false),

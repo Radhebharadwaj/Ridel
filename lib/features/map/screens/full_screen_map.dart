@@ -22,6 +22,7 @@ import 'package:ridel/features/map/widgets/weather_floating_widget.dart';
 import 'package:ridel/features/map/widgets/quick_action_buttons.dart';
 import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:ridel/core/services/weather_service.dart'; // 🚀 NEW
 
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/core/utils/location_guard.dart';
@@ -67,6 +68,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   // 🚀 ADAPTIVE LOD CONTROLLER
   bool _isPerformanceMode = false;
+
+  // 🚀 WEB GESTURE SHIELDS
+  DateTime _lastTapTime = DateTime.now();
+  Timer? _webLongPressTimer;
 
   void _togglePerformanceMode(bool enable) {
     if (!mounted || _tempController == null || _isPerformanceMode == enable) {
@@ -237,6 +242,16 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     );
 
     widget.searchSheetProgressNotifier.addListener(_onProgressChanged);
+
+    // 🚀 NEW: Eager Weather Fetch in microtask
+    Future.microtask(() async {
+      try {
+        final pos = await Geolocator.getLastKnownPosition();
+        if (pos != null) {
+          WeatherService.getWeather(pos.latitude, pos.longitude);
+        }
+      } catch (_) {}
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeApp();
@@ -423,13 +438,37 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         child: Listener(
                           behavior: HitTestBehavior.translucent,
                           onPointerDown: (PointerDownEvent event) {
-                            // 🚀 INSTANT KILL-SWITCH: The millisecond the user's thumb hits the map, 
-                            // kill the camera auto-tracking loop so they can pan freely.
+                            // 🚀 INSTANT KILL-SWITCH
                             final mapProvider = Provider.of<MapProvider>(context, listen: false);
                             if (mapProvider.isAutoTracking) {
                               mapProvider.setAutoTracking(false);
                             }
+                            
+                            // 🚀 TASK 2: SYNTHETIC WEB LONG-PRESS
+                            if (kIsWeb) {
+                              _webLongPressTimer?.cancel();
+                              _webLongPressTimer = Timer(const Duration(milliseconds: 500), () async {
+                                if (!mounted || mapProvider.controller == null) return;
+                                
+                                if (mapProvider.isActiveNavigation || mapProvider.engine.mapUIState.value == MapUIState.navigating) {
+                                  debugPrint("Web simulated long-click ignored: Active navigation shield is ON.");
+                                  return; 
+                                }
+
+                                LatLng point = await mapProvider.controller!.toLatLng(Point(event.localPosition.dx, event.localPosition.dy));
+                                mapProvider.setAutoTracking(false);
+                                mapProvider.setUserPanning(true);
+                                if (mapProvider.mapSelectionPlaceType != null) {
+                                  mapProvider.setTargetDestination(point);
+                                  mapProvider.addNativeDestinationPin(point);
+                                } else {
+                                  mapProvider.handleMapLongPress(point);
+                                }
+                              });
+                            }
                           },
+                          onPointerUp: (_) => _webLongPressTimer?.cancel(),
+                          onPointerMove: (_) => _webLongPressTimer?.cancel(),
                           child: MapLibreMap(
                             key: const ValueKey('ridel_main_map'),
                             styleString: _loadedMapStyle!,
@@ -756,6 +795,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             // Intentionally removed _isMapFullyLoaded setState
                           },
                           onMapClick: (point, latLng) async {
+                            _lastTapTime = DateTime.now(); // 🚀 TASK 1: UPDATE DEBOUNCER
                             FocusScope.of(context).unfocus();
                             final mapProvider = Provider.of<MapProvider>(
                                 context,
@@ -772,15 +812,21 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               await mapProvider.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
                             }
 
-                            if (mapProvider.mapSelectionPlaceType != null) {
-                              mapProvider.setTargetDestination(latLng);
-                              mapProvider.addNativeDestinationPin(latLng);
-                              // If you have _showConfirmationDialog in this file, keep it, otherwise ignore
-                              return;
-                            }
+                            // PIN DROP LOGIC MOVED EXCLUSIVELY TO onMapLongClick
 
                             if (mapProvider.isFlying) {
                               mapProvider.stopCameraFlight();
+                              return;
+                            }
+
+                            // 🚀 FIX: Guard against clearing destination state when a place/route is active.
+                            // On web, onMapClick fires AFTER the synthetic long-press timer,
+                            // which would nuke the targetDestination just set by the pin-drop flow.
+                            final currentUIState = mapProvider.engine.mapUIState.value;
+                            if (currentUIState == MapUIState.placeSelected ||
+                                currentUIState == MapUIState.routeDrawn ||
+                                mapProvider.isDestinationSelected) {
+                              debugPrint("Map click ignored: Destination is already selected (UIState: $currentUIState).");
                               return;
                             }
 
@@ -792,6 +838,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           },
                           onMapLongClick:
                               (Point<double> point, LatLng coordinates) async {
+                            // 🚀 TASK 1: DOUBLE-TAP SHIELD
+                            if (DateTime.now().difference(_lastTapTime).inMilliseconds < 500) {
+                              debugPrint("Long-click BLOCKED by Double-Tap Shield.");
+                              return;
+                            }
+
                             final mapProvider = Provider.of<MapProvider>(
                                 context,
                                 listen: false);
@@ -805,6 +857,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             // 🚀 Free the camera from blue dot
                             mapProvider.setAutoTracking(false);
                             mapProvider.setUserPanning(true);
+
+                            // 🚀 EXCLUSIVE PIN DROP DELEGATION
+                            if (mapProvider.mapSelectionPlaceType != null) {
+                              mapProvider.setTargetDestination(coordinates);
+                              mapProvider.addNativeDestinationPin(coordinates);
+                              return;
+                            }
+
                             mapProvider.handleMapLongPress(coordinates);
 
                           },
@@ -1431,32 +1491,36 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       } else {
         // Already centered -> Toggle Tilt
         final currentTilt = currentCamera.tilt;
+        final bool is3D = currentTilt < 20.0;
 
-        if (currentTilt < 20.0) {
-          // STATE 2: Flat -> Enter 3D Drive Mode (Cinematic Tilt)
-          await _safeMoveCamera(
-            userLatLng,
-            zoom: 17.5, // Zoom in slightly for 3D
-            tilt: 50.0, // Aggressive premium tilt
-            bearing: currentCamera.bearing,
-            duration:
-                const Duration(milliseconds: 1200), // 🚀 1.2s elegant tilt up
-          );
-          mapProvider.setAutoTracking(true);
+        // 🚀 FIRE VISUAL BUTTON STATE INSTANTLY
+        if (mounted) {
+          setState(() {
+            mapProvider.setAutoTracking(true);
+          });
         } else {
-          // STATE 3: Tilted -> Reset to Flat 2D
-          await _safeMoveCamera(
-            userLatLng,
-            zoom: 16.5,
-            tilt: 0.0,
-            bearing: 0.0, // Reset North
-            duration: const Duration(
-                milliseconds: 900), // 🚀 0.9s snappy but smooth reset
-          );
           mapProvider.setAutoTracking(true);
         }
+
+        // 🚀 DELAY CAMERA COMMAND TO PREVENT UI FREEZE
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (!mounted) return;
+          final currentPos = mapController.cameraPosition;
+          if (currentPos != null) {
+            mapController.animateCamera(
+              CameraUpdate.newCameraPosition(
+                CameraPosition(
+                  target: currentPos.target,
+                  zoom: currentPos.zoom,
+                  bearing: currentPos.bearing,
+                  tilt: is3D ? 60.0 : 0.0,
+                ),
+              ),
+              duration: const Duration(milliseconds: 800),
+            );
+          }
+        });
       }
-      if (mounted) setState(() {});
     } on TimeoutException catch (_) {
       // Catches the infinite hang caused by strict browser shields
       debugPrint(

@@ -1,5 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
+
+Map<String, dynamic> _computeGeoJson(List<LatLng> coords) {
+  final List<List<double>> geometryCoords =
+      coords.map((c) => [c.longitude, c.latitude]).toList();
+  return {
+    "type": "Feature",
+    "properties": {},
+    "geometry": {"type": "LineString", "coordinates": geometryCoords}
+  };
+}
+
 /// 🎨 Apple-Level Visualizer: Handles 3D drop shadows, zoom interpolation, white halo casings, and gradients.
 class RouteVisualizer {
   // ═══════════════════════════════════════════════════════════════════════════
@@ -21,30 +32,19 @@ class RouteVisualizer {
   static Future<void> clearRoute(MapLibreMapController? controller) async {
     if (controller == null) return;
 
-    // Remove layers in reverse z-order (top → bottom)
-    for (final layerId in [
-      _glowLayerId,
-      _coreLayerId,
-      _casingLayerId,
-      _shadowLayerId,
-    ]) {
-      try {
-        await controller.removeLayer(layerId);
-      } catch (_) {}
-    }
-
+    // Layer Caching: Instead of destroying the layers, we just empty the data
+    // This eliminates frame drops when toggling routes
+    final emptyGeoJson = {
+      "type": "Feature",
+      "properties": {},
+      "geometry": {"type": "LineString", "coordinates": []}
+    };
     try {
-      await controller.removeSource(_sourceId);
+      await controller.setGeoJsonSource(_sourceId, emptyGeoJson);
     } catch (_) {}
   }
 
   /// Draws a premium multi-layer route polyline.
-  ///
-  /// Visual Stack (bottom → top):
-  /// 1. **Shadow** — Dark translucent wide line for depth
-  /// 2. **Casing** — White/dark border for contrast against map tiles
-  /// 3. **Core** — Neon cyan primary route line
-  /// 4. **Glow** — Translucent wide overlay for soft neon bloom
   static Future<void> drawRoute(
     MapLibreMapController? controller,
     List<LatLng> coordinates,
@@ -54,20 +54,18 @@ class RouteVisualizer {
   }) async {
     if (controller == null || coordinates.isEmpty) return;
 
-    // 1. Clean up old route safely
-    await clearRoute(controller);
+    // 1. Offload GeoJSON parsing to a background isolate (Fix for 528ms INP)
+    final Map<String, dynamic> geoJsonData = await compute(_computeGeoJson, coordinates);
 
-    // 2. Strict GeoJSON formatting: MUST be [Lng, Lat]
-    final List<List<double>> geometryCoords =
-        coordinates.map((c) => [c.longitude, c.latitude]).toList();
+    // 2. Layer Caching: Try to update existing source first
+    try {
+      await controller.setGeoJsonSource(_sourceId, geoJsonData);
+      return; // Cache hit: layers are already rendered and bound!
+    } catch (_) {
+      // Source doesn't exist, we must build the layers
+    }
 
-    final Map<String, dynamic> geoJsonData = {
-      "type": "Feature",
-      "properties": {},
-      "geometry": {"type": "LineString", "coordinates": geometryCoords}
-    };
-
-    // 3. Inject GeoJSON Source
+    // 3. Inject new GeoJSON Source
     try {
       await controller.addGeoJsonSource(_sourceId, geoJsonData);
     } catch (e) {
@@ -89,9 +87,7 @@ class RouteVisualizer {
       }
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // LAYER 1: Shadow — Adds depth and lifts the route off the map
-    // ──────────────────────────────────────────────────────────────────────
+    // LAYER 1: Shadow
     await safeAddLineLayer(
       _sourceId,
       _shadowLayerId,
@@ -101,14 +97,12 @@ class RouteVisualizer {
         lineOpacity: _safeDouble(isDark ? 0.35 : 0.15, 0.15),
         lineCap: 'round',
         lineJoin: 'round',
-        lineBlur: _safeDouble(8.0, 4.0), // Soft shadow blur
-        lineTranslate: [0, 3], // Offset downwards for 3D effect
+        lineBlur: _safeDouble(8.0, 4.0),
+        lineTranslate: [0, 3],
       ),
     );
 
-    // ──────────────────────────────────────────────────────────────────────
-    // LAYER 2: Casing — White/dark border for contrast
-    // ──────────────────────────────────────────────────────────────────────
+    // LAYER 2: Casing
     await safeAddLineLayer(
       _sourceId,
       _casingLayerId,
@@ -121,14 +115,12 @@ class RouteVisualizer {
       ),
     );
 
-    // ──────────────────────────────────────────────────────────────────────
-    // LAYER 3: Core — The primary neon cyan route line
-    // ──────────────────────────────────────────────────────────────────────
+    // LAYER 3: Core
     await safeAddLineLayer(
       _sourceId,
       _coreLayerId,
       LineLayerProperties(
-        lineColor: _safeColor('#00E5FF'), // Ridel Neon Cyan
+        lineColor: _safeColor('#00E5FF'),
         lineWidth: _safeDouble(5.0, 5.0),
         lineOpacity: _safeDouble(1.0, 1.0),
         lineCap: 'round',
@@ -136,9 +128,7 @@ class RouteVisualizer {
       ),
     );
 
-    // ──────────────────────────────────────────────────────────────────────
-    // LAYER 4: Glow — Soft neon bloom effect
-    // ──────────────────────────────────────────────────────────────────────
+    // LAYER 4: Glow
     await safeAddLineLayer(
       _sourceId,
       _glowLayerId,
@@ -160,14 +150,7 @@ class RouteVisualizer {
   ) async {
     if (controller == null || coordinates.isEmpty) return;
 
-    final List<List<double>> geometryCoords =
-        coordinates.map((c) => [c.longitude, c.latitude]).toList();
-
-    final Map<String, dynamic> geoJsonData = {
-      "type": "Feature",
-      "properties": {},
-      "geometry": {"type": "LineString", "coordinates": geometryCoords}
-    };
+    final Map<String, dynamic> geoJsonData = await compute(_computeGeoJson, coordinates);
 
     try {
       await controller.setGeoJsonSource(_sourceId, geoJsonData);

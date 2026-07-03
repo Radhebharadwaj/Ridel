@@ -867,9 +867,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         });
       }
 
-      if (provider.tappedPlaceFromMap != null) {
-        final tappedPlace = provider.tappedPlaceFromMap!;
-        provider.clearTappedPlace();
+      if (provider.activeDestination != null) {
+        final tappedPlace = provider.activeDestination!;
+        provider.clearActiveDestination();
 
         if (_showDirections && _activeRoutingField != null) {
           AppHaptics.heavyImpact();

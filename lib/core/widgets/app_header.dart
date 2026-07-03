@@ -194,10 +194,9 @@ class _AppHeaderState extends State<AppHeader> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: ValueListenableBuilder<String>(
-              valueListenable:
-                  context.read<GlobalLocationService>().currentCityName,
-              builder: (context, cityName, child) {
+            child: Consumer<GlobalLocationService>(
+              builder: (context, locService, child) {
+                String cityName = locService.currentCityName.value;
                 String displayCity =
                     cityName.isNotEmpty ? cityName : "Detecting...";
 
@@ -318,32 +317,45 @@ class _AppHeaderState extends State<AppHeader> {
                                       );
                                     },
                                     behavior: HitTestBehavior.opaque,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (isFake)
-                                          const Padding(
-                                            padding: EdgeInsets.only(right: 6.0),
-                                            child: Icon(Icons.location_off_rounded, color: Colors.redAccent, size: 24),
-                                          ),
-                                        Flexible(
-                                          child: Text(
-                                            displayTitle,
-                                            textAlign: TextAlign.left,
-                                            style: GoogleFonts.inter(
-                                              fontSize: isFake ? 22 : 32,
-                                              fontWeight: FontWeight.w800,
-                                              color: textColor,
-                                              letterSpacing: -1.0,
-                                              height: 1.0,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
+                                    child: AnimatedSize(
+                                      duration: const Duration(milliseconds: 300),
+                                      curve: Curves.easeInOutBack,
+                                      alignment: Alignment.centerLeft,
+                                      child: AnimatedSwitcher(
+                                        duration: const Duration(milliseconds: 300),
+                                        layoutBuilder: (currentChild, previousChildren) => Stack(
+                                          alignment: Alignment.centerLeft,
+                                          children: [...previousChildren, if (currentChild != null) currentChild],
                                         ),
-                                        const SizedBox(width: 4),
-                                        Icon(Icons.keyboard_arrow_down, color: isDark ? Colors.white54 : Colors.black54, size: 22),
-                                      ],
+                                        child: Row(
+                                          key: ValueKey<String>(displayTitle),
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (isFake)
+                                              const Padding(
+                                                padding: EdgeInsets.only(right: 6.0),
+                                                child: Icon(Icons.location_off_rounded, color: Colors.redAccent, size: 24),
+                                              ),
+                                            Flexible(
+                                              child: Text(
+                                                displayTitle,
+                                                textAlign: TextAlign.left,
+                                                style: GoogleFonts.inter(
+                                                  fontSize: isFake ? 22 : 32,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: textColor,
+                                                  letterSpacing: -1.0,
+                                                  height: 1.0,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Icon(Icons.keyboard_arrow_down, color: isDark ? Colors.white54 : Colors.black54, size: 22),
+                                          ],
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),

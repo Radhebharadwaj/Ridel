@@ -135,9 +135,6 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
     bool hasLocation = await LocationGuard.checkAndRequestLocation(context);
     if (!hasLocation || !mounted) return;
 
-    final previousCityState = ProfileRepository.userCity.value;
-    ProfileRepository.userCity.value = 'Locating...';
-
     if (mounted) {
       ToastService.showInfo(context, "Updating location...");
     }
@@ -145,109 +142,11 @@ class _CitySelectorSheetState extends State<CitySelectorSheet> {
     final locationService =
         Provider.of<GlobalLocationService>(context, listen: false);
 
-    // Always trigger location fetch so it can handle settings popup and IP fallback
-    await locationService.initializeEcoLocation(isManualTrigger: true);
+    // 🚀 Extracted entirely to GlobalLocationService!
+    unawaited(locationService.autoDetectAndSetRegion(isManualTrigger: true));
 
-    final position = locationService.currentPosition;
-
-    if (position != null) {
-      // 🚀 FIX 1: "Fake GPS" wala block hamesha ke liye hata diya gaya hai!
-      // Ab Web ka IP fallback bhi perfectly allow hoga.
-
-      final detectedCity = locationService.currentCityName.value;
-
-      if (detectedCity.isNotEmpty && detectedCity != "Locating..." && detectedCity != "Detecting...") {
-        final detectedLower = detectedCity.toLowerCase().trim();
-        dynamic matchedRegion;
-
-        // 🚀 FIX 2: UI Par Hamesha User Ki Asli City Dikhao
-        String displayCity = detectedCity[0].toUpperCase() +
-            detectedCity.substring(1).toLowerCase();
-        ProfileRepository.userCity.value = displayCity;
-
-        // Ab Database match check karo
-        for (final region in _masterRegions) {
-          final coveredCities = region['covered_cities'] as List;
-          bool isMatch = coveredCities.any((c) {
-            String dbCity = c.toString().toLowerCase().trim();
-            return detectedLower.contains(dbCity) ||
-                dbCity.contains(detectedLower);
-          });
-
-          if (isMatch) {
-            matchedRegion = region;
-            break;
-          }
-        }
-
-        if (matchedRegion != null) {
-          // ✅ Data Available Hai: Database switch karo aur sheet band karo
-          await DatabaseHelper.instance.switchCity(matchedRegion['region_id']);
-          AppHaptics.success();
-          if (mounted) {
-            ToastService.showSuccess(context, "Region detected successfully!");
-            Navigator.pop(context);
-          }
-        } else {
-          // ❌ Data Available Nahi Hai: Pyar se Sorry bolo!
-          AppHaptics.heavyImpact();
-          if (mounted) {
-            // Sheet ko band karo aur polite dialog dikhao
-            Navigator.pop(context);
-            showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                      backgroundColor: const Color(0xFF1E2129),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24)),
-                      title: Text('Coming Soon to $displayCity 🚀',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold)),
-                      content: Text(
-                        "We haven't mapped $displayCity yet, but we're expanding our ecosystem fast! Check our roadmap to see when we'll be live in your city.",
-                        style:
-                            const TextStyle(color: Colors.white70, height: 1.5),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Okay',
-                              style: TextStyle(color: Colors.grey)),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            // 🚀 Yahan aap apne website ke roadmap page ka link daal sakte hain
-                            Navigator.pop(ctx);
-                            if (mounted) {
-                              ToastService.showSuccess(
-                                  context, "Opening Roadmap...");
-                            }
-                          },
-                          child: const Text('Check Roadmap',
-                              style: TextStyle(
-                                  color: CupertinoColors.systemBlue,
-                                  fontWeight: FontWeight.bold)),
-                        ),
-                      ],
-                    ));
-          }
-        }
-      } else {
-        ProfileRepository.userCity.value = previousCityState;
-        if (mounted) {
-          ToastService.showError(
-              context, 'Could not fetch city name from coordinates.');
-        }
-        AppHaptics.error();
-      }
-    } else {
-      ProfileRepository.userCity.value = previousCityState;
-      if (mounted) {
-        ToastService.showError(
-            context, 'Location Denied. Please select manually.');
-      }
-      AppHaptics.error();
+    if (mounted) {
+      Navigator.pop(context);
     }
   }
 

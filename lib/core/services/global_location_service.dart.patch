@@ -1,0 +1,77 @@
+--- lib/core/services/global_location_service.dart
++++ lib/core/services/global_location_service.dart
+@@ -10,2 +10,3 @@
+ import 'package:shared_preferences/shared_preferences.dart'; // 🚀 FIX 3: SharedPreferences
+ import 'package:ridel/core/services/weather_service.dart';
++import 'package:ridel/features/commute/shared/services/database_helper.dart'; // 🚀 Added for autoDetect
+ 
+@@ -342,4 +343,71 @@
+       cachedLng = currentLng;
++
++      // Automatically map to supported regions
++      await _matchAndSetDatabaseRegion(newCity);
++      notifyListeners();
+     }
+   }
++
++  // 🚀 EXTRACTED AUTO-DETECT & REGION MAPPING LOGIC
++  final List<Map<String, dynamic>> _masterRegions = [
++    {
++      "region_id": "delhi",
++      "display_name": "Delhi NCR",
++      "covered_cities": [
++        "delhi",
++        "new delhi",
++        "noida",
++        "gurugram",
++        "gurgaon",
++        "faridabad",
++        "ghaziabad",
++        "greater noida"
++      ]
++    }
++  ];
++
++  Future<bool> _matchAndSetDatabaseRegion(String detectedCity) async {
++    if (detectedCity.isEmpty || detectedCity == "Locating..." || detectedCity == "Detecting..." || detectedCity == "Location Disabled") return false;
++    
++    final detectedLower = detectedCity.toLowerCase().trim();
++    dynamic matchedRegion;
++
++    for (final region in _masterRegions) {
++      final coveredCities = region['covered_cities'] as List;
++      bool isMatch = coveredCities.any((c) {
++        String dbCity = c.toString().toLowerCase().trim();
++        return detectedLower.contains(dbCity) || dbCity.contains(detectedLower);
++      });
++      if (isMatch) {
++        matchedRegion = region;
++        break;
++      }
++    }
++
++    if (matchedRegion != null) {
++      await DatabaseHelper.instance.switchCity(matchedRegion['region_id']);
++      return true; // Supported
++    }
++    return false; // Unsupported
++  }
++
++  Future<void> autoDetectAndSetRegion() async {
++    // First check cached position for 0ms UI update
++    try {
++      final lastPos = await Geolocator.getLastKnownPosition();
++      if (lastPos != null) {
++        currentPositionNotifier.value = lastPos;
++        _lastCityGeocodedPosition = lastPos;
++        // Await the cached geocode so we can set the region database instantly
++        await resolveCityName(lastPos.latitude, lastPos.longitude, forceRefresh: false);
++      }
++    } catch (_) {}
++    
++    // Silently fetch high-accuracy in the background without awaiting it to unblock the caller
++    initializeEcoLocation(isManualTrigger: true);
++  }
++
++
++  // ==========================================

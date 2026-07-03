@@ -183,34 +183,54 @@ extension _PremiumDetailsExt on _MapSearchSheetState {
               _buildGlassyTransportMode(context,
                   icon: Icons.directions_walk_rounded,
                   label: 'Walk',
-                  isActive: provider.currentNavMode == 'walking' && provider.currentRouteResult != null, onTap: () {
+                  isActive: provider.currentNavMode == 'walking' && provider.currentRouteResult != null, onTap: () async {
                 AppHaptics.selectionClick();
                 provider.currentNavMode = 'walking';
-                provider.calculateAndDrawNativeRoute(context, provider.currentNavMode);
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                }
+                await Future.delayed(const Duration(milliseconds: 300));
+                if (!context.mounted) return;
+                provider.calculateAndDrawRoute(context);
               }),
               _buildGlassyTransportMode(context,
                   icon: Icons.two_wheeler_rounded,
                   label: 'Bike',
-                  isActive: (provider.currentNavMode == 'bicycling' || provider.currentNavMode == 'twowheeler') && provider.currentRouteResult != null, onTap: () {
+                  isActive: (provider.currentNavMode == 'bicycling' || provider.currentNavMode == 'twowheeler') && provider.currentRouteResult != null, onTap: () async {
                 AppHaptics.selectionClick();
                 provider.currentNavMode = 'twowheeler';
-                provider.calculateAndDrawNativeRoute(context, provider.currentNavMode);
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                }
+                await Future.delayed(const Duration(milliseconds: 300));
+                if (!context.mounted) return;
+                provider.calculateAndDrawRoute(context);
               }),
               _buildGlassyTransportMode(context,
                   icon: CupertinoIcons.car_detailed,
                   label: 'Car',
-                  isActive: provider.currentNavMode == 'driving' && provider.currentRouteResult != null, onTap: () {
+                  isActive: provider.currentNavMode == 'driving' && provider.currentRouteResult != null, onTap: () async {
                 AppHaptics.selectionClick();
                 provider.currentNavMode = 'driving';
-                provider.calculateAndDrawNativeRoute(context, provider.currentNavMode);
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                }
+                await Future.delayed(const Duration(milliseconds: 300));
+                if (!context.mounted) return;
+                provider.calculateAndDrawRoute(context);
               }),
               _buildGlassyTransportMode(context,
                   icon: Icons.local_shipping_rounded,
                   label: 'Heavy',
-                  isActive: provider.currentNavMode == 'heavy' && provider.currentRouteResult != null, onTap: () {
+                  isActive: provider.currentNavMode == 'heavy' && provider.currentRouteResult != null, onTap: () async {
                 AppHaptics.selectionClick();
                 provider.currentNavMode = 'heavy';
-                provider.calculateAndDrawNativeRoute(context, provider.currentNavMode);
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                }
+                await Future.delayed(const Duration(milliseconds: 300));
+                if (!context.mounted) return;
+                provider.calculateAndDrawRoute(context);
               }),
             ],
           ),

@@ -443,7 +443,7 @@ if (showRecentSearches)
 
                                                   // 1. Set the tapped place so the bottom sheet shows the details UI
                                                   safeProvider
-                                                      .setTappedPlace(place);
+                                                      .setActiveDestination(place);
 
                                                   // 2. Set the routing destination
                                                   safeProvider
@@ -631,9 +631,16 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                 onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'walking';
-                  await provider.calculateAndDrawNativeRoute(
-                      context, 'walking');
                   rebuildState(() {});
+                  if (_sheetController.isAttached) {
+                    _safeAnimateSheet(_safeMinSize);
+                  }
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  if (!context.mounted) return;
+                  provider.calculateAndDrawRoute(context);
                 },
               ),
               // BIKE
@@ -645,9 +652,16 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                 onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'twowheeler';
-                  await provider.calculateAndDrawNativeRoute(
-                      context, 'twowheeler');
                   rebuildState(() {});
+                  if (_sheetController.isAttached) {
+                    _safeAnimateSheet(_safeMinSize);
+                  }
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  if (!context.mounted) return;
+                  provider.calculateAndDrawRoute(context);
                 },
               ),
               // CAR
@@ -659,9 +673,16 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                 onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'driving';
-                  await provider.calculateAndDrawNativeRoute(
-                      context, 'driving');
                   rebuildState(() {});
+                  if (_sheetController.isAttached) {
+                    _safeAnimateSheet(_safeMinSize);
+                  }
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  if (!context.mounted) return;
+                  provider.calculateAndDrawRoute(context);
                 },
               ),
               // HEAVY
@@ -673,8 +694,16 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                 onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'heavy';
-                  await provider.calculateAndDrawNativeRoute(context, 'heavy');
                   rebuildState(() {});
+                  if (_sheetController.isAttached) {
+                    _safeAnimateSheet(_safeMinSize);
+                  }
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  if (!context.mounted) return;
+                  provider.calculateAndDrawRoute(context);
                 },
               ),
             ],
@@ -1389,37 +1418,69 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                 icon: Icons.directions_walk_rounded,
                 label: 'Walk',
                 isActive: currentNavMode == 'walking',
-                onTap: () {
+                onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'walking';
-                  provider.calculateAndDrawNativeRoute(context, 'walking');
+                  if (_sheetController.isAttached) {
+                    _safeAnimateSheet(_safeMinSize);
+                  }
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  if (!mounted) return;
+                  provider.calculateAndDrawRoute(context);
                 }),
               _buildGlassyTransportMode(context,
                 icon: Icons.two_wheeler_rounded,
                 label: 'Bike',
                 isActive: currentNavMode == 'twowheeler',
-                onTap: () {
+                onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'twowheeler';
-                  provider.calculateAndDrawNativeRoute(context, 'twowheeler');
+                  if (_sheetController.isAttached) {
+                    _safeAnimateSheet(_safeMinSize);
+                  }
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  if (!mounted) return;
+                  provider.calculateAndDrawRoute(context);
                 }),
               _buildGlassyTransportMode(context,
                 icon: CupertinoIcons.car_detailed,
                 label: 'Car',
                 isActive: currentNavMode == 'driving',
-                onTap: () {
+                onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'driving';
-                  provider.calculateAndDrawNativeRoute(context, 'driving');
+                  if (_sheetController.isAttached) {
+                    _safeAnimateSheet(_safeMinSize);
+                  }
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  if (!mounted) return;
+                  provider.calculateAndDrawRoute(context);
                 }),
               _buildGlassyTransportMode(context,
                 icon: Icons.local_shipping_rounded,
                 label: 'Heavy',
                 isActive: currentNavMode == 'heavy',
-                onTap: () {
+                onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'heavy';
-                  provider.calculateAndDrawNativeRoute(context, 'heavy');
+                  if (_sheetController.isAttached) {
+                    _safeAnimateSheet(_safeMinSize);
+                  }
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  if (!mounted) return;
+                  provider.calculateAndDrawRoute(context);
                 }),
             ],
           ),

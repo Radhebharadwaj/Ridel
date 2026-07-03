@@ -118,15 +118,15 @@ flutter_launcher_icons:
 
 # --- Splash Screen Config ---
 flutter_native_splash:
-  color: "#0B0E17" # Premium dark background to match the app theme
-  image: assets/images/splash.png
+  color: "#050505" # Premium dark background to match the app theme
+  image: assets/icon/logo.png
   android: true
   ios: true
   web: false
   android_12:
-    image: assets/images/splash.png
-    icon_background_color: "#0B0E17"
-    color: "#0B0E17"
+    image: assets/icon/logo.png
+    icon_background_color: "#050505"
+    color: "#050505"
 
 # --- ASSETS CONFIGURATION ---
 flutter:

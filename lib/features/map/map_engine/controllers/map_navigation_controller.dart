@@ -119,24 +119,19 @@ class MapNavigationController {
     final List<Map<String, dynamic>> rawSteps =
         List<Map<String, dynamic>>.from(route.steps);
 
-    // 🚀 Execute asynchronously with micro-yields
-    final parsed = await _parseStepsAsync(rawSteps);
+    // 🚀 Execute completely in a background isolate (Zero main-thread blocking)
+    final isolateResult = await compute(_processRouteDataInIsolate, {
+      'rawSteps': rawSteps,
+      'polyline': route.coordinates,
+    });
 
-    _parsedInstructions = parsed.instructions;
-    _maneuverIcons = parsed.maneuverIcons;
-    _stepDistances = parsed.stepDistances;
+    _parsedInstructions = isolateResult.parsedSteps.instructions;
+    _maneuverIcons = isolateResult.parsedSteps.maneuverIcons;
+    _stepDistances = isolateResult.parsedSteps.stepDistances;
 
-    // 🚀 Reconstruct LatLng on Main Thread (safe from Isolate memory restrictions)
-    _stepStartLocations = List.generate(parsed.startLatitudes.length,
-        (i) => LatLng(parsed.startLatitudes[i], parsed.startLongitudes[i]));
-    _stepEndLocations = List.generate(parsed.endLatitudes.length,
-        (i) => LatLng(parsed.endLatitudes[i], parsed.endLongitudes[i]));
-
-    // 🚀 NEW — Pre-compute step boundaries (one-time O(steps * ~100) operation)
-    _stepBoundaries = RoutingService.buildStepBoundaries(
-      route.coordinates,
-      _stepStartLocations,
-    );
+    _stepStartLocations = isolateResult.stepStartLocations;
+    _stepEndLocations = isolateResult.stepEndLocations;
+    _stepBoundaries = isolateResult.stepBoundaries;
 
     // Prime the Top Banner immediately
     if (_parsedInstructions.isNotEmpty) {
@@ -512,7 +507,26 @@ class MapNavigationController {
   // 🧵 STATIC ISOLATE LOGIC (Primitive Friendly)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  static Future<_ParsedSteps> _parseStepsAsync(List<Map<String, dynamic>> steps) async {
+  static _IsolateResult _processRouteDataInIsolate(Map<String, dynamic> params) {
+    final List<Map<String, dynamic>> rawSteps = params['rawSteps'];
+    final List<LatLng> polyline = params['polyline'];
+
+    final parsed = _parseStepsSync(rawSteps);
+    
+    final stepStartLocations = List.generate(parsed.startLatitudes.length,
+        (i) => LatLng(parsed.startLatitudes[i], parsed.startLongitudes[i]));
+    final stepEndLocations = List.generate(parsed.endLatitudes.length,
+        (i) => LatLng(parsed.endLatitudes[i], parsed.endLongitudes[i]));
+
+    final stepBoundaries = RoutingService.buildStepBoundaries(
+      polyline,
+      stepStartLocations,
+    );
+    
+    return _IsolateResult(parsed, stepStartLocations, stepEndLocations, stepBoundaries);
+  }
+
+  static _ParsedSteps _parseStepsSync(List<Map<String, dynamic>> steps) {
     final instructions = <String>[];
     final icons = <String>[];
 
@@ -543,15 +557,19 @@ class MapNavigationController {
 
       stepDistances
           .add((step['distance']?['value'] as num?)?.toDouble() ?? 0.0);
-          
-      if (i % 25 == 0) {
-        await Future.delayed(Duration.zero); // Yield to event loop
-      }
     }
 
     return _ParsedSteps(instructions, icons, startLats, startLngs, endLats,
         endLngs, stepDistances);
   }
+}
+
+class _IsolateResult {
+  final _ParsedSteps parsedSteps;
+  final List<LatLng> stepStartLocations;
+  final List<LatLng> stepEndLocations;
+  final List<int> stepBoundaries;
+  _IsolateResult(this.parsedSteps, this.stepStartLocations, this.stepEndLocations, this.stepBoundaries);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

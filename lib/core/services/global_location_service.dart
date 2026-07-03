@@ -10,6 +10,7 @@ import 'package:ridel/features/profile/services/profile_repository.dart';
 import 'package:ridel/core/config/app_config.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // 🚀 FIX 3: SharedPreferences
 import 'package:ridel/core/services/weather_service.dart';
+import 'package:ridel/features/commute/shared/services/database_helper.dart';
 
 class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
   // --- STATE VARIABLES ---
@@ -85,6 +86,20 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  // 🚀 TASK 1: Decouple & Elevate the Auto-Detect Logic
+  Future<void> autoDetectAndSetRegion({bool isManualTrigger = false}) async {
+    await initializeEcoLocation(isManualTrigger: isManualTrigger);
+    
+    // 🚀 TASK 3: Wire the Weather Cascade
+    final pos = currentPositionNotifier.value;
+    if (pos != null) {
+      WeatherService.getWeather(pos.latitude, pos.longitude);
+    }
+    
+    // 🚀 TASK 4: Aggressive UI Rebuild
+    notifyListeners();
+  }
+
   // ==========================================
   // 1. APP STARTUP (PRODUCTION HARDENED GPS)
   // ==========================================
@@ -115,6 +130,18 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
       if (isManualTrigger) {
         // User manually clicked the button to detect region
         _permission = await Geolocator.requestPermission();
+        
+        // 🚀 INSTANT BROADCAST: Notify UI immediately after permission granted!
+        if (_permission == LocationPermission.whileInUse || _permission == LocationPermission.always) {
+          _currentCity = "Locating...";
+          currentCityName.value = "Locating...";
+          ProfileRepository.userCity.value = "Locating...";
+          notifyListeners();
+          
+          await autoDetectAndSetRegion(); // Task 1: Wire the Permission Grant Hook
+          notifyListeners();
+          return;
+        }
       } else {
         // Crucial: Do NOT prompt for permission on startup if it's denied.
         // Only auto-fetch if it is already granted.
@@ -139,35 +166,43 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     if (_permission == LocationPermission.whileInUse || _permission == LocationPermission.always) {
-      // 🚀 OPTIMIZATION: Fast Cache for Location
-      if (!isManualTrigger) {
-        try {
-          final lastPos = await Geolocator.getLastKnownPosition();
-          if (lastPos != null && currentPositionNotifier.value == null) {
-            debugPrint("⚡ Instant Location: Using last known position.");
-            currentPositionNotifier.value = lastPos;
-            _isUsingIpFallback = false;
-            _lastCityGeocodedPosition = lastPos;
-            resolveCityName(lastPos.latitude, lastPos.longitude).then((_) {
-              WeatherService.getWeather(lastPos.latitude, lastPos.longitude);
-              notifyListeners();
-            });
-            notifyListeners();
-          }
-        } on Object catch (_) {}
+      // 🚀 INSTANT BROADCAST: If already granted, show locating state immediately
+      if (_currentCity == "Location Disabled" || _currentCity == "Select City" || currentCityName.value == "Location Disabled") {
+        _currentCity = "Locating...";
+        currentCityName.value = "Locating...";
+        ProfileRepository.userCity.value = "Locating...";
+        notifyListeners();
       }
+
+      // 🚀 OPTIMIZATION: Fast Cache for Location
+      try {
+        final lastPos = await Geolocator.getLastKnownPosition();
+        if (lastPos != null && currentPositionNotifier.value == null) {
+          debugPrint("⚡ Instant Location: Using last known position.");
+          currentPositionNotifier.value = lastPos;
+          _isUsingIpFallback = false;
+          _lastCityGeocodedPosition = lastPos;
+          
+          // 🔥 DECOUPLED: Do NOT await reverse geocoding! Run it in background.
+          resolveCityName(lastPos.latitude, lastPos.longitude);
+          
+          return; // 🚀 Nuke the satellite delay by returning early!
+        }
+      } on Object catch (_) {}
 
       try {
         final pos = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
+            accuracy: LocationAccuracy.low, // 🚀 Changed to Low for instant region extraction
           ),
-        ).timeout(const Duration(seconds: 8)); // 8 sec timeout thoda better hai
+        ).timeout(const Duration(seconds: 8));
 
         currentPositionNotifier.value = pos;
         _isUsingIpFallback = false;
         _lastCityGeocodedPosition = pos; // Set initial geocode pos
-        await resolveCityName(pos.latitude, pos.longitude);
+        
+        // 🔥 DECOUPLED: Do NOT await reverse geocoding! Run it in background.
+        resolveCityName(pos.latitude, pos.longitude);
         
         // 🚀 TRIGGER WEATHER FETCH
         WeatherService.getWeather(pos.latitude, pos.longitude);
@@ -186,7 +221,10 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           currentPositionNotifier.value = lastPos;
           _isUsingIpFallback = false;
           _lastCityGeocodedPosition = lastPos;
-          await resolveCityName(lastPos.latitude, lastPos.longitude);
+          
+          // 🔥 DECOUPLED: Do NOT await reverse geocoding!
+          resolveCityName(lastPos.latitude, lastPos.longitude);
+          
           WeatherService.getWeather(lastPos.latitude, lastPos.longitude);
           notifyListeners();
         } else {
@@ -250,7 +288,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
       final response = await http.get(url, headers: {'Accept': 'application/json'}).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final data = await compute(jsonDecode, response.body);
         if (data['results'] != null && data['results'].isNotEmpty) {
           final result = data['results'][0];
           if (result['address_components'] != null) {
@@ -295,7 +333,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
         }).timeout(const Duration(seconds: 5));
 
         if (response.statusCode == 200) {
-          final data = json.decode(response.body);
+          final data = await compute(jsonDecode, response.body);
           if (data['address'] != null) {
             final address = data['address'];
             newCity = address['city'] ?? 
@@ -322,6 +360,43 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
       ProfileRepository.userCity.value = newCity;
       cachedLat = currentLat;
       cachedLng = currentLng;
+      
+      // 🚀 THE FIX: Instantly match and switch the region in the DB
+      await _autoMatchAndSwitchRegion(newCity);
+    }
+  }
+
+  Future<void> _autoMatchAndSwitchRegion(String detectedCity) async {
+    final detectedLower = detectedCity.toLowerCase().trim();
+    dynamic matchedRegion;
+
+    // Standard fallback master regions list
+    final List<Map<String, dynamic>> fallbackRegions = [
+      {
+        "region_id": "delhi",
+        "display_name": "Delhi NCR",
+        "covered_cities": [
+          "delhi", "new delhi", "noida", "gurugram", 
+          "gurgaon", "faridabad", "ghaziabad", "greater noida"
+        ]
+      }
+    ];
+
+    for (final region in fallbackRegions) {
+      final coveredCities = region['covered_cities'] as List;
+      bool isMatch = coveredCities.any((c) {
+        String dbCity = c.toString().toLowerCase().trim();
+        return detectedLower.contains(dbCity) || dbCity.contains(detectedLower);
+      });
+
+      if (isMatch) {
+        matchedRegion = region;
+        break;
+      }
+    }
+
+    if (matchedRegion != null) {
+      await DatabaseHelper.instance.switchCity(matchedRegion['region_id']);
     }
   }
 
@@ -370,10 +445,22 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
         return false; // User has to manually return from settings
       } else {
         permission = await Geolocator.requestPermission();
+        
+        // 🚀 INSTANT BROADCAST
+        if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+          _currentCity = "Locating...";
+          currentCityName.value = "Locating...";
+          ProfileRepository.userCity.value = "Locating...";
+          notifyListeners();
+          
+          await autoDetectAndSetRegion(); // Task 1: Wire the Permission Grant Hook
+          notifyListeners();
+          return true;
+        }
       }
 
       if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
-        await initializeEcoLocation(isManualTrigger: true);
+        await autoDetectAndSetRegion(isManualTrigger: true);
         return true;
       }
     }
@@ -415,7 +502,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
       }).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final data = await compute(jsonDecode, response.body);
         if (data['results'] != null && data['results'].isNotEmpty) {
           final result = data['results'][0];
           
@@ -484,7 +571,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           .timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final data = await compute(jsonDecode, response.body);
 
         // 🚀 Create a Mock 'Position' object so MapEngine doesn't crash
         currentPositionNotifier.value = Position(
@@ -574,7 +661,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
 
     _positionStreamSubscription = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 3),
+          accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 50),
     ).listen((Position position) {
       _updatePositionAndSpeed(position);
     }, onError: (error) {

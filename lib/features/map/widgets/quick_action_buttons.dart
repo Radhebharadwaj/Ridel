@@ -704,19 +704,8 @@ class MapControlsPill extends StatelessWidget {
                       height: 44,
                       width: 48,
                       child: Center(
-                        child: Selector<MapProvider,
-                            (bool, bool, bool, bool, bool)>(
-                          selector: (context, provider) => (
-                            provider.isActiveNavigation,
-                            provider.isAutoTracking,
-                            provider.isRouteCalculated,
-                            provider.targetDestination != null,
-                            provider.isUserVisibleOnScreen,
-                          ),
-                          builder: (context, _, __) {
-                            final mapProvider = Provider.of<MapProvider>(
-                                context,
-                                listen: false);
+                        child: Consumer<MapProvider>(
+                          builder: (context, mapProvider, child) {
                             return AnimatedSwitcher(
                               duration: const Duration(milliseconds: 300),
                               transitionBuilder: (child, animation) =>

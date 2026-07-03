@@ -44,7 +44,7 @@ class _TurnByTurnBannerState extends State<TurnByTurnBanner> {
   }
 
   // ── Premium design tokens ──
-  static const Color _accentCyan = Color(0xFF32D7E0);
+
   static const Color _accentGreen = Color(0xFF30D158);
   static const Color _accentBlue = Color(0xFF0A84FF);
 
@@ -61,7 +61,7 @@ class _TurnByTurnBannerState extends State<TurnByTurnBanner> {
     // Frosted glass — exact WeatherFloatingWidget match
     final glassColor = isLight
         ? Colors.white.withValues(alpha: 0.85)
-        : const Color(0xFF0B0E17).withValues(alpha: 0.85);
+        : Colors.black.withValues(alpha: 0.6);
 
     final borderColor = isLight
         ? Colors.white.withValues(alpha: 0.9)
@@ -145,7 +145,7 @@ class _TurnByTurnBannerState extends State<TurnByTurnBanner> {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(42),
                           child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
+                            filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
                             child: PointerInterceptor(
                               child: Container(
                                 decoration: BoxDecoration(
@@ -187,17 +187,17 @@ class _TurnByTurnBannerState extends State<TurnByTurnBanner> {
   // HEADER — Main Direction + Distance
   // ────────────────────────────────────────────
   Widget _buildHeader(bool isLight) {
-    final primaryText = isLight ? const Color(0xFF1A1A1A) : Colors.white;
+    final secondaryText = isLight ? Colors.black.withValues(alpha: 0.6) : Colors.white70;
     final mapProvider = Provider.of<MapProvider>(context, listen: false);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
       child: Row(
         children: [
-          // Soft squircle icon
+            // Soft squircle icon
           _SoftIcon(
             icon: CupertinoIcons.arrow_turn_up_left,
-            color: isLight ? _accentBlue : _accentCyan,
+            color: isLight ? _accentBlue : Colors.white,
             size: 50,
             iconSize: 24,
             isLight: isLight,
@@ -214,9 +214,9 @@ class _TurnByTurnBannerState extends State<TurnByTurnBanner> {
                     return Text(
                       RouteUtils.formatDistance(distance),
                       style: GoogleFonts.inter(
-                        color: isLight ? _accentBlue : _accentCyan,
+                        color: isLight ? _accentBlue : Colors.white,
                         fontSize: 32,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                         letterSpacing: -1.5,
                         height: 1.0,
                       ),
@@ -224,17 +224,22 @@ class _TurnByTurnBannerState extends State<TurnByTurnBanner> {
                   },
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  'Main Mangal Bazar Road',
-                  style: GoogleFonts.inter(
-                    color: primaryText,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.3,
-                    height: 1.2,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                ValueListenableBuilder<String>(
+                  valueListenable: mapProvider.engine.navigation.currentInstruction,
+                  builder: (context, instruction, child) {
+                    return Text(
+                      instruction,
+                      style: GoogleFonts.inter(
+                        color: secondaryText,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.3,
+                        height: 1.2,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    );
+                  },
                 ),
               ],
             ),

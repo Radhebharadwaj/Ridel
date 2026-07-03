@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/cupertino.dart';
 
+import 'package:flutter/foundation.dart'; // 🚀 NEW: For compute
 final http.Client _apiClient = http.Client();
-const Duration _apiTimeout = Duration(seconds: 15);
+const Duration _apiTimeout = Duration(seconds: 3);
 
 class ForecastDayModel {
   final String date;
@@ -143,7 +144,7 @@ class WeatherService {
 
       if (response.statusCode == 200) {
         try {
-          final json = jsonDecode(response.body);
+          final json = await compute(jsonDecode, response.body);
 
           if (json['success'] == true) {
             final data = json['results'] ?? json['data'];
@@ -215,7 +216,7 @@ class WeatherService {
 
       if (response.statusCode == 200) {
         try {
-          final json = jsonDecode(response.body);
+          final json = await compute(jsonDecode, response.body);
 
           if (json['success'] == true) {
             final data = json['results'] ?? json['data'];
