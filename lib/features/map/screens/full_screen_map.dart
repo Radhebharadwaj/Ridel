@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/core/map/map_style_helper.dart';
 import 'package:ridel/features/map/map_engine/map_engine.dart';
+import 'package:ridel/features/map/map_engine/controllers/map_mode_controller.dart';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
@@ -68,6 +69,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   // 🚀 ADAPTIVE LOD CONTROLLER
   bool _isPerformanceMode = false;
+  bool _isCameraAnimating = false;
 
   // 🚀 WEB GESTURE SHIELDS
   DateTime _lastTapTime = DateTime.now();
@@ -351,34 +353,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     }
   }
 
-  Future<void> _safeMoveCamera(LatLng target,
-      {double? zoom, double? bearing, double? tilt, Duration? duration}) async {
-    final mapController =
-        Provider.of<MapProvider>(context, listen: false).controller ??
-            _tempController;
-    // ignore: unnecessary_null_comparison
-    if (target.latitude == null || target.longitude == null) {
-      debugPrint("🛑 NULL DETECTED: animateCamera received a null target!");
-      return;
-    }
-
-    debugPrint(
-        "🛠️ DEBUG ANIMATE CAMERA: Lat:${target.latitude}, Lng:${target.longitude}, Zoom:${zoom ?? 14.0}");
-
-    if (mapController != null) {
-      await mapController.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: target,
-            zoom: zoom ?? 14.0,
-            tilt: tilt ?? 0.0,
-            bearing: bearing ?? 0.0,
-          ),
-        ),
-        duration: duration,
-      );
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -432,7 +406,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       debugPrint(
                           "🛠️ DEBUG INITIAL CAMERA: Lat:$safeLat, Lng:$safeLng");
 
-                      final bool showNativeBlueDot = context.select<MapProvider, bool>((p) => p.showNativeBlueDot);
 
                       return RepaintBoundary(
                         child: Listener(
@@ -472,7 +445,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           child: MapLibreMap(
                             key: const ValueKey('ridel_main_map'),
                             styleString: _loadedMapStyle!,
-                            myLocationEnabled: showNativeBlueDot,
+                            myLocationEnabled: true,
                             myLocationRenderMode: MyLocationRenderMode.normal, // 🚀 REMOVES UGLY GREY HALO/CONE
                           minMaxZoomPreference:
                               const MinMaxZoomPreference(3.0, 18.5),
@@ -517,16 +490,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
                             Future<void> safeAddImage(
                                 String? id, Uint8List bytes) async {
-                              if (id == null || id.trim().isEmpty) return;
-                              if (_addedImages.contains(id)) {
-                                return; // Use boolean flag check to prevent JS interop calls
-                              }
-                              try {
-                                await controller.addImage(id, bytes);
-                                _addedImages.add(id);
-                              } catch (e) {
-                                // Ignore if it already exists or fails
-                                debugPrint("Image add warning: $e");
+                              if (id != null && id.trim().isNotEmpty) {
+                                if (_addedImages.contains(id)) return;
+                                try {
+                                  await controller.addImage(id, bytes);
+                                  _addedImages.add(id);
+                                } catch (_) {
+                                  // Ignore error if image already exists in the style
+                                }
                               }
                             }
 
@@ -546,11 +517,16 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             } catch (_) {}
 
                             try {
-                              final ByteData bytes = await rootBundle.load('assets/images/nav_puck.png'); // Verify your asset path
-                              final Uint8List imageData = bytes.buffer.asUint8List();
-                              await controller.addImage('nav_puck', imageData);
-                              _addedImages.add('nav_puck');
-                              debugPrint("✅ Nav Puck Image successfully injected into MapLibre");
+                              const String id = 'nav_puck';
+                              if (id.isNotEmpty) {
+                                try {
+                                  final ByteData bytes = await rootBundle.load('assets/images/nav_puck.png'); // Verify your asset path
+                                  final Uint8List imageData = bytes.buffer.asUint8List();
+                                  await controller.addImage(id, imageData);
+                                  _addedImages.add(id);
+                                  debugPrint("✅ Nav Puck Image successfully injected into MapLibre");
+                                } catch (_) {}
+                              }
                             } catch (e) {
                               debugPrint("❌ Failed to load Nav Puck Image: $e");
                             }
@@ -881,13 +857,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           tiltGesturesEnabled: true,
 
                           // Removed duplicate myLocationEnabled
-                          myLocationTrackingMode:
-                              Provider.of<MapProvider>(context, listen: false)
-                                      .isAutoTracking
-                                  ? (kIsWeb
-                                      ? MyLocationTrackingMode.tracking
-                                      : MyLocationTrackingMode.trackingCompass)
-                                  : MyLocationTrackingMode.none,
+                          myLocationTrackingMode: MyLocationTrackingMode.tracking,
                           trackCameraPosition: false,
 
                           logoViewMargins: const Point(-5000, -5000),
@@ -1418,57 +1388,44 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   }
 
   Future<void> _handleLocateMeTapped(MapProvider mapProvider) async {
-    debugPrint("🎯 [DEBUG] Locate Me button clicked!");
+    if (_isCameraAnimating) return; // Prevent animation stacking
 
-    // Use centralized LocationGuard for standard permission checking
-    bool hasPermission = await LocationGuard.checkAndRequestLocation(context);
-    if (!hasPermission) return;
+    final userPos = mapProvider.currentLocation;
+    final mapController = mapProvider.controller ?? _tempController;
+    if (userPos == null || mapController == null) {
+      debugPrint("[CameraEngine] Aborted: Missing GPS coordinate or controller.");
+      return;
+    }
 
     try {
-      // 🚨 CRITICAL: Append .timeout to prevent infinite browser deadlock
-      LocationPermission permission = await Geolocator.checkPermission()
-          .timeout(const Duration(seconds: 2));
+      _isCameraAnimating = true;
 
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission()
-            .timeout(const Duration(seconds: 2));
-        if (permission == LocationPermission.denied) {
-          throw Exception("Permission denied by user.");
-        }
-      }
+      debugPrint("🎯 [DEBUG] Locate Me button clicked!");
 
-      if (permission == LocationPermission.deniedForever) {
-        throw Exception("Permission permanently denied.");
-      }
+      // Use centralized LocationGuard for standard permission checking
+      final bool hasPermission = await LocationGuard.checkAndRequestLocation(context);
+      if (!hasPermission || !mounted) return;
 
-      // If granted, proceed:
-      debugPrint("✅ [DEBUG] Permission granted. Fetching location...");
-      if (!mounted) return;
-      final position = await Geolocator.getCurrentPosition(
-          locationSettings:
-              const LocationSettings(accuracy: LocationAccuracy.high));
+      final locService = Provider.of<GlobalLocationService>(context, listen: false);
+      final position = locService.currentPosition;
+      if (position == null) return;
+
       final userLatLng = LatLng(position.latitude, position.longitude);
 
-      final mapController = mapProvider.controller ?? _tempController;
-
-      if (mapController == null) return;
-
       // Fallback if _currentCameraPosition is null initially before the first move
-      final currentCamera =
-          _currentCameraPosition ?? mapController.cameraPosition;
+      final currentCamera = _currentCameraPosition ?? mapController.cameraPosition;
       if (currentCamera == null) return;
 
-      // Update the custom dot (Location provider state)
+      // Update the custom dot (Location provider state) — offloaded from main thread
       Future.microtask(() {
         if (context.mounted) {
           mapProvider.updateCurrentLocation(userLatLng);
         }
       });
 
-      await mapController
-          .updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+      await mapController.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
 
-      // 2. Calculate Distance from Camera Center to User
+      // Evaluate spatial geometry between camera center and user position
       final double distance = Geolocator.distanceBetween(
         currentCamera.target.latitude,
         currentCamera.target.longitude,
@@ -1476,55 +1433,61 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         userLatLng.longitude,
       );
 
-      // 3. The Smart State Machine
-      if (distance > 15.0) {
-        // STATE 1: Far away -> Smooth "Fly To" animation
-        await _safeMoveCamera(
-          userLatLng,
-          zoom: 16.5,
-          tilt: 0.0,
-          bearing: 0.0,
-          duration: const Duration(
-              milliseconds: 1800), // 🚀 1.8s smooth glide across the map
-        );
+      // ═══════════════════════════════════════════════════════
+      // 3-STATE SMART CAMERA MACHINE (Apple Maps Parity)
+      // ═══════════════════════════════════════════════════════
+      if (distance > 30.0 || !mapProvider.isAutoTracking) {
+        // STATE 1: Re-center — User camera is far from GPS position
         mapProvider.setAutoTracking(true);
-      } else {
-        // Already centered -> Toggle Tilt
-        final currentTilt = currentCamera.tilt;
-        final bool is3D = currentTilt < 20.0;
 
-        // 🚀 FIRE VISUAL BUTTON STATE INSTANTLY
-        if (mounted) {
-          setState(() {
-            mapProvider.setAutoTracking(true);
-          });
-        } else {
-          mapProvider.setAutoTracking(true);
-        }
-
-        // 🚀 DELAY CAMERA COMMAND TO PREVENT UI FREEZE
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (!mounted) return;
-          final currentPos = mapController.cameraPosition;
-          if (currentPos != null) {
-            mapController.animateCamera(
-              CameraUpdate.newCameraPosition(
-                CameraPosition(
-                  target: currentPos.target,
-                  zoom: currentPos.zoom,
-                  bearing: currentPos.bearing,
-                  tilt: is3D ? 60.0 : 0.0,
-                ),
+        final currentPos = mapController.cameraPosition;
+        if (currentPos != null) {
+          await mapController.animateCamera(
+            CameraUpdate.newCameraPosition(
+              CameraPosition(
+                target: userLatLng,
+                zoom: 16.5,
+                tilt: currentPos.tilt,
+                bearing: currentPos.bearing,
               ),
-              duration: const Duration(milliseconds: 800),
-            );
-          }
-        });
+            ),
+            duration: const Duration(milliseconds: 800),
+          );
+        }
+      } else if (currentCamera.tilt < 30.0) {
+        // STATE 2: Tilt to 60° (3D View) — User is centered, camera is flat
+        mapProvider.engine.mode.setMode(MapMode.city3d);
+        final currentPos = mapController.cameraPosition;
+        if (currentPos != null) {
+          await mapController.animateCamera(
+            CameraUpdate.newCameraPosition(
+              CameraPosition(
+                target: userLatLng,
+                zoom: 16.5,
+                tilt: 60.0,
+                bearing: currentPos.bearing,
+              ),
+            ),
+            duration: const Duration(milliseconds: 600),
+          );
+        }
+      } else {
+        // STATE 3: Reset to 0° (Flat 2D North-Up View) — User is centered and tilted
+        mapProvider.engine.mode.setMode(MapMode.explore);
+        await mapController.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: userLatLng,
+              zoom: 16.5,
+              tilt: 0.0,
+              bearing: 0.0,
+            ),
+          ),
+          duration: const Duration(milliseconds: 600),
+        );
       }
     } on TimeoutException catch (_) {
-      // Catches the infinite hang caused by strict browser shields
-      debugPrint(
-          "⏳ [DEBUG] Geolocator timed out (Browser silently blocked it).");
+      debugPrint("⏳ [CameraEngine] Geolocator timed out (Browser silently blocked it).");
       if (!mounted) return;
       final validContext = ToastService.navigatorKey.currentContext ?? context;
       if (validContext.mounted) {
@@ -1533,24 +1496,15 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           "Check site settings (🔒).",
           title: "Location Blocked",
           onTap: () {
-            debugPrint("👆 [DEBUG] Error Toast Tapped!");
             if (kIsWeb) {
-              // 🚨 Capture context immediately before the async gap
-              final safeContext =
-                  ToastService.navigatorKey.currentContext ?? context;
-
+              final safeContext = ToastService.navigatorKey.currentContext ?? context;
               Future.delayed(const Duration(milliseconds: 400), () {
-                debugPrint(
-                    "🟢 [DEBUG] 400ms delay finished, firing Warning Toast...");
                 if (!safeContext.mounted) return;
                 try {
-                  // 🚨 Changed to showWarning to bypass the isMapScreen invisibility filter
                   ToastService.showWarning(safeContext,
                       "Click the lock icon (🔒) in your browser URL bar to allow location.",
                       title: "Browser Settings");
-                } catch (e) {
-                  debugPrint("🔴 [DEBUG] Failed to launch Warning Toast: $e");
-                }
+                } catch (_) {}
               });
             } else {
               Geolocator.openAppSettings().catchError((e) {
@@ -1561,9 +1515,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           },
         );
       }
-    } catch (e) {
-      // Catches standard denied exceptions
-      debugPrint("📍 [DEBUG] Locate Me Error: $e");
+    } catch (e, stack) {
+      debugPrint("[CameraEngine] Execution Exception: $e\n$stack");
       if (!mounted) return;
       final validContext = ToastService.navigatorKey.currentContext ?? context;
       if (validContext.mounted) {
@@ -1572,24 +1525,15 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           "Tap to grant access.",
           title: "Location Denied",
           onTap: () {
-            debugPrint("👆 [DEBUG] Error Toast Tapped!");
             if (kIsWeb) {
-              // 🚨 Capture context immediately before the async gap
-              final safeContext =
-                  ToastService.navigatorKey.currentContext ?? context;
-
+              final safeContext = ToastService.navigatorKey.currentContext ?? context;
               Future.delayed(const Duration(milliseconds: 400), () {
-                debugPrint(
-                    "🟢 [DEBUG] 400ms delay finished, firing Warning Toast...");
                 if (!safeContext.mounted) return;
                 try {
-                  // 🚨 Changed to showWarning to bypass the isMapScreen invisibility filter
                   ToastService.showWarning(safeContext,
                       "Click the lock icon (🔒) in your browser URL bar to allow location.",
                       title: "Browser Settings");
-                } catch (e) {
-                  debugPrint("🔴 [DEBUG] Failed to launch Warning Toast: $e");
-                }
+                } catch (_) {}
               });
             } else {
               Geolocator.openAppSettings().catchError((e) {
@@ -1600,6 +1544,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           },
         );
       }
+    } finally {
+      // Absolutely guaranteed unlock after maximum animation duration
+      Future.delayed(const Duration(milliseconds: 850), () {
+        if (mounted) {
+          _isCameraAnimating = false;
+        }
+      });
     }
   }
 }
