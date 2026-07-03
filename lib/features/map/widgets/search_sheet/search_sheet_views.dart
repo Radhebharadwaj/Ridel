@@ -441,6 +441,9 @@ if (showRecentSearches)
                                                       .cancelAndClearRoute(
                                                           resetCamera: false);
 
+                                                  // 🚀 TASK 1: FORCIBLY SEVER AUTO-TRACKING BEFORE CAMERA FLIGHT
+                                                  safeProvider.setAutoTracking(false);
+
                                                   // 1. Set the tapped place so the bottom sheet shows the details UI
                                                   safeProvider
                                                       .setActiveDestination(place);
@@ -1352,6 +1355,7 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
     return Container(
       margin: const EdgeInsets.only(top: 12, left: 16, right: 16, bottom: 20),
       padding: const EdgeInsets.all(16),
+      clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -1408,6 +1412,7 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
               ),
             ],
           ),
+          
           const SizedBox(height: 24),
 
           // 🚀 2. TRANSPORT MODES (Properly Wired to MapProvider)
@@ -1552,6 +1557,7 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
               ],
             ),
           ),
+          // Removed closing bracket for condition
         ],
       ),
     );
@@ -1584,11 +1590,16 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
         child: _buildUnifiedExploreView(isDark, progress, isExpandedList: isExpanded),
       );
     }
-    return Column(
-      children: [
-        contentView,
-        if (!isAddingStopMode) _buildReportIssueFooter(isDark),
-      ],
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOutCubic,
+      child: Column(
+        mainAxisSize: MainAxisSize.min, // CRITICAL: Forces container to shrink to fit only visible children!
+        children: [
+          contentView,
+          if (!isAddingStopMode && !provider.hasActiveRoute) _buildReportIssueFooter(isDark),
+        ],
+      ),
     );
   }
 

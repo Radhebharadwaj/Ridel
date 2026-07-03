@@ -138,12 +138,11 @@ class MapEngine {
 
     try {
       Future<void> safeAddEngineImage(String? id, Uint8List bytes) async {
-        if (id != null && id.trim().isNotEmpty) {
-          try {
-            await controller.addImage(id, bytes);
-          } catch (_) {
-            // Ignore error if image already exists
-          }
+        if (id == null || id.trim().isEmpty) return;
+        try {
+          await controller.addImage(id, bytes);
+        } catch (e) {
+          debugPrint("SafeAddImage error: $e");
         }
       }
 

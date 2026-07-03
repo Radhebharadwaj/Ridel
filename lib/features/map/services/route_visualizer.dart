@@ -39,11 +39,9 @@ class RouteVisualizer {
       "properties": {},
       "geometry": {"type": "LineString", "coordinates": []}
     };
-    Future.microtask(() async {
-      try {
-        await controller.setGeoJsonSource(_sourceId, emptyGeoJson);
-      } catch (_) {}
-    });
+    try {
+      await controller.setGeoJsonSource(_sourceId, emptyGeoJson);
+    } catch (_) {}
   }
 
   /// Draws a premium multi-layer route polyline.

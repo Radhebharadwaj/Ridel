@@ -84,8 +84,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   String? _activeRoutingField;
 
   final FocusNode _searchFocus = FocusNode();
-  final DraggableScrollableController _sheetController =
-      DraggableScrollableController();
+  DraggableScrollableController get _sheetController =>
+      Provider.of<MapProvider>(context, listen: false).sheetController;
 
   // ignore: deprecated_member_use
 
@@ -157,12 +157,15 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   double get _safeMinSize {
     if (!mounted) return 0.15;
+    final provider = Provider.of<MapProvider>(context, listen: false);
+    final routeActive = _currentRoute != null || provider.isRouteCalculated;
+
     // The height available inside the SafeArea
     final availableHeight = MediaQuery.sizeOf(context).height -
         MediaQuery.paddingOf(context).bottom;
 
-    // 70.0 (Pill Height) + 44.0 (Bottom Margin matching Nav Pill's 20.0 position + 24.0 margin)
-    const requiredPhysicalHeight = 70.0 + 44.0;
+    // 70.0 (Pill Height) + dynamic margin
+    final double requiredPhysicalHeight = 70.0 + 44.0;
 
     return (requiredPhysicalHeight / availableHeight).clamp(0.05, 0.40);
   }
@@ -436,6 +439,10 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     provider.setDropPinMode(false); // 🚨 CRITICAL FIX
     provider.setAddingStopMode(false); // 🚨 CRITICAL FIX
 
+    if (_sheetController.isAttached) {
+      _safeAnimateSheet(_safeMidSize);
+    }
+
     // 3. Show the Undo Toast
     ToastService.showActionToast(context,
         message: "Route cleared", actionLabel: "UNDO", onActionTap: () async {
@@ -524,6 +531,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       // 4. Fly Camera
       if (lat != 0.0 && lng != 0.0) {
         await safeProvider.cancelAndClearRoute(resetCamera: false);
+        // 🚀 TASK 1: FORCIBLY SEVER AUTO-TRACKING BEFORE CAMERA FLIGHT
+        safeProvider.setAutoTracking(false);
         safeProvider.setDestinationSelected(true);
         safeProvider.engine.setUIState(MapUIState.placeSelected);
         setState(() {
@@ -739,6 +748,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
               // Update provider with valid data
               final provider = Provider.of<MapProvider>(context, listen: false);
               await provider.cancelAndClearRoute(resetCamera: false);
+              // 🚀 TASK 1: FORCIBLY SEVER AUTO-TRACKING BEFORE CAMERA FLIGHT
+              provider.setAutoTracking(false);
               provider.setDestinationSelected(true);
               provider.engine.setUIState(MapUIState.placeSelected);
               setState(() {
@@ -1000,6 +1011,10 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           // 🧭 State Machine: Route drawn → morph QuickActionButtons to "Start"
           provider.engine.setUIState(MapUIState.routeDrawn);
 
+          if (_sheetController.isAttached) {
+            _safeAnimateSheet(_safeMinSize);
+          }
+
           final double minLat = math.min(originLoc.latitude, destLoc.latitude);
           final double maxLat = math.max(originLoc.latitude, destLoc.latitude);
           final double minLng =
@@ -1149,7 +1164,6 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   void dispose() {
     _hideDashTimer?.cancel();
     _debounce?.cancel();
-    _sheetController.dispose();
     _searchCtrl.dispose();
     _originCtrl.dispose();
     _destCtrl.dispose();
@@ -1172,6 +1186,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     required Widget child,
   }) {
     final innerContainer = Container(
+      clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
         color: sheetBgColor,
         borderRadius: premiumRadius,
@@ -1228,6 +1243,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   Widget build(BuildContext context) {
     final provider = Provider.of<MapProvider>(context, listen: false);
     final isActiveNavigation = context.select<MapProvider, bool>((p) => p.isActiveNavigation);
+    final isRouteCalculated = context.select<MapProvider, bool>((p) => p.isRouteCalculated);
     final screenSize = MediaQuery.sizeOf(context);
     final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final bool isKeyboardOpen = keyboardHeight > 0;
@@ -1443,9 +1459,13 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                         ? 0.0 
                                         : ((progress - 0.45) / (0.95 - 0.45)).clamp(0.0, 1.0);
 
+                                    final bool routeActive = _currentRoute != null || provider.isRouteCalculated;
+                                    final double baseSide = routeActive ? 16.0 : 28.0;
+                                    final double baseBottom = routeActive ? 0.0 : 44.0; // 0.0 makes it flush with the bottom safe area!
+
                                     // 🚀 FIX: Bind margins and height strictly to morphFactor to prevent initial jumping
-                                    final double currentSideMargin = lerpDouble(28.0, 0.0, morphFactor) ?? 28.0;
-                                    final double currentBottomMargin = lerpDouble(44.0, 0.0, morphFactor) ?? 44.0;
+                                    final double currentSideMargin = lerpDouble(baseSide, 0.0, morphFactor) ?? baseSide;
+                                    final double currentBottomMargin = lerpDouble(baseBottom, 0.0, morphFactor) ?? baseBottom;
                                     
                                     final dynamicHeaderHeight = isActiveNavigation
                                         ? (_isNavSheetExpanded ? navExpandedHeight - 40 : navCollapsedHeight)
@@ -1489,6 +1509,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                   // 🎨 PERFORMANCE FIX: RepaintBoundary around Blur
                                                   RepaintBoundary(
                                                     child: AnimatedContainer(
+                                                      clipBehavior: Clip.hardEdge,
                                                       // 🚀 CRITICAL: Disable animation during drag to prevent jitter, but keep it for Navigation mode height changes
                                                       duration: provider
                                                               .isActiveNavigation

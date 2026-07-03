@@ -30,6 +30,9 @@ class MapProvider extends ChangeNotifier {
   final RouteEngineService _routingService = RouteEngineService();
   int _routingSessionCounter = 0;
 
+  // 🚀 GLOBAL SHEET CONTROLLER
+  final DraggableScrollableController sheetController = DraggableScrollableController();
+
   // 🚀 DYNAMIC DPI SCALER: Leaves Web untouched, boosts Mobile by 2x-2.5x
   double get mapItemScale => kIsWeb ? 1.0 : 2.5; 
 
@@ -38,6 +41,16 @@ class MapProvider extends ChangeNotifier {
 
   bool isAddingStopMode = false;
   bool isDropPinMode = false;
+
+  bool _is3D = false;
+  bool get is3D => _is3D;
+
+  void setIs3D(bool value) {
+    if (_is3D != value) {
+      _is3D = value;
+      notifyListeners();
+    }
+  }
 
   void setAddingStopMode(bool value) {
     if (isAddingStopMode != value) {
@@ -278,8 +291,11 @@ class MapProvider extends ChangeNotifier {
     }
     double targetBearing = _lastPuckBearing + diff;
 
-    // 2. Camera Tracking Logic (wrapped in boolean guard)
-    if (isAutoTracking && controller != null) {
+    // 2. Camera Tracking Logic — STRICTLY block auto-centering if user selected a pin!
+    if (!isAutoTracking) {
+      // 🚀 HARD GUARD: User has selected a destination or manually panned.
+      // Do NOT re-center camera to the GPS blue dot.
+    } else if (controller != null) {
       try {
         controller!.animateCamera(
           CameraUpdate.newCameraPosition(
@@ -342,6 +358,9 @@ class MapProvider extends ChangeNotifier {
   // State flag for UI
   bool isRouteCalculated = false;
   bool isCalculatingRoute = false;
+
+  bool get hasActiveRoute =>
+      isRouteCalculated || engine.mapUIState.value == MapUIState.routeDrawn;
 
   Future<void> calculateAndDrawNativeRoute(
     BuildContext context,
@@ -475,6 +494,15 @@ class MapProvider extends ChangeNotifier {
         isRouteCalculated = true;
         engine.setUIState(MapUIState.routeDrawn);
         notifyListeners();
+
+        // 🚨 IMMEDIATELY animate the bottom sheet down to its collapsed header view!
+        if (sheetController.isAttached) {
+          sheetController.animateTo(
+            0.14, // Exact fractional height that naturally reveals strictly the top Dropped Pin header!
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeInOutCubic,
+          );
+        }
       } else {
         debugPrint(
           "⚠️ [ROUTE ENGINE] Ola API returned empty coordinates or null.",
@@ -1145,13 +1173,11 @@ class MapProvider extends ChangeNotifier {
           timeString,
           isPrimary,
         );
-        if (imageId.trim().isNotEmpty) {
-          try {
+        try {
+          if (imageId.trim().isNotEmpty) {
             await controller!.addImage(imageId, imageBytes);
-          } catch (_) {
-            // Silently ignore if image already exists in style
           }
-        }
+        } catch (_) {}
 
         // 2. Add Point Source
         try {
@@ -1290,15 +1316,8 @@ class MapProvider extends ChangeNotifier {
       // Step E: Re-add the puck's SymbolLayer at the very end
       try {
         // Re-inject image before adding layer
-        const imageId = 'nav_puck';
-        if (imageId.isNotEmpty) {
-          try {
-            final bytes = await rootBundle.load('assets/images/nav_puck.png');
-            await controller!.addImage(imageId, bytes.buffer.asUint8List());
-          } catch (_) {
-            // Silently ignore if nav_puck already exists
-          }
-        }
+        final bytes = await rootBundle.load('assets/images/nav_puck.png');
+        await controller!.addImage('nav_puck', bytes.buffer.asUint8List());
 
         await controller!.addSymbolLayer(
           "nav_puck_source", 
@@ -1327,11 +1346,14 @@ class MapProvider extends ChangeNotifier {
       isActiveNavigation = false; 
       engine.setUIState(MapUIState.idle);
 
-      // 🚀 ANTI-PURGE GUARD: Only flush the puck's GeoJSON data to hide it visually.
-      // NEVER destroy the nav_puck_layer or nav_puck_source — they are immortal infrastructure.
       final emptyGeoJson = {"type": "FeatureCollection", "features": []};
       try {
         await controller?.setGeoJsonSource("nav_puck_source", emptyGeoJson);
+      } catch (_) {}
+
+      try {
+        await controller?.removeLayer("nav_puck_layer");
+        await controller?.removeSource("nav_puck_source");
       } catch (_) {}
     }
 
@@ -1339,103 +1361,104 @@ class MapProvider extends ChangeNotifier {
       return; // Do not spam the bridge if already clear
     }
     if (controller != null && _drawnRoutesCount > 0) {
-      Future.microtask(() async {
+      // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
+      try {
+        await controller!.removeLayer('primary-casing');
+      } catch (_) {}
+      try {
+        await controller!.removeLayer('primary-core');
+      } catch (_) {}
+      try {
+        await controller!.removeLayer('primary-shine');
+      } catch (_) {}
+      try {
+        await controller!.removeLayer('primary-walk-layer');
+      } catch (_) {}
+      try {
+        await controller!.removeLayer('connectors-layer');
+      } catch (_) {}
+      try {
+        await controller!.removeLayer('intermediate-pins-layer');
+      } catch (_) {}
 
-        // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
+      for (int i = 0; i < 5; i++) {
         try {
-          await controller!.removeLayer('primary-casing');
+          await controller!.removeLayer('route-layer-$i');
         } catch (_) {}
         try {
-          await controller!.removeLayer('primary-core');
+          await controller!.removeLayer('alt-walk-layer-$i');
         } catch (_) {}
         try {
-          await controller!.removeLayer('primary-shine');
+          await controller!.removeLayer('time-tag-layer-$i');
         } catch (_) {}
-        try {
-          await controller!.removeLayer('primary-walk-layer');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('connectors-layer');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('intermediate-pins-layer');
-        } catch (_) {}
+      }
 
-        for (int i = 0; i < 5; i++) {
+      // 2. SECURE SOURCE CLEANUP (Only safe to remove after layers are dead)
+      try {
+        await controller!.removeSource('primary-source');
+      } catch (_) {}
+      try {
+        await controller!.removeSource('connectors-source');
+      } catch (_) {}
+      try {
+        await controller!.removeSource('intermediate-pins-source');
+      } catch (_) {}
+
+      for (int i = 0; i < 5; i++) {
+        try {
+          await controller!.removeSource('route-source-$i');
+        } catch (_) {}
+        try {
+          await controller!.removeSource('alt-source-$i');
+        } catch (_) {}
+        try {
+          await controller!.removeSource('time-tag-source-$i');
+        } catch (_) {}
+      }
+
+      _drawnRoutesCount = 0;
+      if (!preserveState) {
+        isRouteCalculated = false;
+        _currentRouteResult = null;
+        _lastRouteData = null;
+
+        // 🚨 Deactivate Focus Mode & Hide Puck
+        await _toggleFocusModeLayers(false);
+        await hideNavigationPuck();
+
+        // Native blue dot is reactively restored by hideNativeBlueDot getter. No controller call needed.
+        await updatePuckVisibility();
+
+
+        // 🚨 Cinematic Camera Reset
+        if (controller != null && currentLocation != null) {
           try {
-            await controller!.removeLayer('route-layer-$i');
-          } catch (_) {}
-          try {
-            await controller!.removeLayer('alt-walk-layer-$i');
-          } catch (_) {}
-          try {
-            await controller!.removeLayer('time-tag-layer-$i');
-          } catch (_) {}
-        }
-
-        // 2. SECURE SOURCE CLEANUP (Only safe to remove after layers are dead)
-        try {
-          await controller!.removeSource('primary-source');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('connectors-source');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('intermediate-pins-source');
-        } catch (_) {}
-
-        for (int i = 0; i < 5; i++) {
-          try {
-            await controller!.removeSource('route-source-$i');
-          } catch (_) {}
-          try {
-            await controller!.removeSource('alt-source-$i');
-          } catch (_) {}
-          try {
-            await controller!.removeSource('time-tag-source-$i');
-          } catch (_) {}
-        }
-
-        _drawnRoutesCount = 0;
-        if (!preserveState) {
-          isRouteCalculated = false;
-          _currentRouteResult = null;
-          _lastRouteData = null;
-
-          // 🚨 Deactivate Focus Mode & Hide Puck
-          await _toggleFocusModeLayers(false);
-          await hideNavigationPuck();
-
-          // Native blue dot is reactively restored by hideNativeBlueDot getter. No controller call needed.
-          await updatePuckVisibility();
-
-          // 🚨 Cinematic Camera Reset
-          if (controller != null && currentLocation != null) {
-            try {
-              await controller!.animateCamera(
-                CameraUpdate.newCameraPosition(
-                  CameraPosition(
-                    target: currentLocation!,
-                    zoom: 15.0, // Comfortable default zoom
-                    tilt: 0.0, // Strictly reset to flat 2D
-                    bearing: 0.0, // Strictly reset rotation
-                  ),
+            await controller!.animateCamera(
+              CameraUpdate.newCameraPosition(
+                CameraPosition(
+                  target: currentLocation!,
+                  zoom: 15.0, // Comfortable default zoom
+                  tilt: 0.0, // Strictly reset to flat 2D
+                  bearing: 0.0, // Strictly reset rotation
                 ),
-                duration: const Duration(milliseconds: 1200), // Smooth 1.2s premium flight
-              );
+              ),
+              duration: const Duration(
+                  milliseconds: 1200), // Smooth 1.2s premium flight
+            );
 
-              // Wait for the flight to finish smoothly BEFORE locking the tracking
-              await Future.delayed(const Duration(milliseconds: 1250));
-              // Reset tracking mode after animation
-              await setTrackingMode(MyLocationTrackingMode.tracking);
-            } catch (e) {
-              debugPrint("⚠️ Native Tracking Reset Error: $e");
-            }
+            // Wait for the flight to finish smoothly BEFORE locking the tracking
+            await Future.delayed(const Duration(milliseconds: 1250));
+            // Reset tracking mode after animation
+            await setTrackingMode(
+              MyLocationTrackingMode.tracking,
+            );
+          } catch (e) {
+            debugPrint("⚠️ Native Tracking Reset Error: $e");
           }
         }
+      }
 
-        notifyListeners();
-      });
+      notifyListeners();
     }
   }
 
@@ -1448,12 +1471,10 @@ class MapProvider extends ChangeNotifier {
     // Hide the static puck layer
     await hideNavigationPuck();
     
-    Future.microtask(() async {
-      // 1. Clear MapLibre Native Layers (Lines AND ETA Pills)
-      if (controller != null) {
-
-        if (_drawnRoutesCount > 0 || isRouteCalculated) {
-          // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
+    // 1. Clear MapLibre Native Layers (Lines AND ETA Pills)
+    if (controller != null) {
+      if (_drawnRoutesCount > 0 || isRouteCalculated) {
+        // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
         try {
           await controller!.removeLayer('primary-casing');
         } catch (_) {}
@@ -1567,13 +1588,12 @@ class MapProvider extends ChangeNotifier {
       await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
     }
 
-      // 🌟 Explicitly Restore All Dimmed/Hidden Background Layers & Hide Puck
-      await _toggleFocusModeLayers(false);
-      await hideNavigationPuck();
+    // 🌟 Explicitly Restore All Dimmed/Hidden Background Layers & Hide Puck
+    await _toggleFocusModeLayers(false);
+    await hideNavigationPuck();
 
-      // 3. Notify the UI to rebuild (This brings the Search Bar back!)
-      notifyListeners();
-    });
+    // 3. Notify the UI to rebuild (This brings the Search Bar back!)
+    notifyListeners();
   }
 
   // Helper to calculate camera bounds
@@ -1987,6 +2007,10 @@ class MapProvider extends ChangeNotifier {
   Future<void> handleMapTap(Point<double> point, LatLng latLng) async {
     if (!_isMapReady) return;
 
+    // 🚀 TASK 1: FORCIBLY SEVER AUTO-TRACKING BEFORE CAMERA FLIGHT
+    // This MUST happen first to prevent the GPS stream from yanking the camera back.
+    setAutoTracking(false);
+
     if (engine.mapController != null) {
       await engine.mapController!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
     }
@@ -2019,11 +2043,22 @@ class MapProvider extends ChangeNotifier {
     // Single consolidated notification for all state changes above
     notifyListeners();
 
-    // 3. Execute the flight to the PIN coordinates (tappedCoordinates), NOT user location instantly!
-    await engine.mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(latLng, 16.0),
-      duration: const Duration(milliseconds: 800),
-    );
+    // 🚀 TASK 2: Execute a cinematic flight strictly to the dropped pin
+    Future.microtask(() async {
+      if (engine.mapController != null) {
+        await engine.mapController!.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: latLng, // strictly center on the PIN, not the user!
+              zoom: 16.0,     // Clean, immersive street-level zoom
+              tilt: 0.0,      // Clean flat cartographic angle
+              bearing: 0.0,   // North-up alignment
+            ),
+          ),
+          duration: const Duration(milliseconds: 800), // Silky-smooth 60FPS glide
+        );
+      }
+    });
 
     // Clear existing pin if any
     if (_droppedPinSymbol != null && controller != null) {
@@ -2779,16 +2814,22 @@ class MapProvider extends ChangeNotifier {
     notifyListeners(); // 🧭 Triggers Consumer → AnimatedMapPin overlay appears
 
     try {
-      // 2. Smoothly fly to the destination
-      await controller!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(lat, lng),
-            zoom: 15.0, // Or your preferred zoom level
-          ),
-        ),
-        duration: const Duration(milliseconds: 1200),
-      );
+      // 🚀 TASK 2: Execute a cinematic flight strictly to the destination pin
+      Future.microtask(() async {
+        if (controller != null) {
+          await controller!.animateCamera(
+            CameraUpdate.newCameraPosition(
+              CameraPosition(
+                target: LatLng(lat, lng), // strictly center on the PIN, not the user!
+                zoom: 16.0,        // Clean, immersive street-level zoom
+                tilt: 0.0,         // Clean flat cartographic angle
+                bearing: 0.0,      // North-up alignment
+              ),
+            ),
+            duration: const Duration(milliseconds: 800), // Silky-smooth 60FPS glide
+          );
+        }
+      });
 
       // Clear existing pin if any
       if (_droppedPinSymbol != null && controller != null) {
