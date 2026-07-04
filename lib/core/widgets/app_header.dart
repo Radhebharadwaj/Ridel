@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:ridel/main.dart';
+import 'package:ridel/core/map/map_provider.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -43,7 +44,7 @@ class AppHeader extends StatefulWidget {
   State<AppHeader> createState() => _AppHeaderState();
 }
 
-class _AppHeaderState extends State<AppHeader> {
+class _AppHeaderState extends State<AppHeader> with WidgetsBindingObserver {
   final ProfileRepository _repo = ProfileRepository();
 
   String _notificationMode = 'Active';
@@ -59,6 +60,7 @@ class _AppHeaderState extends State<AppHeader> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initLocation();
       if (widget.isRouteMode) {
@@ -67,6 +69,21 @@ class _AppHeaderState extends State<AppHeader> {
       }
     });
   }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Force re-check immediately upon resuming the app
+      context.read<MapProvider>().initializeLocation();
+    }
+  }
+
 
   @override
   void didUpdateWidget(AppHeader oldWidget) {
@@ -194,20 +211,26 @@ class _AppHeaderState extends State<AppHeader> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Consumer<GlobalLocationService>(
-              builder: (context, locService, child) {
-                String cityName = locService.currentCityName.value;
-                String displayCity =
-                    cityName.isNotEmpty ? cityName : "Detecting...";
+            child: Consumer<MapProvider>(
+              builder: (context, mapProvider, child) {
+                return Consumer<GlobalLocationService>(
+                  builder: (context, locService, child) {
+                    final location = mapProvider.currentLocation;
+                    String cityName = locService.currentCityName.value;
+                    
+                    String displayCity = "Fetching Location...";
+                    if (location != null) {
+                       displayCity = cityName.isNotEmpty ? cityName : "Your Location is Active";
+                    }
 
-                displayCity = displayCity.split(' ').map((word) {
-                  return word.isEmpty
-                      ? ""
-                      : word[0].toUpperCase() + word.substring(1).toLowerCase();
-                }).join(' ');
+                    displayCity = displayCity.split(' ').map((word) {
+                      return word.isEmpty
+                          ? ""
+                          : word[0].toUpperCase() + word.substring(1).toLowerCase();
+                    }).join(' ');
 
-                final displayTitle = displayCity;
-                final isFake = cityName == "Fake GPS Detected" || cityName == "Location Disabled";
+                    final displayTitle = displayCity;
+                    final isFake = cityName == "Fake GPS Detected" || cityName == "Location Disabled";
 
                 return AnimatedSwitcher(
                   duration: const Duration(milliseconds: 400),
@@ -363,6 +386,8 @@ class _AppHeaderState extends State<AppHeader> {
                             ),
                           ],
                         ),
+                );
+                  },
                 );
               },
             ),

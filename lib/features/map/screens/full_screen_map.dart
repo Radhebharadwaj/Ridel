@@ -1052,12 +1052,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             onSearchModeChanged: (isActive) {},
                             onSearchSubmitted: (query) {},
                             onProgressChanged: (progress) {
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                if (mounted) {
-                                  widget.searchSheetProgressNotifier.value =
-                                      progress;
-                                }
-                              });
+                              if (mounted) {
+                                widget.searchSheetProgressNotifier.value = progress;
+                              }
                             },
                             onBackToPreviousTab: () {
                               Provider.of<AppNavigationProvider>(context,
@@ -1300,22 +1297,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         child: pillChild!,
                       );
                     }
-                    final screenSize = MediaQuery.sizeOf(context);
+                    final double screenHeight = MediaQuery.sizeOf(context).height;
+                    const double buttonGap = 16.0;
 
-                    // 1. Calculate the exact top pixel coordinate of the sheet
-                    final double availableHeight = screenSize.height -
-                        MediaQuery.paddingOf(context).bottom;
-                    final double sheetPhysicalHeight =
-                        progress * availableHeight;
-
-                    final double dynamicBottomMargin =
-                        lerpDouble(44.0, 0.0, progress) ?? 44.0;
-
-                    // -16.0px gap above the sheet to sit extremely close to the top of the Search Sheet.
-                    final double dynamicBottomPosition = sheetPhysicalHeight +
-                        dynamicBottomMargin +
-                        MediaQuery.paddingOf(context).bottom -
-                        16.0;
+                    // This formula guarantees the buttons ALWAYS stay exactly 'buttonGap'
+                    // distance above the top edge of the sheet.
+                    final double dynamicBottomPosition = (screenHeight * progress) + buttonGap;
 
                     final opacity = (progress <= 0.45)
                         ? 1.0

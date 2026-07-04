@@ -169,26 +169,32 @@ class MapProvider extends ChangeNotifier {
 
   Future<void> initializeLocation() async {
     try {
-      // STEP 1: INSTANT CACHED FETCH (0ms lag)
-      // Immediately grab the last known position from the OS/browser cache to unblock the UI
-      final Position? cachedPosition = await Geolocator.getLastKnownPosition();
-      if (cachedPosition != null) {
-        currentLocation = LatLng(cachedPosition.latitude, cachedPosition.longitude);
-        notifyListeners(); // Instantly triggers initial centering in the UI
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
       }
       
-      // STEP 2: ASYNCHRONOUS HIGH-ACCURACY REFINEMENT (Short 2.5s timeout)
-      // Fetch the exact live GPS coordinate in the background without blocking the map render
-      Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(milliseconds: 2500), // Aggressive 2.5s cut-off
-      ).then((Position livePosition) {
-        currentLocation = LatLng(livePosition.latitude, livePosition.longitude);
-        notifyListeners(); // Glides the camera smoothly to the refined live coordinates
-      }).catchError((e) {
-        debugPrint("⚠️ Live GPS refinement fallback to stream/cache: $e");
-      });
-      
+      if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+        // STEP 1: INSTANT CACHED FETCH (0ms lag)
+        // Immediately grab the last known position from the OS/browser cache to unblock the UI
+        final Position? cachedPosition = await Geolocator.getLastKnownPosition();
+        if (cachedPosition != null) {
+          currentLocation = LatLng(cachedPosition.latitude, cachedPosition.longitude);
+          notifyListeners(); // Instantly triggers initial centering in the UI
+        }
+        
+        // STEP 2: ASYNCHRONOUS HIGH-ACCURACY REFINEMENT (Short 2.5s timeout)
+        // Fetch the exact live GPS coordinate in the background without blocking the map render
+        Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(milliseconds: 2500), // Aggressive 2.5s cut-off
+        ).then((Position livePosition) {
+          currentLocation = LatLng(livePosition.latitude, livePosition.longitude);
+          notifyListeners(); // Glides the camera smoothly to the refined live coordinates
+        }).catchError((e) {
+          debugPrint("⚠️ Live GPS refinement fallback to stream/cache: $e");
+        });
+      }
     } catch (e) {
       debugPrint("❌ Location initialization pipeline failed: $e");
     }
