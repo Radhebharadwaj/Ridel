@@ -1470,7 +1470,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                             return false;
                           },
                           child: SafeArea(
-                            bottom: true,
+                            bottom: false,
                             top: false, // Don't restrict the top
                             child: DraggableScrollableSheet(
                               controller: _sheetController,
@@ -1496,20 +1496,42 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                     final bool routeActive =
                                         _currentRoute != null ||
                                             provider.isRouteCalculated;
-                                    final double baseSide =
-                                        routeActive ? 16.0 : 28.0;
                                     final double baseBottom = routeActive
                                         ? 0.0
                                         : 44.0; // 0.0 makes it flush with the bottom safe area!
 
-                                    // 🚀 FIX: Bind margins and height strictly to morphFactor to prevent initial jumping
-                                    final double currentSideMargin = lerpDouble(
-                                            baseSide, 0.0, morphFactor) ??
-                                        baseSide;
-                                    final double currentBottomMargin =
-                                        lerpDouble(
-                                                baseBottom, 0.0, morphFactor) ??
-                                            baseBottom;
+                                    // Dynamic Horizontal Margin Interpolation
+                                    final double minSize = 0.12; 
+                                    final double midSize = 0.55; 
+                                    final double maxSize = 0.95; 
+
+                                    final double closedMargin = routeActive ? 16.0 : 24.0; 
+                                    final double weatherCardMargin = 16.0; 
+                                    final double fullMargin = 0.0; 
+
+                                    double getDynamicHorizontalMargin() {
+                                      if (progress <= midSize) {
+                                        final double t = (progress - minSize) / (midSize - minSize);
+                                        return lerpDouble(closedMargin, weatherCardMargin, t.clamp(0.0, 1.0))!;
+                                      } else {
+                                        final double t = (progress - midSize) / (maxSize - midSize);
+                                        return lerpDouble(weatherCardMargin, fullMargin, t.clamp(0.0, 1.0))!;
+                                      }
+                                    }
+                                    
+                                    final double currentSideMargin = getDynamicHorizontalMargin();
+
+                                    double getDynamicBottomMargin() {
+                                      if (progress <= midSize) {
+                                        final double t = (progress - minSize) / (midSize - minSize);
+                                        return lerpDouble(baseBottom, weatherCardMargin, t.clamp(0.0, 1.0))!;
+                                      } else {
+                                        final double t = (progress - midSize) / (maxSize - midSize);
+                                        return lerpDouble(weatherCardMargin, fullMargin, t.clamp(0.0, 1.0))!;
+                                      }
+                                    }
+
+                                    final double currentBottomMargin = getDynamicBottomMargin();
 
                                     final dynamicHeaderHeight =
                                         isActiveNavigation
