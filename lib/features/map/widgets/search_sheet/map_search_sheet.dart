@@ -73,7 +73,7 @@ class MapSearchSheet extends StatefulWidget {
 class _MapSearchSheetState extends State<MapSearchSheet>
     with SingleTickerProviderStateMixin {
   SheetMode _currentMode = SheetMode.search;
-  
+
   final TextEditingController _searchCtrl = TextEditingController();
   final TextEditingController _originCtrl = TextEditingController();
   final TextEditingController _destCtrl = TextEditingController();
@@ -157,15 +157,13 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   double get _safeMinSize {
     if (!mounted) return 0.15;
-    final provider = Provider.of<MapProvider>(context, listen: false);
-    final routeActive = _currentRoute != null || provider.isRouteCalculated;
 
     // The height available inside the SafeArea
     final availableHeight = MediaQuery.sizeOf(context).height -
         MediaQuery.paddingOf(context).bottom;
 
     // 70.0 (Pill Height) + dynamic margin
-    final double requiredPhysicalHeight = 70.0 + 44.0;
+    const double requiredPhysicalHeight = 70.0 + 44.0;
 
     return (requiredPhysicalHeight / availableHeight).clamp(0.05, 0.40);
   }
@@ -231,7 +229,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       if (!mounted) return;
       Provider.of<MapProvider>(context, listen: false)
           .addListener(_onMapProviderUpdated);
-          
+
       // 🚀 FIX: Broadcast initial height instantly to position Quick Access Buttons correctly on startup
       _sheetProgress.value = _safeMinSize;
       if (widget.onProgressChanged != null) {
@@ -259,16 +257,16 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     final state = _locationPickerController.sheetState.value;
 
     if (state == SheetState.selectingLocation) {
-      // 🚀 FIX: No longer listening to raw onCameraMove spam. 
+      // 🚀 FIX: No longer listening to raw onCameraMove spam.
       // Reverse geocode is now triggered safely in _onMapProviderUpdated via MapProvider's onCameraIdle.
-      
+
       // Trigger an initial reverse geocode
       final provider = Provider.of<MapProvider>(context, listen: false);
       final pos = provider.controller?.cameraPosition;
       if (pos != null) {
         _locationPickerController.onCameraMove(pos.target);
       }
-      
+
       // Shrink sheet to show more map
       if (_sheetController.isAttached) {
         _safeAnimateSheet(_safeMinSize);
@@ -282,20 +280,37 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     try {
       final lowerQuery = query.toLowerCase().trim();
       final allStops = DatabaseHelper.instance.instantCachedStops;
-      
-      return allStops.where((stop) {
-        final stopName = (stop['stop_name'] ?? stop['name'] ?? '').toString();
-        return stopName.toLowerCase().contains(lowerQuery);
-      }).take(5).map((stop) {
-        return PlaceModel(
-          placeId: stop['stop_id']?.toString() ?? '',
-          name: stop['stop_name']?.toString() ?? stop['name']?.toString() ?? 'Unknown Stop',
-          address: 'Transit Stop',
-          latitude: double.tryParse((stop['lat'] ?? stop['LAT'] ?? '0').toString()) ?? 0.0,
-          longitude: double.tryParse((stop['lon'] ?? stop['LON'] ?? stop['lng'] ?? stop['LNG'] ?? '0').toString()) ?? 0.0,
-          categories: stop['transport_mode'] == 0 ? ['metro_station'] : ['bus_station'],
-        );
-      }).toList();
+
+      return allStops
+          .where((stop) {
+            final stopName =
+                (stop['stop_name'] ?? stop['name'] ?? '').toString();
+            return stopName.toLowerCase().contains(lowerQuery);
+          })
+          .take(5)
+          .map((stop) {
+            return PlaceModel(
+              placeId: stop['stop_id']?.toString() ?? '',
+              name: stop['stop_name']?.toString() ??
+                  stop['name']?.toString() ??
+                  'Unknown Stop',
+              address: 'Transit Stop',
+              latitude: double.tryParse(
+                      (stop['lat'] ?? stop['LAT'] ?? '0').toString()) ??
+                  0.0,
+              longitude: double.tryParse((stop['lon'] ??
+                          stop['LON'] ??
+                          stop['lng'] ??
+                          stop['LNG'] ??
+                          '0')
+                      .toString()) ??
+                  0.0,
+              categories: stop['transport_mode'] == 0
+                  ? ['metro_station']
+                  : ['bus_station'],
+            );
+          })
+          .toList();
     } catch (e) {
       debugPrint("Local Search Error: $e");
       return [];
@@ -337,25 +352,27 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       if (!mounted) return;
       debugPrint("🔍 DEBUG SEARCH: Sending query -> '$query'");
       final cleanQuery = query.toLowerCase().trim();
-      
+
       try {
-        final globalLoc = Provider.of<GlobalLocationService>(context, listen: false);
+        final globalLoc =
+            Provider.of<GlobalLocationService>(context, listen: false);
         final pos = globalLoc.currentPosition;
         final latLng = pos != null ? LatLng(pos.latitude, pos.longitude) : null;
-        
+
         // Fetch remote places silently
         final apiResults = await MasterSearchService().searchPlaces(
           cleanQuery,
           userLocation: latLng,
         );
-        
+
         if (!mounted || _searchCtrl.text.trim() != query) return;
 
         setState(() {
           // Merge avoiding exact duplicates by name
           final combined = [...localResults];
           for (var apiItem in apiResults) {
-            if (!combined.any((local) => local.name.toLowerCase() == apiItem.name.toLowerCase())) {
+            if (!combined.any((local) =>
+                local.name.toLowerCase() == apiItem.name.toLowerCase())) {
               combined.add(apiItem);
             }
           }
@@ -395,7 +412,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         setState(() => _isSearchMode = true);
         WidgetsBinding.instance
             .addPostFrameCallback((_) => widget.onSearchModeChanged(true));
-            
+
         // 🚀 FIX: Reset to _safeMinSize instead of 0.0 to prevent button collapse
         _sheetProgress.value = _safeMinSize;
         if (widget.onProgressChanged != null) {
@@ -582,12 +599,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
     // 🚀 INTERCEPT CATEGORY SEARCHES (Nearby Places)
     final lowerQuery = query.trim().toLowerCase();
-    
+
     // RAM Cache Queries (Zero API)
-    if (lowerQuery == 'metro' || lowerQuery == 'metro stations' || lowerQuery == 'bus stops') {
+    if (lowerQuery == 'metro' ||
+        lowerQuery == 'metro stations' ||
+        lowerQuery == 'bus stops') {
       final provider = Provider.of<MapProvider>(context, listen: false);
       await provider.showNearbyStopsOnMap(lowerQuery);
-      
+
       // Collapse sheet to show the map
       if (_sheetController.isAttached) {
         _sheetController.animateTo(
@@ -601,12 +620,19 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
     // Network Queries (Overpass API)
     final otherCategories = [
-      'petrol pumps', 'railway stations', 'hotels', 'restaurants', 'parking', 'coffee', 'cng', 'gym'
+      'petrol pumps',
+      'railway stations',
+      'hotels',
+      'restaurants',
+      'parking',
+      'coffee',
+      'cng',
+      'gym'
     ];
     if (otherCategories.contains(lowerQuery)) {
       final provider = Provider.of<MapProvider>(context, listen: false);
       await provider.findAndShowNearby(lowerQuery, context);
-      
+
       if (_sheetController.isAttached) {
         _sheetController.animateTo(
           _safeMinSize,
@@ -851,7 +877,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       final provider = Provider.of<MapProvider>(context, listen: false);
 
       // 🚀 NEW: Hook location picker reverse geocode to map IDLE center updates
-      if (_locationPickerController.sheetState.value == SheetState.selectingLocation) {
+      if (_locationPickerController.sheetState.value ==
+          SheetState.selectingLocation) {
         final currentCenter = provider.currentMapCenter;
         if (currentCenter != null && _lastIdleCenter != currentCenter) {
           // Only trigger if we moved significantly to avoid micro-jitter geocoding
@@ -1177,7 +1204,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     _locationPickerController.dispose();
     super.dispose();
   }
-  
+
   Widget _buildGlassyBackground({
     required bool isDark,
     required Color sheetBgColor,
@@ -1194,7 +1221,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       ),
       child: child,
     );
-    
+
     if (kIsWeb) {
       return innerContainer;
     } else {
@@ -1242,8 +1269,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<MapProvider>(context, listen: false);
-    final isActiveNavigation = context.select<MapProvider, bool>((p) => p.isActiveNavigation);
-    final isRouteCalculated = context.select<MapProvider, bool>((p) => p.isRouteCalculated);
+    final isActiveNavigation =
+        context.select<MapProvider, bool>((p) => p.isActiveNavigation);
     final screenSize = MediaQuery.sizeOf(context);
     final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final bool isKeyboardOpen = keyboardHeight > 0;
@@ -1283,10 +1310,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
               _selectedPlace == null &&
               !_showDirections &&
               _searchCtrl.text.isEmpty) {
-            _sheetController.animateTo(_safeMinSize, duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+            _sheetController.animateTo(_safeMinSize,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic);
           } else if (!_searchFocus.hasFocus) {
             // Only jump if NOT focused. If focused, let the 500ms focus listener animateTo handle it smoothly!
-            _sheetController.animateTo(_safeMaxSize.clamp(_safeMinSize, 1.0), duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+            _sheetController.animateTo(_safeMaxSize.clamp(_safeMinSize, 1.0),
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic);
           }
         }
       });
@@ -1320,8 +1351,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     final double defaultIdleHeight = screenSize.height;
 
     return RepaintBoundary(
-      child: Stack(
-        children: [
+        child: Stack(
+      children: [
         AnimatedOpacity(
           opacity: (isKeyboardOpen && widget.isMapTabActive) ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 300),
@@ -1331,7 +1362,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                   : RepaintBoundary(
                       child: BackdropFilter(
                         filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                        child: Container(color: Colors.black.withValues(alpha: 0.3)),
+                        child: Container(
+                            color: Colors.black.withValues(alpha: 0.3)),
                       ),
                     ))
               : const SizedBox.shrink(),
@@ -1455,21 +1487,40 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                   valueListenable: _sheetProgress,
                                   builder: (context, progress, child) {
                                     // 1. Calculate how far the sheet is dragged beyond half-open
-                                    final double morphFactor = (progress <= 0.45) 
-                                        ? 0.0 
-                                        : ((progress - 0.45) / (0.95 - 0.45)).clamp(0.0, 1.0);
+                                    final double morphFactor = (progress <=
+                                            0.45)
+                                        ? 0.0
+                                        : ((progress - 0.45) / (0.95 - 0.45))
+                                            .clamp(0.0, 1.0);
 
-                                    final bool routeActive = _currentRoute != null || provider.isRouteCalculated;
-                                    final double baseSide = routeActive ? 16.0 : 28.0;
-                                    final double baseBottom = routeActive ? 0.0 : 44.0; // 0.0 makes it flush with the bottom safe area!
+                                    final bool routeActive =
+                                        _currentRoute != null ||
+                                            provider.isRouteCalculated;
+                                    final double baseSide =
+                                        routeActive ? 16.0 : 28.0;
+                                    final double baseBottom = routeActive
+                                        ? 0.0
+                                        : 44.0; // 0.0 makes it flush with the bottom safe area!
 
                                     // 🚀 FIX: Bind margins and height strictly to morphFactor to prevent initial jumping
-                                    final double currentSideMargin = lerpDouble(baseSide, 0.0, morphFactor) ?? baseSide;
-                                    final double currentBottomMargin = lerpDouble(baseBottom, 0.0, morphFactor) ?? baseBottom;
-                                    
-                                    final dynamicHeaderHeight = isActiveNavigation
-                                        ? (_isNavSheetExpanded ? navExpandedHeight - 40 : navCollapsedHeight)
-                                        : (_showDirections ? 190.0 : (lerpDouble(70.0, 76.0, morphFactor) ?? 70.0));
+                                    final double currentSideMargin = lerpDouble(
+                                            baseSide, 0.0, morphFactor) ??
+                                        baseSide;
+                                    final double currentBottomMargin =
+                                        lerpDouble(
+                                                baseBottom, 0.0, morphFactor) ??
+                                            baseBottom;
+
+                                    final dynamicHeaderHeight =
+                                        isActiveNavigation
+                                            ? (_isNavSheetExpanded
+                                                ? navExpandedHeight - 40
+                                                : navCollapsedHeight)
+                                            : (_showDirections
+                                                ? 190.0
+                                                : (lerpDouble(70.0, 76.0,
+                                                        morphFactor) ??
+                                                    70.0));
 
                                     // Permanent 35.0 radius on all 4 corners for all states
                                     final BorderRadius premiumRadius =
@@ -1504,12 +1555,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                               ),
                                               child: Stack(
                                                 clipBehavior: Clip.none,
-                                                alignment: Alignment.topCenter, // 🚀 FIX: Anchor to top so margin pushes down properly
+                                                alignment: Alignment
+                                                    .topCenter, // 🚀 FIX: Anchor to top so margin pushes down properly
                                                 children: [
                                                   // 🎨 PERFORMANCE FIX: RepaintBoundary around Blur
                                                   RepaintBoundary(
                                                     child: AnimatedContainer(
-                                                      clipBehavior: Clip.hardEdge,
+                                                      clipBehavior:
+                                                          Clip.hardEdge,
                                                       // 🚀 CRITICAL: Disable animation during drag to prevent jitter, but keep it for Navigation mode height changes
                                                       duration: provider
                                                               .isActiveNavigation
@@ -1523,7 +1576,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                           ? (_isNavSheetExpanded
                                                               ? navExpandedHeight
                                                               : navCollapsedHeight)
-                                                          : (constraints.maxHeight - currentBottomMargin), // 🚀 FIX: Prevents upward Stack overflow!
+                                                          : (constraints
+                                                                  .maxHeight -
+                                                              currentBottomMargin), // 🚀 FIX: Prevents upward Stack overflow!
                                                       margin: EdgeInsets.only(
                                                         left: currentSideMargin,
                                                         right:
@@ -1580,30 +1635,66 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                         // CRITICAL: MUST CLIP THE BLUR TO MATCH CORNERS
                                                         borderRadius:
                                                             premiumRadius,
-                                                        child: _buildGlassyBackground(
+                                                        child:
+                                                            _buildGlassyBackground(
                                                           isDark: isDark,
-                                                          sheetBgColor: sheetBgColor,
-                                                          premiumRadius: premiumRadius,
-                                                          sheetBorderColor: sheetBorderColor,
+                                                          sheetBgColor:
+                                                              sheetBgColor,
+                                                          premiumRadius:
+                                                              premiumRadius,
+                                                          sheetBorderColor:
+                                                              sheetBorderColor,
                                                           child: Stack(
-                                                              children: [
-                                                                // Bottom Layer: Scrollable Content
-                                                                Positioned.fill(
-                                                                  child: ShaderMask(
-                                                                    shaderCallback: (Rect bounds) {
-                                                                      // Calculate exact normalized stop for the dynamic header
-                                                                      final fadeStop = (dynamicHeaderHeight / bounds.height).clamp(0.0, 1.0);
-                                                                      final fadeStart = (fadeStop - 0.05).clamp(0.0, 1.0); 
-                                                                      return LinearGradient(
-                                                                        begin: Alignment.topCenter,
-                                                                        end: Alignment.bottomCenter,
-                                                                        colors: const [Colors.transparent, Colors.transparent, Colors.black, Colors.black],
-                                                                        stops: [0.0, fadeStart, fadeStop, 1.0],
-                                                                      ).createShader(bounds);
-                                                                    },
-                                                                    blendMode: BlendMode.dstIn,
-                                                                    child: ScrollConfiguration(
-                                                                      behavior: ScrollConfiguration.of(
+                                                            children: [
+                                                              // Bottom Layer: Scrollable Content
+                                                              Positioned.fill(
+                                                                child:
+                                                                    ShaderMask(
+                                                                  shaderCallback:
+                                                                      (Rect
+                                                                          bounds) {
+                                                                    // Calculate exact normalized stop for the dynamic header
+                                                                    final fadeStop = (dynamicHeaderHeight /
+                                                                            bounds
+                                                                                .height)
+                                                                        .clamp(
+                                                                            0.0,
+                                                                            1.0);
+                                                                    final fadeStart = (fadeStop -
+                                                                            0.05)
+                                                                        .clamp(
+                                                                            0.0,
+                                                                            1.0);
+                                                                    return LinearGradient(
+                                                                      begin: Alignment
+                                                                          .topCenter,
+                                                                      end: Alignment
+                                                                          .bottomCenter,
+                                                                      colors: const [
+                                                                        Colors
+                                                                            .transparent,
+                                                                        Colors
+                                                                            .transparent,
+                                                                        Colors
+                                                                            .black,
+                                                                        Colors
+                                                                            .black
+                                                                      ],
+                                                                      stops: [
+                                                                        0.0,
+                                                                        fadeStart,
+                                                                        fadeStop,
+                                                                        1.0
+                                                                      ],
+                                                                    ).createShader(
+                                                                        bounds);
+                                                                  },
+                                                                  blendMode:
+                                                                      BlendMode
+                                                                          .dstIn,
+                                                                  child:
+                                                                      ScrollConfiguration(
+                                                                    behavior: ScrollConfiguration.of(
                                                                             context)
                                                                         .copyWith(
                                                                       scrollbars:
@@ -1638,7 +1729,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                             opacity: (!isActiveNavigation && progress > 0.05)
                                                                                 ? 1.0
                                                                                 : 0.0,
-                                                                            child: AnimatedSwitcher(
+                                                                            child:
+                                                                                AnimatedSwitcher(
                                                                               duration: const Duration(milliseconds: 300),
                                                                               transitionBuilder: (Widget child, Animation<double> animation) {
                                                                                 return FadeTransition(
@@ -1652,9 +1744,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                                   ),
                                                                                 );
                                                                               },
-                                                                              child: (!isActiveNavigation && progress > 0.05)
-                                                                                  ? _buildSheetContent(isDark, progress, isExpanded: isKeyboardOpen)
-                                                                                  : const SizedBox.shrink(),
+                                                                              child: (!isActiveNavigation && progress > 0.05) ? _buildSheetContent(isDark, progress, isExpanded: isKeyboardOpen) : const SizedBox.shrink(),
                                                                             ),
                                                                           ),
                                                                         ),
@@ -1673,53 +1763,56 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                   ),
                                                                 ),
                                                               ),
-                                                                // Top Layer: Floating Header with Gradient Fade
-                                                                Positioned(
-                                                                  top: 0,
-                                                                  left: 0,
-                                                                  right: 0,
+                                                              // Top Layer: Floating Header with Gradient Fade
+                                                              Positioned(
+                                                                top: 0,
+                                                                left: 0,
+                                                                right: 0,
+                                                                child:
+                                                                    Container(
+                                                                  color: Colors
+                                                                      .transparent,
+                                                                  height:
+                                                                      dynamicHeaderHeight,
                                                                   child:
-                                                                      Container(
-                                                                    color: Colors
-                                                                        .transparent,
-                                                                    height:
-                                                                        dynamicHeaderHeight,
+                                                                      GestureDetector(
+                                                                    onTap: () {
+                                                                      if (progress <
+                                                                          0.1) {
+                                                                        _expandToFull();
+                                                                      }
+                                                                    },
+                                                                    behavior:
+                                                                        HitTestBehavior
+                                                                            .translucent,
                                                                     child:
-                                                                        GestureDetector(
-                                                                      onTap:
-                                                                          () {
-                                                                        if (progress <
-                                                                            0.1) {
-                                                                          _expandToFull();
-                                                                        }
-                                                                      },
-                                                                      behavior:
-                                                                          HitTestBehavior
-                                                                              .translucent,
-                                                                      child:
-                                                                          AnimatedSwitcher(
-                                                                        duration:
-                                                                            const Duration(milliseconds: 500),
-                                                                        switchInCurve:
-                                                                            Curves.easeInCubic,
-                                                                        switchOutCurve:
-                                                                            Curves.easeOutCubic,
-                                                                        child: _showDirections
-                                                                            ? _buildDirectionsHeader(dynamicHeaderHeight,
-                                                                                isDark)
-                                                                            : (_selectedPlace != null
-                                                                                ? _buildSelectedPlaceHeader(dynamicHeaderHeight, progress, isDark)
-                                                                                : _buildSearchHeader(dynamicHeaderHeight, progress, isDark)),
-                                                                      ),
+                                                                        AnimatedSwitcher(
+                                                                      duration: const Duration(
+                                                                          milliseconds:
+                                                                              500),
+                                                                      switchInCurve:
+                                                                          Curves
+                                                                              .easeInCubic,
+                                                                      switchOutCurve:
+                                                                          Curves
+                                                                              .easeOutCubic,
+                                                                      child: _showDirections
+                                                                          ? _buildDirectionsHeader(
+                                                                              dynamicHeaderHeight,
+                                                                              isDark)
+                                                                          : (_selectedPlace != null
+                                                                              ? _buildSelectedPlaceHeader(dynamicHeaderHeight, progress, isDark)
+                                                                              : _buildSearchHeader(dynamicHeaderHeight, progress, isDark)),
                                                                     ),
                                                                   ),
                                                                 ),
-                                                              ],
-                                                            ),
+                                                              ),
+                                                            ],
                                                           ),
                                                         ),
                                                       ),
                                                     ),
+                                                  ),
                                                   Positioned(
                                                     top: -7.5,
                                                     left: 0,

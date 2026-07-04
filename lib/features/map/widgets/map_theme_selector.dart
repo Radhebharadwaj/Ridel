@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:ridel/core/map/map_style_helper.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
+import 'package:ridel/core/map/map_provider.dart';
 
 /// 🚀 ULTRA-MINIMALIST FLOATING GLASS MAP THEME SELECTOR
 /// This ONLY changes the map's render style (Dark/Light tiles).
@@ -12,8 +13,7 @@ class MapThemeSelector {
     BuildContext context, {
     required MapThemeType currentTheme,
     required Function(MapThemeType) onThemeSelected,
-    required bool showPOIs,
-    required ValueChanged<bool> onPOIsToggled,
+    required MapProvider mapProvider,
   }) {
     // 1. Get exact button coordinates
     final RenderBox renderBox = context.findRenderObject() as RenderBox;
@@ -54,8 +54,7 @@ class MapThemeSelector {
                     color: Colors.transparent,
                     child: _MapThemePopup(
                       currentTheme: currentTheme,
-                      showPOIs: showPOIs,
-                      onPOIsToggled: onPOIsToggled,
+                      mapProvider: mapProvider,
                       onThemeSelected: (theme) {
                         onThemeSelected(theme);
                         Navigator.of(dialogContext).pop();
@@ -75,14 +74,12 @@ class MapThemeSelector {
 class _MapThemePopup extends StatefulWidget {
   final MapThemeType currentTheme;
   final ValueChanged<MapThemeType> onThemeSelected;
-  final bool showPOIs;
-  final ValueChanged<bool> onPOIsToggled;
+  final MapProvider mapProvider;
 
   const _MapThemePopup({
     required this.currentTheme,
     required this.onThemeSelected,
-    required this.showPOIs,
-    required this.onPOIsToggled,
+    required this.mapProvider,
   });
 
   @override
@@ -90,12 +87,62 @@ class _MapThemePopup extends StatefulWidget {
 }
 
 class _MapThemePopupState extends State<_MapThemePopup> {
+  late bool _localShowLabels;
   late bool _localShowPOIs;
 
   @override
   void initState() {
     super.initState();
-    _localShowPOIs = widget.showPOIs;
+    _localShowLabels = widget.mapProvider.showLabels;
+    _localShowPOIs = widget.mapProvider.showPOIs;
+  }
+  
+  Widget _buildToggleRow({
+    required IconData icon,
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 18,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.white70
+                : Colors.black54,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white
+                    : Colors.black87,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 24,
+            child: Transform.scale(
+              scale: 0.75,
+              child: Switch(
+                value: value,
+                activeTrackColor: const Color(0xFF007AFF),
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -171,53 +218,35 @@ class _MapThemePopupState extends State<_MapThemePopup> {
                     height: 1,
                   ),
                   const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12.0, vertical: 4.0),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.local_offer_outlined,
-                          size: 18,
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? Colors.white70
-                              : Colors.black54,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Shops & Places',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(
-                              color: Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? Colors.white
-                                  : Colors.black87,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        SizedBox(
-                          height: 24,
-                          child: Transform.scale(
-                            scale: 0.75,
-                            child: Switch(
-                              value: _localShowPOIs,
-                              activeTrackColor: const Color(0xFF0A84FF),
-                              onChanged: (val) {
-                                AppHaptics.selectionClick();
-                                setState(() {
-                                  _localShowPOIs = val;
-                                });
-                                widget.onPOIsToggled(val);
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  
+                  // 1. LABELS TOGGLE ROW
+                  _buildToggleRow(
+                    icon: Icons.text_fields_rounded,
+                    title: "Labels",
+                    value: _localShowLabels,
+                    onChanged: (val) {
+                      AppHaptics.selectionClick();
+                      setState(() {
+                        _localShowLabels = val;
+                      });
+                      widget.mapProvider.toggleLabels(val);
+                    },
+                  ),
+                  
+                  const SizedBox(height: 8),
+                  
+                  // 2. POIS TOGGLE ROW
+                  _buildToggleRow(
+                    icon: Icons.place_outlined,
+                    title: "POIs",
+                    value: _localShowPOIs,
+                    onChanged: (val) {
+                      AppHaptics.selectionClick();
+                      setState(() {
+                        _localShowPOIs = val;
+                      });
+                      widget.mapProvider.togglePOIs(val);
+                    },
                   ),
                 ],
               ),

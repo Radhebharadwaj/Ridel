@@ -54,16 +54,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   MapLibreMapController? _tempController;
   MapThemeType? _currentTheme;
   CameraPosition? _currentCameraPosition;
+  bool _hasInitialCentered = false; // 🚀 Task 2: Guard flag for initial auto-center
 
   final ValueNotifier<bool> _showScaleBarNotifier = ValueNotifier(false);
   Timer? _scaleBarTimer;
 
   final ValueNotifier<String> _scaleTextNotifier = ValueNotifier('0 m');
   final ValueNotifier<double> _scaleWidthNotifier = ValueNotifier(60.0);
-
-  bool _showPOIs = true;
-
-
 
   // 🚀 ADAPTIVE LOD CONTROLLER
   bool _isPerformanceMode = false;
@@ -255,7 +252,42 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeApp();
+      
+      final mapProvider = Provider.of<MapProvider>(context, listen: false);
+      mapProvider.addListener(() {
+        if (!_hasInitialCentered && mapProvider.currentLocation != null) {
+          _attemptInitialCameraCenter();
+        }
+      });
     });
+  }
+
+  Future<void> _attemptInitialCameraCenter() async {
+    final mapProvider = Provider.of<MapProvider>(context, listen: false);
+    if (_hasInitialCentered || _tempController == null) return;
+    
+    final location = mapProvider.currentLocation;
+    if (location != null && location.latitude != 0.0) {
+      _hasInitialCentered = true;
+      
+      try {
+        // CRITICAL FOR WEB GL: Allow 150ms for native style sprites to finish registering in memory
+        await Future.delayed(const Duration(milliseconds: 150));
+        
+        if (!mounted) return;
+        await _tempController!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+        
+        await _tempController!.animateCamera(
+          CameraUpdate.newLatLngZoom(
+            LatLng(location.latitude, location.longitude),
+            16.5,
+          ),
+          duration: const Duration(milliseconds: 400),
+        );
+      } catch (e) {
+        debugPrint("❌ Initial camera snap intercepted: $e");
+      }
+    }
   }
 
   Future<void> _initializeApp() async {
@@ -323,6 +355,23 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     super.dispose();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // 🚀 Task 2: Bind System/App Appearance Change Listener
+    // Automatically trigger the map style push when Theme.of(context).brightness changes
+    final isSystemDark = Theme.of(context).brightness == Brightness.dark;
+    final systemTheme = isSystemDark ? MapThemeType.dark : MapThemeType.light;
+    
+    Future.microtask(() {
+      if (mounted) {
+        final provider = Provider.of<MapProvider>(context, listen: false);
+        final themeToSet = _currentTheme ?? systemTheme;
+        provider.setTheme(themeToSet);
+      }
+    });
+  }
   Future<void> _initMapStyle({bool updateExisting = false}) async {
     if (!mounted) return;
     if (!updateExisting) {
@@ -404,7 +453,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       debugPrint(
                           "🛠️ DEBUG INITIAL CAMERA: Lat:$safeLat, Lng:$safeLng");
 
-                      final bool showNativeBlueDot = context.select<MapProvider, bool>((p) => p.showNativeBlueDot);
 
                       return RepaintBoundary(
                         child: Listener(
@@ -444,8 +492,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           child: MapLibreMap(
                             key: const ValueKey('ridel_main_map'),
                             styleString: _loadedMapStyle!,
-                            myLocationEnabled: showNativeBlueDot,
-                            myLocationRenderMode: MyLocationRenderMode.normal, // 🚀 REMOVES UGLY GREY HALO/CONE
+                            myLocationEnabled: true,
+                            myLocationTrackingMode: MyLocationTrackingMode.tracking,
+                            myLocationRenderMode: MyLocationRenderMode.gps,
                           minMaxZoomPreference:
                               const MinMaxZoomPreference(3.0, 18.5),
                           cameraTargetBounds: CameraTargetBounds(
@@ -471,17 +520,20 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             // Call proactive permission request and snap
                             mapProvider.initializeMapAndPermissions();
 
-                            // 🚀 Use GlobalLocationService state instead of raw permission checks on mount
-                            final locService = Provider.of<GlobalLocationService>(
-                                context,
-                                listen: false);
-                            if (locService.currentPosition != null) {
-                              final latLng = LatLng(
-                                  locService.currentPosition!.latitude,
-                                  locService.currentPosition!.longitude);
-                              controller.animateCamera(
-                                  CameraUpdate.newLatLngZoom(latLng, 16.0));
-                            }
+                            // 🚀 TASK 3: Explicitly sync initial theme on map startup
+                            final isSystemDark = Theme.of(context).brightness == Brightness.dark;
+                            MapStyleHelper.getOlaStyle(
+                              isSystemDark,
+                              themeType: mapProvider.currentTheme,
+                              showLabels: mapProvider.showLabels,
+                              showPOIs: mapProvider.showPOIs,
+                            ).then((styleString) {
+                              controller.setStyle(styleString);
+                            }).catchError((e) {
+                              debugPrint("❌ Failed to set initial style: $e");
+                            });
+
+                            // Removed premature camera animation to prevent WebGL style race condition
                           },
                           onStyleLoadedCallback: () async {
                             final controller = _tempController;
@@ -764,7 +816,17 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                     listen: false),
                                 this);
 
-                            // Intentionally removed _isMapFullyLoaded setState
+                            // 🚀 Task 1: Re-inject location tracking cleanly after style loads
+                            try {
+                              await controller.updateMyLocationTrackingMode(
+                                  kIsWeb ? MyLocationTrackingMode.tracking : MyLocationTrackingMode.trackingCompass
+                              );
+                            } catch (e) {
+                              debugPrint("❌ Puck restoration intercepted: $e");
+                            }
+
+                            // 🚀 Task 2: Auto-center on startup
+                            await _attemptInitialCameraCenter();
                           },
                           onMapClick: (point, latLng) async {
                             _lastTapTime = DateTime.now(); // 🚀 TASK 1: UPDATE DEBOUNCER
@@ -853,13 +915,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           tiltGesturesEnabled: true,
 
                           // Removed duplicate myLocationEnabled
-                          myLocationTrackingMode:
-                              Provider.of<MapProvider>(context, listen: false)
-                                      .isAutoTracking
-                                  ? (kIsWeb
-                                      ? MyLocationTrackingMode.tracking
-                                      : MyLocationTrackingMode.trackingCompass)
-                                  : MyLocationTrackingMode.none,
+
                           trackCameraPosition: false,
 
                           logoViewMargins: const Point(-5000, -5000),
@@ -883,6 +939,18 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               if (context.mounted) {
                                 Provider.of<MapProvider>(context, listen: false)
                                     .updateCurrentLocation(location.position);
+                                    
+                                // 🚀 Task 2: Auto-center on initial GPS stream emit
+                                if (!_hasInitialCentered && _tempController != null) {
+                                  _hasInitialCentered = true;
+                                  _tempController!.animateCamera(
+                                    CameraUpdate.newLatLngZoom(
+                                      location.position,
+                                      16.0,
+                                    ),
+                                    duration: const Duration(milliseconds: 800),
+                                  );
+                                }
                               }
                             });
                           },
@@ -1318,17 +1386,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                               (isDark
                                                   ? MapThemeType.dark
                                                   : MapThemeType.light),
-                                          showPOIs: _showPOIs,
-                                          onPOIsToggled: (val) {
-                                        setState(() {
-                                          _showPOIs = val;
-                                          _initMapStyle(updateExisting: true);
-                                        });
-                                      }, onThemeSelected: (selectedTheme) {
-                                        setState(() {
-                                          _currentTheme = selectedTheme;
-                                          _initMapStyle();
-                                        });
+                                          mapProvider: Provider.of<MapProvider>(context, listen: false),
+                                          onThemeSelected: (selectedTheme) {
+                                        _currentTheme = selectedTheme;
+                                        Provider.of<MapProvider>(context, listen: false).setTheme(selectedTheme);
                                       });
                                     },
                                     onLocateTap: () {

@@ -31,10 +31,11 @@ class MapProvider extends ChangeNotifier {
   int _routingSessionCounter = 0;
 
   // 🚀 GLOBAL SHEET CONTROLLER
-  final DraggableScrollableController sheetController = DraggableScrollableController();
+  final DraggableScrollableController sheetController =
+      DraggableScrollableController();
 
   // 🚀 DYNAMIC DPI SCALER: Leaves Web untouched, boosts Mobile by 2x-2.5x
-  double get mapItemScale => kIsWeb ? 1.0 : 2.5; 
+  double get mapItemScale => kIsWeb ? 1.0 : 2.5;
 
   // Multi-stop tracking
   List<PlaceModel> intermediateStops = [];
@@ -153,44 +154,43 @@ class MapProvider extends ChangeNotifier {
     if (!serviceEnabled) return; // Prompt user to turn on GPS
 
     LocationPermission permission = await Geolocator.checkPermission();
-    
+
     // PROACTIVE REQUEST ON FIRST LAUNCH
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
 
     // INSTANT SNAP IF GRANTED
-    if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
-      await _enableBlueDotAndSnapToUser(); 
+    if (permission == LocationPermission.whileInUse ||
+        permission == LocationPermission.always) {
+      await initializeLocation();
     }
   }
 
-  Future<void> _enableBlueDotAndSnapToUser() async {
-    if (controller == null) return;
-
-    // 1. Turn on Native Blue Dot
+  Future<void> initializeLocation() async {
     try {
-      await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
-    } catch (_) {}
-    
-    // 2. Fetch current position instantly (low accuracy for speed)
-    try {
-      Position pos = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium));
+      // STEP 1: INSTANT CACHED FETCH (0ms lag)
+      // Immediately grab the last known position from the OS/browser cache to unblock the UI
+      final Position? cachedPosition = await Geolocator.getLastKnownPosition();
+      if (cachedPosition != null) {
+        currentLocation = LatLng(cachedPosition.latitude, cachedPosition.longitude);
+        notifyListeners(); // Instantly triggers initial centering in the UI
+      }
       
-      // 3. Fly the camera to the user instantly
-      await controller!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(pos.latitude, pos.longitude),
-            zoom: 15.0,
-          )
-        )
-      );
+      // STEP 2: ASYNCHRONOUS HIGH-ACCURACY REFINEMENT (Short 2.5s timeout)
+      // Fetch the exact live GPS coordinate in the background without blocking the map render
+      Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(milliseconds: 2500), // Aggressive 2.5s cut-off
+      ).then((Position livePosition) {
+        currentLocation = LatLng(livePosition.latitude, livePosition.longitude);
+        notifyListeners(); // Glides the camera smoothly to the refined live coordinates
+      }).catchError((e) {
+        debugPrint("⚠️ Live GPS refinement fallback to stream/cache: $e");
+      });
       
-      // 4. Start the high-accuracy background stream now
-      engine.locService?.startLiveTracking(); 
     } catch (e) {
-      debugPrint("Could not fetch instant location: $e");
+      debugPrint("❌ Location initialization pipeline failed: $e");
     }
   }
 
@@ -238,10 +238,14 @@ class MapProvider extends ChangeNotifier {
                   "type": "Feature",
                   "geometry": {
                     "type": "Point",
-                    "coordinates": [location.longitude, location.latitude] // 🚀 STRICTLY LNG, LAT
+                    "coordinates": [
+                      location.longitude,
+                      location.latitude
+                    ] // 🚀 STRICTLY LNG, LAT
                   },
                   "properties": {
-                    "rotation": (bearing).toDouble(), // 🚀 STRICTLY NON-NULL DOUBLE
+                    "rotation":
+                        (bearing).toDouble(), // 🚀 STRICTLY NON-NULL DOUBLE
                   }
                 }
               ]
@@ -249,11 +253,12 @@ class MapProvider extends ChangeNotifier {
           : {"type": "FeatureCollection", "features": []};
 
       try {
-        await controller!.addSource("nav_puck_source", GeojsonSourceProperties(data: puckGeoJson));
+        await controller!.addSource(
+            "nav_puck_source", GeojsonSourceProperties(data: puckGeoJson));
       } catch (e) {
         await controller!.setGeoJsonSource("nav_puck_source", puckGeoJson);
       }
-      
+
       _lastPuckLocation = location;
       _lastPuckBearing = bearing;
     } catch (e) {
@@ -265,8 +270,6 @@ class MapProvider extends ChangeNotifier {
     await _updatePuckGeoJson(
         _lastPuckLocation, _lastPuckBearing, customPuckOpacity);
   }
-
-
 
   Future<void> showNavigationPuck(LatLng location, double bearing) async {
     await _updatePuckGeoJson(location, bearing, customPuckOpacity);
@@ -368,7 +371,7 @@ class MapProvider extends ChangeNotifier {
   ) async {
     isCalculatingRoute = true;
     notifyListeners();
-    
+
     debugPrint("🚀 [ROUTE ENGINE] Triggered for mode: $mode");
 
     if (targetDestination == null) {
@@ -432,7 +435,7 @@ class MapProvider extends ChangeNotifier {
     try {
       // Fetch route from Route Engine.
       debugPrint("⏳ [ROUTE ENGINE] Waiting for Route Engine API...");
-      
+
       final safeContext = ToastService.navigatorKey.currentContext;
       if (safeContext != null && safeContext.mounted) {
         ToastService.showLoading(safeContext, "Finding route...");
@@ -731,7 +734,8 @@ class MapProvider extends ChangeNotifier {
 
   Future<bool> handleRouteClick(Point<double> point, LatLng coordinates) async {
     // 1. Guard clause: Do nothing if actively navigating
-    if (isActiveNavigation || engine.mapUIState.value == MapUIState.navigating) {
+    if (isActiveNavigation ||
+        engine.mapUIState.value == MapUIState.navigating) {
       return false;
     }
 
@@ -748,7 +752,7 @@ class MapProvider extends ChangeNotifier {
       altLayerIds.add(
           'alt-walk-layer-$i'); // CRITICAL: Makes walking routes clickable!
     }
-    
+
     try {
       // 2. Safely query features
       final features = await controller!.queryRenderedFeatures(
@@ -829,7 +833,8 @@ class MapProvider extends ChangeNotifier {
     Future<void> safeAddLineLayer(
         String sourceId, String layerId, LineLayerProperties props) async {
       try {
-        await controller!.addLineLayer(sourceId, layerId, props, belowLayerId: 'nav_puck_layer');
+        await controller!.addLineLayer(sourceId, layerId, props,
+            belowLayerId: 'nav_puck_layer');
       } catch (e) {
         debugPrint("🗺️ LINE DRAW ERROR for $layerId: $e");
       }
@@ -1024,7 +1029,6 @@ class MapProvider extends ChangeNotifier {
         debugPrint("🗺️ PRIMARY ROUTE DRAW ERROR: $e");
       }
     }
-
 
     // 5. Adjust Camera to fit the PRIMARY route
     if (allRoutes.isNotEmpty) {
@@ -1307,12 +1311,12 @@ class MapProvider extends ChangeNotifier {
     // 9. FIX Z-INDEX RENDER SEQUENCE (Puck MUST be top-most)
     if (targetDestination != null) {
       await clearNativeDestinationPin();
-      
+
       // Step D: Strictly remove the puck layer
       try {
         await controller!.removeLayer("nav_puck_layer");
       } catch (_) {}
-      
+
       // Step E: Re-add the puck's SymbolLayer at the very end
       try {
         // Re-inject image before adding layer
@@ -1320,16 +1324,16 @@ class MapProvider extends ChangeNotifier {
         await controller!.addImage('nav_puck', bytes.buffer.asUint8List());
 
         await controller!.addSymbolLayer(
-          "nav_puck_source", 
+          "nav_puck_source",
           "nav_puck_layer",
           SymbolLayerProperties(
             iconImage: 'nav_puck',
             iconSize: 0.35 * mapItemScale, // 🚀 REVERTED TO PERFECT SIZE
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
-            iconRotate: const ['get', 'rotation'], 
+            iconRotate: const ['get', 'rotation'],
             iconRotationAlignment: 'map', // MUST BE MAP
-            iconPitchAlignment: 'map',    // Keeps it stable in 3D
+            iconPitchAlignment: 'map', // Keeps it stable in 3D
           ),
         );
       } catch (e) {
@@ -1343,7 +1347,7 @@ class MapProvider extends ChangeNotifier {
   Future<void> clearNativeRoute({bool preserveState = false}) async {
     // 1. LOCK THE STREAM IMMEDIATELY AND EXECUTE KILL-SWITCH (Before any awaits)
     if (!preserveState) {
-      isActiveNavigation = false; 
+      isActiveNavigation = false;
       engine.setUIState(MapUIState.idle);
 
       final emptyGeoJson = {"type": "FeatureCollection", "features": []};
@@ -1429,7 +1433,6 @@ class MapProvider extends ChangeNotifier {
         // Native blue dot is reactively restored by hideNativeBlueDot getter. No controller call needed.
         await updatePuckVisibility();
 
-
         // 🚨 Cinematic Camera Reset
         if (controller != null && currentLocation != null) {
           try {
@@ -1467,10 +1470,10 @@ class MapProvider extends ChangeNotifier {
     _liveLocationSub?.cancel();
     _liveLocationSub = null;
     intermediateStops.clear();
-    
+
     // Hide the static puck layer
     await hideNavigationPuck();
-    
+
     // 1. Clear MapLibre Native Layers (Lines AND ETA Pills)
     if (controller != null) {
       if (_drawnRoutesCount > 0 || isRouteCalculated) {
@@ -1574,7 +1577,8 @@ class MapProvider extends ChangeNotifier {
       await controller!.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
-            target: LatLng(currentLocation!.latitude, currentLocation!.longitude),
+            target:
+                LatLng(currentLocation!.latitude, currentLocation!.longitude),
             zoom: 15.0,
             tilt: 0.0,
             bearing: 0.0,
@@ -1582,10 +1586,11 @@ class MapProvider extends ChangeNotifier {
         ),
         duration: const Duration(milliseconds: 1200),
       );
-      
+
       // Wait for the flight to finish smoothly BEFORE locking the tracking
       await Future.delayed(const Duration(milliseconds: 1250));
-      await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+      await controller!
+          .updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
     }
 
     // 🌟 Explicitly Restore All Dimmed/Hidden Background Layers & Hide Puck
@@ -1641,15 +1646,46 @@ class MapProvider extends ChangeNotifier {
 
   MapThemeType _currentTheme = MapThemeType.dark;
   MapThemeType get currentTheme => _currentTheme;
-  void setTheme(MapThemeType theme) {
+  Future<void> setTheme(MapThemeType theme) async {
+    // CRITICAL GUARD: If the theme is already active, DO NOT notify or rebuild!
+    if (_currentTheme == theme) return;
+
     _currentTheme = theme;
-    if (controller != null) {
-      if (_lastRouteData != null) {
-        // Explicitly clear layers to prevent memory leaks from overlaying
-        RouteVisualizer.clearRoute(controller).then((_) {
-          drawNativeRoute(_lastRouteData!.allRoutesCoordinates);
-        });
+    notifyListeners(); // Call strictly once!
+
+    await _autoPushMapStyle();
+
+    if (controller != null && _lastRouteData != null) {
+      // Explicitly clear layers to prevent memory leaks from overlaying
+      RouteVisualizer.clearRoute(controller).then((_) {
+        drawNativeRoute(_lastRouteData!.allRoutesCoordinates);
+      });
+    }
+  }
+
+  Future<void> _autoPushMapStyle() async {
+    if (controller == null) return;
+    try {
+      final String newStyle = await MapStyleHelper.getOlaStyle(
+        false,
+        themeType: _currentTheme,
+        showLabels: _showLabels,
+        showPOIs: _showPOIs,
+      );
+
+      // CRITICAL FOR WEB: Ensure the engine is ready to accept a new style string without crashing!
+      await controller!.setStyle(newStyle);
+
+      // 🚀 Task 1: Explicitly re-verify location tracking so MapLibre Web cleanly re-injects the blue dot sprite
+      try {
+        await controller!.updateMyLocationTrackingMode(kIsWeb
+            ? MyLocationTrackingMode.tracking
+            : MyLocationTrackingMode.trackingCompass);
+      } catch (e) {
+        debugPrint("❌ Puck restoration intercepted: $e");
       }
+    } catch (e) {
+      debugPrint("❌ Auto style sync failed: $e");
     }
   }
 
@@ -1832,7 +1868,8 @@ class MapProvider extends ChangeNotifier {
       ).listen((pos) {
         engine.navigation.processLocationUpdate(pos);
       }, onError: (error) {
-        debugPrint("📍 [DEBUG] Map Provider GPS stream lost or glitched: $error");
+        debugPrint(
+            "📍 [DEBUG] Map Provider GPS stream lost or glitched: $error");
       });
 
       AppHaptics.success();
@@ -1857,10 +1894,12 @@ class MapProvider extends ChangeNotifier {
         _locServiceSub = engine.locService!.engineLocationStream.listen((pos) {
           final now = DateTime.now();
           // 🚀 ONLY UPDATE ENGINE AT MAX 30 FPS (Every ~33ms)
-          if (lastMapUpdate == null || now.difference(lastMapUpdate!).inMilliseconds > 33) {
+          if (lastMapUpdate == null ||
+              now.difference(lastMapUpdate!).inMilliseconds > 33) {
             lastMapUpdate = now;
-            
-            if (!isActiveNavigation && engine.mapUIState.value == MapUIState.idle) {
+
+            if (!isActiveNavigation &&
+                engine.mapUIState.value == MapUIState.idle) {
               // If the stream fires while navigation is off, mercilessly kill the layer again.
               controller?.removeLayer("nav_puck_layer").catchError((_) {});
               return; // 🚀 ABORT: Do not update puck logic!
@@ -1986,6 +2025,27 @@ class MapProvider extends ChangeNotifier {
 
   /// Public accessor for the UI state machine.
   ValueNotifier<MapUIState> get mapUIState => engine.mapUIState;
+  // Layer visibility state
+  bool _showLabels = true;
+  bool _showPOIs = false;
+
+  bool get showLabels => _showLabels;
+  bool get showPOIs => _showPOIs;
+
+  Future<void> toggleLabels(bool value) async {
+    if (_showLabels == value) return;
+    _showLabels = value;
+    notifyListeners();
+    await _autoPushMapStyle();
+  }
+
+  Future<void> togglePOIs(bool value) async {
+    if (_showPOIs == value) return;
+    _showPOIs = value;
+    notifyListeners();
+    await _autoPushMapStyle();
+  }
+
   MapUIState get currentUIState => engine.mapUIState.value;
 
   void setActiveDestination(PlaceModel place) {
@@ -2012,7 +2072,8 @@ class MapProvider extends ChangeNotifier {
     setAutoTracking(false);
 
     if (engine.mapController != null) {
-      await engine.mapController!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+      await engine.mapController!
+          .updateMyLocationTrackingMode(MyLocationTrackingMode.none);
     }
 
     await cancelAndClearRoute(resetCamera: false);
@@ -2023,7 +2084,8 @@ class MapProvider extends ChangeNotifier {
     final temporaryPlace = PlaceModel(
       placeId: 'temp_${latLng.latitude}_${latLng.longitude}',
       name: 'Dropped Pin',
-      address: '${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}',
+      address:
+          '${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}',
       latitude: latLng.latitude,
       longitude: latLng.longitude,
       categories: const [],
@@ -2050,12 +2112,13 @@ class MapProvider extends ChangeNotifier {
           CameraUpdate.newCameraPosition(
             CameraPosition(
               target: latLng, // strictly center on the PIN, not the user!
-              zoom: 16.0,     // Clean, immersive street-level zoom
-              tilt: 0.0,      // Clean flat cartographic angle
-              bearing: 0.0,   // North-up alignment
+              zoom: 16.0, // Clean, immersive street-level zoom
+              tilt: 0.0, // Clean flat cartographic angle
+              bearing: 0.0, // North-up alignment
             ),
           ),
-          duration: const Duration(milliseconds: 800), // Silky-smooth 60FPS glide
+          duration:
+              const Duration(milliseconds: 800), // Silky-smooth 60FPS glide
         );
       }
     });
@@ -2407,7 +2470,8 @@ class MapProvider extends ChangeNotifier {
     return degrees * math.pi / 180;
   }
 
-  double _calculateHaversine(double lat1, double lon1, double lat2, double lon2) {
+  double _calculateHaversine(
+      double lat1, double lon1, double lat2, double lon2) {
     const double r = 6371; // Earth's radius in kilometers
     final double dLat = _degreesToRadians(lat2 - lat1);
     final double dLon = _degreesToRadians(lon2 - lon1);
@@ -2420,26 +2484,38 @@ class MapProvider extends ChangeNotifier {
     return r * c;
   }
 
-  Future<List<Map<String, dynamic>>> getNearestStops(double userLat, double userLng, String type, {int limit = 15}) async {
-    final int mode = (type.toLowerCase() == 'metro' || type.toLowerCase() == 'metro stations') ? 0 : 1;
-    final List<Map<String, dynamic>> allStops = await DatabaseHelper.instance.getStopsByMode(mode);
-    
+  Future<List<Map<String, dynamic>>> getNearestStops(
+      double userLat, double userLng, String type,
+      {int limit = 15}) async {
+    final int mode = (type.toLowerCase() == 'metro' ||
+            type.toLowerCase() == 'metro stations')
+        ? 0
+        : 1;
+    final List<Map<String, dynamic>> allStops =
+        await DatabaseHelper.instance.getStopsByMode(mode);
+
     List<Map<String, dynamic>> stopsWithDistance = [];
     for (var stop in allStops) {
-      double stopLat = double.tryParse((stop['lat'] ?? stop['LAT'] ?? '0').toString()) ?? 0.0;
-      double stopLng = double.tryParse((stop['lon'] ?? stop['LON'] ?? stop['lng'] ?? stop['LNG'] ?? '0').toString()) ?? 0.0;
-      
+      double stopLat =
+          double.tryParse((stop['lat'] ?? stop['LAT'] ?? '0').toString()) ??
+              0.0;
+      double stopLng = double.tryParse(
+              (stop['lon'] ?? stop['LON'] ?? stop['lng'] ?? stop['LNG'] ?? '0')
+                  .toString()) ??
+          0.0;
+
       // Skip invalid coordinates
       if (stopLat == 0.0 && stopLng == 0.0) continue;
-      
+
       double distance = _calculateHaversine(userLat, userLng, stopLat, stopLng);
       stopsWithDistance.add({
         ...stop,
         'calculated_distance': distance,
       });
     }
-    
-    stopsWithDistance.sort((a, b) => (a['calculated_distance'] as double).compareTo(b['calculated_distance'] as double));
+
+    stopsWithDistance.sort((a, b) => (a['calculated_distance'] as double)
+        .compareTo(b['calculated_distance'] as double));
     return stopsWithDistance.take(limit).toList();
   }
 
@@ -2453,7 +2529,8 @@ class MapProvider extends ChangeNotifier {
     _setLoading(true);
     try {
       // 🚀 1. Instant RAM Fetch (Zero API)
-      final nearestStops = await getNearestStops(userLoc.latitude, userLoc.longitude, type);
+      final nearestStops =
+          await getNearestStops(userLoc.latitude, userLoc.longitude, type);
 
       if (nearestStops.isEmpty) {
         debugPrint("⚠️ No stops found nearby for $type.");
@@ -2464,8 +2541,16 @@ class MapProvider extends ChangeNotifier {
       final Map<String, dynamic> geoJson = {
         "type": "FeatureCollection",
         "features": nearestStops.map((stop) {
-          double stopLat = double.tryParse((stop['lat'] ?? stop['LAT'] ?? '0').toString()) ?? 0.0;
-          double stopLng = double.tryParse((stop['lon'] ?? stop['LON'] ?? stop['lng'] ?? stop['LNG'] ?? '0').toString()) ?? 0.0;
+          double stopLat =
+              double.tryParse((stop['lat'] ?? stop['LAT'] ?? '0').toString()) ??
+                  0.0;
+          double stopLng = double.tryParse((stop['lon'] ??
+                      stop['LON'] ??
+                      stop['lng'] ??
+                      stop['LNG'] ??
+                      '0')
+                  .toString()) ??
+              0.0;
           return {
             "type": "Feature",
             "geometry": {
@@ -2475,7 +2560,10 @@ class MapProvider extends ChangeNotifier {
             "properties": {
               "id": stop['stop_id'] ?? stop['STOP_ID'],
               "name": stop['stop_name'] ?? stop['STOP_NAME'] ?? stop['name'],
-              "icon": (type.toLowerCase() == 'metro' || type.toLowerCase() == 'metro stations') ? 'metro_icon' : 'bus_icon' 
+              "icon": (type.toLowerCase() == 'metro' ||
+                      type.toLowerCase() == 'metro stations')
+                  ? 'metro_icon'
+                  : 'bus_icon'
             }
           };
         }).toList()
@@ -2507,15 +2595,24 @@ class MapProvider extends ChangeNotifier {
       double minLat = 90.0, maxLat = -90.0;
       double minLng = 180.0, maxLng = -180.0;
       for (var stop in nearestStops) {
-        double stopLat = double.tryParse((stop['lat'] ?? stop['LAT'] ?? '0').toString()) ?? 0.0;
-        double stopLng = double.tryParse((stop['lon'] ?? stop['LON'] ?? stop['lng'] ?? stop['LNG'] ?? '0').toString()) ?? 0.0;
+        double stopLat =
+            double.tryParse((stop['lat'] ?? stop['LAT'] ?? '0').toString()) ??
+                0.0;
+        double stopLng = double.tryParse((stop['lon'] ??
+                    stop['LON'] ??
+                    stop['lng'] ??
+                    stop['LNG'] ??
+                    '0')
+                .toString()) ??
+            0.0;
         minLat = math.min(minLat, stopLat);
         maxLat = math.max(maxLat, stopLat);
         minLng = math.min(minLng, stopLng);
         maxLng = math.max(maxLng, stopLng);
       }
-      
-      await controller?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+
+      await controller
+          ?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
       await controller?.animateCamera(
         CameraUpdate.newLatLngBounds(
           LatLngBounds(
@@ -2529,7 +2626,6 @@ class MapProvider extends ChangeNotifier {
         ),
         duration: const Duration(milliseconds: 1000),
       );
-
     } catch (e) {
       debugPrint("❌ Error showing nearby stops: $e");
     } finally {
@@ -2616,7 +2712,8 @@ class MapProvider extends ChangeNotifier {
         ).listen((pos) {
           engine.navigation.processLocationUpdate(pos);
         }, onError: (error) {
-          debugPrint("📍 [DEBUG] Map Provider GPS stream lost or glitched: $error");
+          debugPrint(
+              "📍 [DEBUG] Map Provider GPS stream lost or glitched: $error");
         });
 
         double minLat = math.min(currentLoc.latitude, stationLoc.latitude);
@@ -2625,7 +2722,8 @@ class MapProvider extends ChangeNotifier {
         double maxLng = math.max(currentLoc.longitude, stationLoc.longitude);
 
         try {
-          await controller?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+          await controller
+              ?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
           await controller?.animateCamera(
             CameraUpdate.newLatLngBounds(
               LatLngBounds(
@@ -2792,11 +2890,12 @@ class MapProvider extends ChangeNotifier {
 
   Future<void> flyToPlace(double lat, double lng) async {
     if (!_isMapReady) return;
-    
+
     try {
       // 1. Break the tracking lock FIRST to prevent snap-backs
       if (controller != null) {
-        await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+        await controller!
+            .updateMyLocationTrackingMode(MyLocationTrackingMode.none);
       }
     } catch (e) {
       debugPrint("⚠️ flyToPlace Error updating tracking mode: $e");
@@ -2820,13 +2919,15 @@ class MapProvider extends ChangeNotifier {
           await controller!.animateCamera(
             CameraUpdate.newCameraPosition(
               CameraPosition(
-                target: LatLng(lat, lng), // strictly center on the PIN, not the user!
-                zoom: 16.0,        // Clean, immersive street-level zoom
-                tilt: 0.0,         // Clean flat cartographic angle
-                bearing: 0.0,      // North-up alignment
+                target: LatLng(
+                    lat, lng), // strictly center on the PIN, not the user!
+                zoom: 16.0, // Clean, immersive street-level zoom
+                tilt: 0.0, // Clean flat cartographic angle
+                bearing: 0.0, // North-up alignment
               ),
             ),
-            duration: const Duration(milliseconds: 800), // Silky-smooth 60FPS glide
+            duration:
+                const Duration(milliseconds: 800), // Silky-smooth 60FPS glide
           );
         }
       });
@@ -2977,7 +3078,8 @@ class MapProvider extends ChangeNotifier {
         );
 
         try {
-          await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+          await controller!
+              .updateMyLocationTrackingMode(MyLocationTrackingMode.none);
           await controller!.animateCamera(
             CameraUpdate.newLatLngBounds(
               LatLngBounds(
