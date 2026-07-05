@@ -186,8 +186,10 @@ class MapProvider extends ChangeNotifier {
         // STEP 2: ASYNCHRONOUS HIGH-ACCURACY REFINEMENT (Short 2.5s timeout)
         // Fetch the exact live GPS coordinate in the background without blocking the map render
         Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-          timeLimit: const Duration(milliseconds: 2500), // Aggressive 2.5s cut-off
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(milliseconds: 2500), // Aggressive 2.5s cut-off
+          ),
         ).then((Position livePosition) {
           currentLocation = LatLng(livePosition.latitude, livePosition.longitude);
           notifyListeners(); // Glides the camera smoothly to the refined live coordinates

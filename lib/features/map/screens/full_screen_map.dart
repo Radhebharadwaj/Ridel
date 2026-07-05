@@ -55,6 +55,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   MapThemeType? _currentTheme;
   CameraPosition? _currentCameraPosition;
   bool _hasInitialCentered = false; // 🚀 Task 2: Guard flag for initial auto-center
+  final GlobalKey _mapKey = GlobalKey(debugLabel: 'primary_map_view'); // 🚀 Static GlobalKey to prevent WebGL context teardowns
 
   final ValueNotifier<bool> _showScaleBarNotifier = ValueNotifier(false);
   Timer? _scaleBarTimer;
@@ -275,6 +276,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         await Future.delayed(const Duration(milliseconds: 150));
         
         if (!mounted) return;
+        
+        // 🚀 THE "DEFIBRILLATOR SHOCK": Force the native SDK to wake the GPS puck
         await _tempController!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
         
         await _tempController!.animateCamera(
@@ -284,6 +287,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           ),
           duration: const Duration(milliseconds: 400),
         );
+
+        // 🚀 Switch back to .none so the camera is free for user interaction
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted && _tempController != null) {
+            _tempController!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+          }
+        });
       } catch (e) {
         debugPrint("❌ Initial camera snap intercepted: $e");
       }
@@ -445,6 +455,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       final userCurrentLocation =
                           Provider.of<MapProvider>(context, listen: false)
                               .currentLocation;
+                      final hasLocationPermission =
+                          context.select<GlobalLocationService, bool>((s) => s.hasLocationPermission);
+                      
+                      // 🚀 TASK 1: Dynamic Native Puck Visibility
+                      final isRouteActive = context.select<MapProvider, bool>(
+                          (p) => p.isRouteCalculated || p.isActiveNavigation);
+                      final shouldShowNativePuck = hasLocationPermission && !isRouteActive;
+
                       final double safeLat =
                           userCurrentLocation?.latitude ?? 21.1458;
                       final double safeLng =
@@ -490,11 +508,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           onPointerUp: (_) => _webLongPressTimer?.cancel(),
                           onPointerMove: (_) => _webLongPressTimer?.cancel(),
                           child: MapLibreMap(
-                            key: const ValueKey('ridel_main_map'),
+                            key: _mapKey,
                             styleString: _loadedMapStyle!,
-                            myLocationEnabled: true,
+                            myLocationEnabled: shouldShowNativePuck,
                             myLocationTrackingMode: MyLocationTrackingMode.tracking,
-                            myLocationRenderMode: MyLocationRenderMode.gps,
+                            myLocationRenderMode: shouldShowNativePuck 
+                                ? MyLocationRenderMode.gps 
+                                : MyLocationRenderMode.normal,
                           minMaxZoomPreference:
                               const MinMaxZoomPreference(3.0, 18.5),
                           cameraTargetBounds: CameraTargetBounds(

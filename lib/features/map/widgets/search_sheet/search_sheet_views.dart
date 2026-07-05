@@ -444,6 +444,11 @@ if (showRecentSearches)
                                                   // 🚀 TASK 1: FORCIBLY SEVER AUTO-TRACKING BEFORE CAMERA FLIGHT
                                                   safeProvider.setAutoTracking(false);
 
+                                                  // 🔥 CRITICAL FIX 3: Explicitly break the native MapLibre GPS tracking lock!
+                                                  if (safeProvider.controller != null) {
+                                                    await safeProvider.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+                                                  }
+
                                                   // 1. Set the tapped place so the bottom sheet shows the details UI
                                                   safeProvider
                                                       .setActiveDestination(place);
@@ -635,9 +640,6 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'walking';
                   rebuildState(() {});
-                  if (_sheetController.isAttached) {
-                    _safeAnimateSheet(_safeMinSize);
-                  }
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
                   }
@@ -656,9 +658,6 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'twowheeler';
                   rebuildState(() {});
-                  if (_sheetController.isAttached) {
-                    _safeAnimateSheet(_safeMinSize);
-                  }
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
                   }
@@ -677,9 +676,6 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'driving';
                   rebuildState(() {});
-                  if (_sheetController.isAttached) {
-                    _safeAnimateSheet(_safeMinSize);
-                  }
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
                   }
@@ -698,9 +694,6 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'heavy';
                   rebuildState(() {});
-                  if (_sheetController.isAttached) {
-                    _safeAnimateSheet(_safeMinSize);
-                  }
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
                   }
@@ -1426,9 +1419,6 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                 onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'walking';
-                  if (_sheetController.isAttached) {
-                    _safeAnimateSheet(_safeMinSize);
-                  }
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
                   }
@@ -1443,9 +1433,6 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                 onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'twowheeler';
-                  if (_sheetController.isAttached) {
-                    _safeAnimateSheet(_safeMinSize);
-                  }
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
                   }
@@ -1460,9 +1447,6 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                 onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'driving';
-                  if (_sheetController.isAttached) {
-                    _safeAnimateSheet(_safeMinSize);
-                  }
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
                   }
@@ -1477,9 +1461,6 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                 onTap: () async {
                   AppHaptics.selectionClick();
                   provider.currentNavMode = 'heavy';
-                  if (_sheetController.isAttached) {
-                    _safeAnimateSheet(_safeMinSize);
-                  }
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
                   }

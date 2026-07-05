@@ -119,19 +119,20 @@ class _AppHeaderState extends State<AppHeader> with WidgetsBindingObserver {
   Future<void> _initLocation() async {
     try {
       await _repo.getProfile();
-      String current = ProfileRepository.userCity.value;
+      
+      if (!mounted) return;
+      final locationService = Provider.of<GlobalLocationService>(context, listen: false);
       
       bool isGranted = await Permission.location.isGranted;
 
       if (isGranted) {
-        if (current.isEmpty || current == "Select City" || current == "Location Disabled") {
-           ProfileRepository.userCity.value = "Locating...";
+        if (locationService.currentCityName.value == "Location Disabled" || 
+            locationService.currentCityName.value == "Select City") {
+           locationService.currentCityName.value = "Locating...";
         }
-        
-        if (!mounted) return;
-        final locationService =
-            Provider.of<GlobalLocationService>(context, listen: false);
         await locationService.initializeEcoLocation(isManualTrigger: false);
+      } else {
+        locationService.currentCityName.value = "Location Disabled";
       }
     } catch (e) {
       debugPrint('Error initializing location: $e');
@@ -211,17 +212,13 @@ class _AppHeaderState extends State<AppHeader> with WidgetsBindingObserver {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Consumer<MapProvider>(
-              builder: (context, mapProvider, child) {
-                return Consumer<GlobalLocationService>(
-                  builder: (context, locService, child) {
-                    final location = mapProvider.currentLocation;
-                    String cityName = locService.currentCityName.value;
+            child: Consumer<GlobalLocationService>(
+              builder: (context, locService, child) {
+                return ValueListenableBuilder<String>(
+                  valueListenable: locService.currentCityName,
+                  builder: (context, cityName, child) {
                     
-                    String displayCity = "Fetching Location...";
-                    if (location != null) {
-                       displayCity = cityName.isNotEmpty ? cityName : "Your Location is Active";
-                    }
+                    String displayCity = cityName.isNotEmpty ? cityName : "Locating...";
 
                     displayCity = displayCity.split(' ').map((word) {
                       return word.isEmpty

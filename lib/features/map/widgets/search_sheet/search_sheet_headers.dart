@@ -966,8 +966,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
     );
   }
 
-  Widget _buildSelectedPlaceHeader(
-      double headerHeight, double progress, bool isDark) {
+  Widget _buildSelectedPlaceHeader(double headerHeight, double progress, bool isDark) {
     final textColor = isDark ? Colors.white : Colors.black;
     final subTextColor = isDark ? Colors.white54 : Colors.black54;
     final btnIconColor = isDark ? Colors.white : Colors.black;
@@ -977,57 +976,50 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
     if (_selectedPlace!.name == 'Dropped Pin' ||
         _selectedPlace!.address.isEmpty ||
         _selectedPlace!.address.contains('Lat:')) {
-      subtitleText =
-          'Lat: ${_selectedPlace!.latitude.toStringAsFixed(4)}, Lng: ${_selectedPlace!.longitude.toStringAsFixed(4)}';
+      subtitleText = 'Lat: ${_selectedPlace!.latitude.toStringAsFixed(4)}, Lng: ${_selectedPlace!.longitude.toStringAsFixed(4)}';
     }
 
-    return Center(
+    // MATHEMATICALLY EQUAL RIM: Strictly matches _buildSearchHeader's 11.0px uniform padding
+    const uniformPadding = 11.0;
+
+    return ConstrainedBox(
       key: const ValueKey('place_header'),
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 12 + (8 * progress),
-          right: 12 + (8 * progress),
-          top: 2 + (3 * progress), // Reduced top padding
-          bottom: 2, // Explicit small bottom padding
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildPremiumCircleButton(
-              icon: CupertinoIcons.share,
-              iconColor: btnIconColor,
-              bgColor: mattePillBase,
-              onTap: () async {
-                final shareLink =
-                    'https://maps.apple/p/~${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
-
-                await Clipboard.setData(ClipboardData(text: shareLink));
-
-                // 🚀 FIX: Removed Ugly White Snackbar
-                _showPremiumNotification(
-                  'Link copied successfully!',
-                );
-              },
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ShaderMask(
-                shaderCallback: (Rect bounds) {
-                  return const LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black,
-                      Colors.black,
-                      Colors.transparent
-                    ],
-                    stops: [0.0, 0.08, 0.92, 1.0],
-                  ).createShader(bounds);
+      constraints: const BoxConstraints(minHeight: 70.0),
+      child: SizedBox(
+        height: headerHeight,
+        child: Padding(
+          padding: const EdgeInsets.all(uniformPadding), // Exactly 11px on all 4 sides
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Share Button (Exactly 44px circle centered within the 48px inner height)
+              _buildPremiumCircleButton(
+                icon: CupertinoIcons.share,
+                iconColor: btnIconColor,
+                bgColor: mattePillBase,
+                size: 44.0, // Explicitly match 44.0px button size
+                onTap: () async {
+                  final shareLink = 'https://maps.apple/p/~${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
+                  await Clipboard.setData(ClipboardData(text: shareLink));
+                  _showPremiumNotification('Link copied successfully!');
                 },
-                blendMode: BlendMode.dstIn,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              ),
+              
+              const SizedBox(width: 10),
+              
+              // Center Place Typography (Tight typography matching 16px search hierarchy)
+              Expanded(
+                child: ShaderMask(
+                  shaderCallback: (Rect bounds) {
+                    return const LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
+                      stops: [0.0, 0.05, 0.95, 1.0],
+                    ).createShader(bounds);
+                  },
+                  blendMode: BlendMode.dstIn,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
@@ -1040,9 +1032,9 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                         overflow: TextOverflow.clip,
                         style: TextStyle(
                           color: textColor,
-                          fontSize: 17,
+                          fontSize: 16, // Exactly matches search bar typography size
                           fontWeight: FontWeight.bold,
-                          height: 1.2,
+                          height: 1.1,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -1053,28 +1045,31 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                         overflow: TextOverflow.clip,
                         style: TextStyle(
                           color: subTextColor,
-                          fontSize: 13,
+                          fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          height: 1.2,
+                          height: 1.1,
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            _buildPremiumCircleButton(
-              icon: Icons.close_rounded,
-              iconColor: btnIconColor,
-              bgColor: mattePillBase,
-              onTap: () {
-                final provider =
-                    Provider.of<MapProvider>(context, listen: false);
-                _handleCancelRoute(context, provider);
-              },
-            ),
-          ],
+              
+              const SizedBox(width: 10),
+              
+              // Close Button (Exactly 44px circle centered within the 48px inner height)
+              _buildPremiumCircleButton(
+                icon: Icons.close_rounded,
+                iconColor: btnIconColor,
+                bgColor: mattePillBase,
+                size: 44.0, // Explicitly match 44.0px button size
+                onTap: () {
+                  final provider = Provider.of<MapProvider>(context, listen: false);
+                  _handleCancelRoute(context, provider);
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

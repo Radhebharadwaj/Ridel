@@ -45,6 +45,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _debounceTimer; // 🚀 NEW: For debouncing API calls
 
   // --- GETTERS ---
+  bool get hasLocationPermission => _permission == LocationPermission.whileInUse || _permission == LocationPermission.always;
   Position? get currentPosition => currentPositionNotifier.value;
   bool get hasValidLocation => currentPositionNotifier.value != null;
   bool get isLiveTracking => _isLiveTrackingActive;
@@ -65,12 +66,32 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
 
   GlobalLocationService() {
     WidgetsBinding.instance.addObserver(this);
+    
+    // 🚀 Auto-Trigger Reverse Geocoding when position changes
+    currentPositionNotifier.addListener(() {
+      final pos = currentPositionNotifier.value;
+      if (pos != null && !_isUsingIpFallback) {
+        _checkAndRefreshCity(pos);
+      }
+    });
   }
 
   // 🚀 PHASE 1 (FIXED): PAUSE/RESUME GPS ON LIFECYCLE CHANGES
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+    
+    // 🚀 Check permission on resume to auto-trigger pipeline
+    if (state == AppLifecycleState.resumed) {
+      Geolocator.checkPermission().then((perm) {
+        if (perm == LocationPermission.whileInUse || perm == LocationPermission.always) {
+          if (currentCityName.value == "Location Disabled" || currentCityName.value == "Locating...") {
+            initializeEcoLocation(isManualTrigger: false);
+          }
+        }
+      });
+    }
+
     if (_positionStreamSubscription == null) return;
 
     // 🚀 FIX 1: NEVER pause stream if active navigation is on!
@@ -181,10 +202,6 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           debugPrint("⚡ Instant Location: Using last known position.");
           currentPositionNotifier.value = lastPos;
           _isUsingIpFallback = false;
-          _lastCityGeocodedPosition = lastPos;
-          
-          // 🔥 DECOUPLED: Do NOT await reverse geocoding! Run it in background.
-          resolveCityName(lastPos.latitude, lastPos.longitude);
           
           return; // 🚀 Nuke the satellite delay by returning early!
         }
@@ -199,10 +216,6 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
 
         currentPositionNotifier.value = pos;
         _isUsingIpFallback = false;
-        _lastCityGeocodedPosition = pos; // Set initial geocode pos
-        
-        // 🔥 DECOUPLED: Do NOT await reverse geocoding! Run it in background.
-        resolveCityName(pos.latitude, pos.longitude);
         
         // 🚀 TRIGGER WEATHER FETCH
         WeatherService.getWeather(pos.latitude, pos.longitude);
@@ -220,10 +233,6 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           debugPrint("Using last known position as safety net.");
           currentPositionNotifier.value = lastPos;
           _isUsingIpFallback = false;
-          _lastCityGeocodedPosition = lastPos;
-          
-          // 🔥 DECOUPLED: Do NOT await reverse geocoding!
-          resolveCityName(lastPos.latitude, lastPos.longitude);
           
           WeatherService.getWeather(lastPos.latitude, lastPos.longitude);
           notifyListeners();
@@ -241,7 +250,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
         _lastCityGeocodedPosition!.latitude, _lastCityGeocodedPosition!.longitude,
         newPos.latitude, newPos.longitude
       );
-      if (distance < 5000) return; // Only re-geocode if moved more than 5km
+      if (distance < 5000 && _currentCity != "Locating..." && _currentCity != "Location Disabled") return; // Only re-geocode if moved more than 5km
     }
 
     debugPrint("Refreshing global city...");
@@ -348,22 +357,23 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
-    if (newCity != null) {
-      newCity = _sanitizeCityName(newCity);
+    newCity ??= "Current Location";
 
-      prefs.setDouble('cachedLat', currentLat);
-      prefs.setDouble('cachedLng', currentLng);
-      prefs.setString('cachedLocality', newCity);
-      
-      _currentCity = newCity;
-      currentCityName.value = newCity;
-      ProfileRepository.userCity.value = newCity;
-      cachedLat = currentLat;
-      cachedLng = currentLng;
-      
-      // 🚀 THE FIX: Instantly match and switch the region in the DB
-      await _autoMatchAndSwitchRegion(newCity);
-    }
+    newCity = _sanitizeCityName(newCity);
+
+    prefs.setDouble('cachedLat', currentLat);
+    prefs.setDouble('cachedLng', currentLng);
+    prefs.setString('cachedLocality', newCity);
+    
+    _currentCity = newCity;
+    currentCityName.value = newCity;
+    ProfileRepository.userCity.value = newCity;
+    cachedLat = currentLat;
+    cachedLng = currentLng;
+    
+    // 🚀 THE FIX: Instantly match and switch the region in the DB
+    await _autoMatchAndSwitchRegion(newCity);
+    notifyListeners();
   }
 
   Future<void> _autoMatchAndSwitchRegion(String detectedCity) async {

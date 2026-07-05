@@ -151,21 +151,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     },
   };
 
-  double _lastScreenHeight = 0;
-  double _lastScreenWidth = 0;
   double _lastHapticExtent = -1.0;
 
   double get _safeMinSize {
     if (!mounted) return 0.15;
-
-    // The height available inside the SafeArea
-    final availableHeight = MediaQuery.sizeOf(context).height -
-        MediaQuery.paddingOf(context).bottom;
-
-    // 70.0 (Pill Height) + dynamic margin
+    // 🚀 FIX: Must divide by full screenHeight, because the parent SafeArea has top/bottom set to false!
+    final screenHeight = MediaQuery.sizeOf(context).height;
     const double requiredPhysicalHeight = 70.0 + 44.0;
-
-    return (requiredPhysicalHeight / availableHeight).clamp(0.05, 0.40);
+    return (requiredPhysicalHeight / screenHeight).clamp(0.05, 0.40);
   }
 
   double get _safeMidSize => 0.45;
@@ -515,15 +508,11 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       safeProvider.setDestinationSelected(true);
       safeProvider.engine.setUIState(MapUIState.placeSelected);
 
-      // Safely animate sheet to Pill View size
+      // Safely animate sheet to Mid View size to show place details
       if (_sheetController.isAttached) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_sheetController.isAttached) {
-            _sheetController.animateTo(
-              _safeMinSize,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOutCubic,
-            );
+            _safeAnimateSheet(_safeMidSize);
           }
         });
       }
@@ -550,6 +539,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         await safeProvider.cancelAndClearRoute(resetCamera: false);
         // 🚀 TASK 1: FORCIBLY SEVER AUTO-TRACKING BEFORE CAMERA FLIGHT
         safeProvider.setAutoTracking(false);
+
+        // 🔥 CRITICAL FIX 1: Explicitly break the native MapLibre GPS tracking lock!
+        if (safeProvider.controller != null) {
+          await safeProvider.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+        }
+
         safeProvider.setDestinationSelected(true);
         safeProvider.engine.setUIState(MapUIState.placeSelected);
         setState(() {
@@ -563,11 +558,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         if (!mounted) return;
         safeProvider.setTargetDestination(LatLng(lat, lng));
         if (_sheetController.isAttached) {
-          _sheetController.animateTo(
-            _safeMinSize,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutCubic,
-          );
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _safeAnimateSheet(_safeMidSize);
+          });
         }
 
         // Drop the native Red Circle at the selected place coordinates
@@ -776,6 +769,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
               await provider.cancelAndClearRoute(resetCamera: false);
               // 🚀 TASK 1: FORCIBLY SEVER AUTO-TRACKING BEFORE CAMERA FLIGHT
               provider.setAutoTracking(false);
+
+              // 🔥 CRITICAL FIX 2: Explicitly break the native MapLibre GPS tracking lock!
+              if (provider.controller != null) {
+                await provider.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+              }
+
               provider.setDestinationSelected(true);
               provider.engine.setUIState(MapUIState.placeSelected);
               setState(() {
@@ -830,7 +829,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     }
 
     if (_sheetController.isAttached) {
-      _safeAnimateSheet(_safeMinSize);
+      _safeAnimateSheet(_safeMidSize);
     }
 
     _searchFocus.unfocus();
@@ -1038,6 +1037,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
           // 🧭 State Machine: Route drawn → morph QuickActionButtons to "Start"
           provider.engine.setUIState(MapUIState.routeDrawn);
 
+          // 🚀 CRITICAL FIX: Forcefully and smoothly collapse the sheet to the floating pill state!
           if (_sheetController.isAttached) {
             _safeAnimateSheet(_safeMinSize);
           }
@@ -1300,30 +1300,16 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     final midS = isNav ? navExpandedS : _safeMidSize;
     final maxS = isNav ? navExpandedS : _safeMaxSize;
 
+    // ❌ DELETE OR COMMENT OUT THIS ENTIRE ANIMATION BLOCK:
+    /* 
     if ((_lastScreenHeight != 0 &&
             (_lastScreenHeight - screenSize.height).abs() > 20) ||
         (_lastScreenWidth != 0 &&
             (_lastScreenWidth - screenSize.width).abs() > 20)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _sheetController.isAttached) {
-          if (!_searchFocus.hasFocus &&
-              _selectedPlace == null &&
-              !_showDirections &&
-              _searchCtrl.text.isEmpty) {
-            _sheetController.animateTo(_safeMinSize,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic);
-          } else if (!_searchFocus.hasFocus) {
-            // Only jump if NOT focused. If focused, let the 500ms focus listener animateTo handle it smoothly!
-            _sheetController.animateTo(_safeMaxSize.clamp(_safeMinSize, 1.0),
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic);
-          }
-        }
-      });
+      // 🚀 CRITICAL FIX: DO NOT ANIMATE SHEET HERE. IT CAUSES THE GHOST POP-OPEN BUG!
     }
-    _lastScreenHeight = screenSize.height;
-    _lastScreenWidth = screenSize.width;
+    */
+    // _lastScreenHeight and _lastScreenWidth removed
 
     final double currentMaxS = (isKeyboardOpen && !isNav)
         ? 1.0
@@ -1479,193 +1465,69 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                               minChildSize: minS,
                               maxChildSize: currentMaxS,
                               snap: true,
-                              snapAnimationDuration:
+snapAnimationDuration:
                                   const Duration(milliseconds: 350),
                               snapSizes: snaps,
                               builder: (context, scrollController) {
                                 return ValueListenableBuilder<double>(
                                   valueListenable: _sheetProgress,
                                   builder: (context, progress, child) {
-                                    // 1. Calculate how far the sheet is dragged beyond half-open
-                                    final double morphFactor = (progress <=
-                                            0.45)
-                                        ? 0.0
-                                        : ((progress - 0.45) / (0.95 - 0.45))
-                                            .clamp(0.0, 1.0);
+                                    // 🚀 1. DISCRETE STATE LOCKS (Kills 60fps processor recalculations)
+                                    // Transforms continuous drag values into strict boolean states
+                                    final bool isClosedMode = progress <= (minS + 0.05);
 
-                                    final bool routeActive =
-                                        _currentRoute != null ||
-                                            provider.isRouteCalculated;
-                                    final double baseBottom = routeActive
-                                        ? 0.0
-                                        : 44.0; // 0.0 makes it flush with the bottom safe area!
+                                    final double staticHeaderHeight = provider.isActiveNavigation
+                                        ? (_isNavSheetExpanded ? navExpandedHeight - 40 : navCollapsedHeight)
+                                        : (_showDirections ? 190.0 : 70.0);
 
-                                    // Dynamic Horizontal Margin Interpolation
-                                    final double minSize = 0.12; 
-                                    final double midSize = 0.55; 
-                                    final double maxSize = 0.95; 
-
-                                    final double closedMargin = routeActive ? 16.0 : 24.0; 
-                                    final double weatherCardMargin = 16.0; 
-                                    final double fullMargin = 0.0; 
-
-                                    double getDynamicHorizontalMargin() {
-                                      if (progress <= midSize) {
-                                        final double t = (progress - minSize) / (midSize - minSize);
-                                        return lerpDouble(closedMargin, weatherCardMargin, t.clamp(0.0, 1.0))!;
-                                      } else {
-                                        final double t = (progress - midSize) / (maxSize - midSize);
-                                        return lerpDouble(weatherCardMargin, fullMargin, t.clamp(0.0, 1.0))!;
-                                      }
-                                    }
-                                    
-                                    final double currentSideMargin = getDynamicHorizontalMargin();
-
-                                    double getDynamicBottomMargin() {
-                                      if (progress <= midSize) {
-                                        final double t = (progress - minSize) / (midSize - minSize);
-                                        return lerpDouble(baseBottom, weatherCardMargin, t.clamp(0.0, 1.0))!;
-                                      } else {
-                                        final double t = (progress - midSize) / (maxSize - midSize);
-                                        return lerpDouble(weatherCardMargin, fullMargin, t.clamp(0.0, 1.0))!;
-                                      }
-                                    }
-
-                                    final double currentBottomMargin = getDynamicBottomMargin();
-
-                                    final dynamicHeaderHeight =
-                                        isActiveNavigation
-                                            ? (_isNavSheetExpanded
-                                                ? navExpandedHeight - 40
-                                                : navCollapsedHeight)
-                                            : (_showDirections
-                                                ? 190.0
-                                                : (lerpDouble(70.0, 76.0,
-                                                        morphFactor) ??
-                                                    70.0));
-
-                                    // Permanent 35.0 radius on all 4 corners for all states
-                                    final BorderRadius premiumRadius =
-                                        BorderRadius.circular(35.0);
-
-                                    // 2. EXACT Weather Card Alpha (0.85 when idle, 0.95 when fully dragged)
-                                    final double currentAlpha =
-                                        lerpDouble(0.85, 0.95, morphFactor) ??
-                                            0.85;
-
-                                    // 3. EXACT Weather Card Base Colors (0xFF0B0E17 for dark mode)
-                                    final Color sheetBgColor = isDark
-                                        ? const Color(0xFF0B0E17)
-                                            .withValues(alpha: currentAlpha)
-                                        : Colors.white
-                                            .withValues(alpha: currentAlpha);
-
-                                    // 4. EXACT Weather Card Border Color (Blue tint for dark mode)
-                                    final Color sheetBorderColor = isDark
-                                        ? const Color(0xFF7CA1FF)
-                                            .withValues(alpha: 0.15)
-                                        : Colors.white.withValues(alpha: 0.9);
+                                    final Color sheetBgColor = isDark 
+                                        ? const Color(0xFF0B0E17).withValues(alpha: 0.85) 
+                                        : Colors.white.withValues(alpha: 0.85);
 
                                     return PointerInterceptor(
                                       child: Align(
                                         alignment: Alignment.bottomCenter,
                                         child: LayoutBuilder(
                                           builder: (context, constraints) {
+                                            // 🚀 2. ABSOLUTE HEIGHT MANAGEMENT (Stops unpredictable stretching)
+                                            final double shellHeight = provider.isActiveNavigation
+                                                ? (_isNavSheetExpanded ? navExpandedHeight : navCollapsedHeight)
+                                                : (_showDirections 
+                                                    ? 190.0 // Strictly locked for Directions View
+                                                    : (isClosedMode ? 70.0 : (constraints.maxHeight - 44.0)));
+
                                             return ConstrainedBox(
-                                              constraints: BoxConstraints(
-                                                maxWidth: isDesktop ? 800 : 400,
-                                              ),
+                                              constraints: BoxConstraints(maxWidth: isDesktop ? 800 : 400),
                                               child: Stack(
                                                 clipBehavior: Clip.none,
-                                                alignment: Alignment
-                                                    .topCenter, // 🚀 FIX: Anchor to top so margin pushes down properly
+                                                // 🚀 3. BOTTOM ALIGNMENT LOCK (Anchors the pill rigidly to the floor)
+                                                // Prevents the pill from ever floating upwards when sheet extent shifts!
+                                                alignment: Alignment.bottomCenter, 
                                                 children: [
-                                                  // 🎨 PERFORMANCE FIX: RepaintBoundary around Blur
                                                   RepaintBoundary(
-                                                    child: AnimatedContainer(
-                                                      clipBehavior:
-                                                          Clip.hardEdge,
-                                                      // 🚀 CRITICAL: Disable animation during drag to prevent jitter, but keep it for Navigation mode height changes
-                                                      duration: provider
-                                                              .isActiveNavigation
-                                                          ? const Duration(
-                                                              milliseconds: 200)
-                                                          : Duration.zero,
-                                                      curve:
-                                                          Curves.easeOutCubic,
-                                                      height: provider
-                                                              .isActiveNavigation
-                                                          ? (_isNavSheetExpanded
-                                                              ? navExpandedHeight
-                                                              : navCollapsedHeight)
-                                                          : (constraints
-                                                                  .maxHeight -
-                                                              currentBottomMargin), // 🚀 FIX: Prevents upward Stack overflow!
+                                                    child: AnimatedContainer( // Smooth morph only on state changes!
+                                                      duration: const Duration(milliseconds: 250),
+                                                      curve: Curves.easeOutCubic,
+                                                      clipBehavior: Clip.hardEdge,
+                                                      height: shellHeight,
                                                       margin: EdgeInsets.only(
-                                                        left: currentSideMargin,
-                                                        right:
-                                                            currentSideMargin,
-                                                        bottom:
-                                                            currentBottomMargin,
+                                                        left: isClosedMode ? 24.0 : 16.0,
+                                                        right: isClosedMode ? 24.0 : 16.0,
+                                                        bottom: 44.0, // Strictly locked floor margin!
                                                       ),
-                                                      // OUTER CONTAINER: SHADOWS ONLY, STRICTLY NO BACKGROUND COLOR
                                                       decoration: BoxDecoration(
-                                                        borderRadius:
-                                                            premiumRadius,
+                                                        borderRadius: BorderRadius.circular(35.0),
                                                         boxShadow: isDark
-                                                            ? [
-                                                                // EXACT Weather Card Dual-Shadow
-                                                                BoxShadow(
-                                                                    color: Colors
-                                                                        .white
-                                                                        .withValues(
-                                                                            alpha:
-                                                                                0.04),
-                                                                    blurRadius:
-                                                                        16,
-                                                                    spreadRadius:
-                                                                        1),
-                                                                BoxShadow(
-                                                                    color: Colors
-                                                                        .black
-                                                                        .withValues(
-                                                                            alpha:
-                                                                                0.3),
-                                                                    blurRadius:
-                                                                        24,
-                                                                    offset:
-                                                                        const Offset(
-                                                                            0,
-                                                                            8)),
-                                                              ]
-                                                            : [
-                                                                BoxShadow(
-                                                                    color: Colors
-                                                                        .black
-                                                                        .withValues(
-                                                                            alpha:
-                                                                                0.05),
-                                                                    blurRadius:
-                                                                        32,
-                                                                    offset:
-                                                                        const Offset(
-                                                                            0,
-                                                                            12))
-                                                              ],
+                                                            ? [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 24, offset: const Offset(0, 8))]
+                                                            : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 32, offset: const Offset(0, 12))],
                                                       ),
                                                       child: ClipRRect(
-                                                        // CRITICAL: MUST CLIP THE BLUR TO MATCH CORNERS
-                                                        borderRadius:
-                                                            premiumRadius,
-                                                        child:
-                                                            _buildGlassyBackground(
+                                                        borderRadius: BorderRadius.circular(35.0),
+                                                        child: _buildGlassyBackground(
                                                           isDark: isDark,
-                                                          sheetBgColor:
-                                                              sheetBgColor,
-                                                          premiumRadius:
-                                                              premiumRadius,
-                                                          sheetBorderColor:
-                                                              sheetBorderColor,
+                                                          sheetBgColor: sheetBgColor,
+                                                          premiumRadius: BorderRadius.circular(35.0),
+                                                          sheetBorderColor: isDark ? const Color(0xFF7CA1FF).withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.9),
                                                           child: Stack(
                                                             children: [
                                                               // Bottom Layer: Scrollable Content
@@ -1676,12 +1538,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                       (Rect
                                                                           bounds) {
                                                                     // Calculate exact normalized stop for the dynamic header
-                                                                    final fadeStop = (dynamicHeaderHeight /
-                                                                            bounds
-                                                                                .height)
-                                                                        .clamp(
-                                                                            0.0,
-                                                                            1.0);
+                                                                    final fadeStop = (staticHeaderHeight / bounds.height).clamp(0.0, 1.0);
                                                                     final fadeStart = (fadeStop -
                                                                             0.05)
                                                                         .clamp(
@@ -1740,17 +1597,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                               .onDrag,
                                                                       slivers: [
                                                                         SliverPadding(
-                                                                          padding:
-                                                                              EdgeInsets.only(top: dynamicHeaderHeight),
+                                                                          padding: EdgeInsets.only(top: staticHeaderHeight),
                                                                         ),
                                                                         SliverToBoxAdapter(
                                                                           child:
                                                                               AnimatedOpacity(
                                                                             duration:
                                                                                 const Duration(milliseconds: 150),
-                                                                            opacity: (!isActiveNavigation && progress > 0.05)
-                                                                                ? 1.0
-                                                                                : 0.0,
+                                                                            opacity: (!provider.isActiveNavigation && !isClosedMode) ? 1.0 : 0.0,
                                                                             child:
                                                                                 AnimatedSwitcher(
                                                                               duration: const Duration(milliseconds: 300),
@@ -1766,7 +1620,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                                   ),
                                                                                 );
                                                                               },
-                                                                              child: (!isActiveNavigation && progress > 0.05) ? _buildSheetContent(isDark, progress, isExpanded: isKeyboardOpen) : const SizedBox.shrink(),
+                                                                              child: (!provider.isActiveNavigation && !isClosedMode) ? _buildSheetContent(isDark, progress, isExpanded: isKeyboardOpen) : const SizedBox.shrink(),
                                                                             ),
                                                                           ),
                                                                         ),
@@ -1790,12 +1644,9 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                 top: 0,
                                                                 left: 0,
                                                                 right: 0,
-                                                                child:
-                                                                    Container(
-                                                                  color: Colors
-                                                                      .transparent,
-                                                                  height:
-                                                                      dynamicHeaderHeight,
+                                                                child: Container(
+                                                                  color: Colors.transparent,
+                                                                  height: staticHeaderHeight,
                                                                   child:
                                                                       GestureDetector(
                                                                     onTap: () {
@@ -1819,12 +1670,10 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                                                           Curves
                                                                               .easeOutCubic,
                                                                       child: _showDirections
-                                                                          ? _buildDirectionsHeader(
-                                                                              dynamicHeaderHeight,
-                                                                              isDark)
+                                                                          ? _buildDirectionsHeader(staticHeaderHeight, isDark)
                                                                           : (_selectedPlace != null
-                                                                              ? _buildSelectedPlaceHeader(dynamicHeaderHeight, progress, isDark)
-                                                                              : _buildSearchHeader(dynamicHeaderHeight, progress, isDark)),
+                                                                              ? _buildSelectedPlaceHeader(staticHeaderHeight, progress, isDark)
+                                                                              : _buildSearchHeader(staticHeaderHeight, progress, isDark)),
                                                                     ),
                                                                   ),
                                                                 ),
