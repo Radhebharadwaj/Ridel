@@ -4,7 +4,7 @@ import 'package:flutter/cupertino.dart';
 
 import 'package:flutter/foundation.dart'; // 🚀 NEW: For compute
 final http.Client _apiClient = http.Client();
-const Duration _apiTimeout = Duration(seconds: 3);
+const Duration _apiTimeout = Duration(seconds: 8); // 🚀 Boosted from 3s to 8s
 
 class ForecastDayModel {
   final String date;
@@ -170,9 +170,21 @@ class WeatherService {
     }
   }
 
+  // 🚀 CRITICAL GUARD: Abort fetch if city is unresolved or transient!
+  static bool isInvalidCity(String? city) {
+    if (city == null || city.trim().isEmpty) return true;
+    final c = city.trim().toLowerCase();
+    return c == "locating..." || 
+           c == "location disabled" || 
+           c == "select city" || 
+           c == "detecting..." || 
+           c == "current location" ||
+           c == "null";
+  }
+
   static Future<WeatherModel?> getWeatherByCity(String city, {double? lat, double? lng}) async {
-    if (city.isEmpty || city == 'Select City') {
-      debugPrint('⚠️ Weather Fetch Skipped: Invalid City Name');
+    if (isInvalidCity(city)) {
+      debugPrint("🛑 [WeatherService] Blocked premature API call for invalid city: $city");
       return null;
     }
 

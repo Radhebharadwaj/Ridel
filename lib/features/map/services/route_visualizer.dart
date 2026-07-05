@@ -81,7 +81,7 @@ class RouteVisualizer {
 
     Future<void> safeAddLineLayer(String sourceId, String layerId, LineLayerProperties props) async {
       try {
-        await controller.addLineLayer(sourceId, layerId, props, belowLayerId: 'nav_puck_layer');
+        await controller.addLineLayer(sourceId, layerId, props);
       } catch (e) {
         debugPrint('Ignored safeAddLineLayer Error: $e');
       }

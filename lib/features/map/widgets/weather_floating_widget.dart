@@ -158,9 +158,8 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     final locService =
         Provider.of<GlobalLocationService>(context, listen: false);
 
-    if (locService.currentCity == 'Location Disabled' || 
-        locService.currentCity == 'Select City' || 
-        locService.currentCity == 'Locating...') {
+    if (WeatherService.isInvalidCity(locService.currentCity)) {
+      debugPrint("⏳ [Weather Card] Waiting for city resolution before fetching weather...");
       if (mounted) {
         setState(() {
           _hasError = true;
@@ -264,6 +263,14 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
         "🟢 [WEATHER DEBUG] _hasError: $_hasError, _weather: ${_weather?.temp}");
 
     if (_hasError || _weather == null) {
+      final locService = Provider.of<GlobalLocationService>(context, listen: false);
+      final currentCity = locService.currentCityName.value;
+      
+      if (WeatherService.isInvalidCity(currentCity)) {
+        debugPrint("⏳ [Weather Card] Waiting for city resolution before fetching weather...");
+        return;
+      }
+      
       debugPrint(
           "🔴 [WEATHER DEBUG] Tap blocked! (Error or Null Weather). Retrying fetch...");
       _resolveLocationAndFetchWeather(); // Retry tap
@@ -373,7 +380,7 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     // 🚀 INP Optimization: Only listens to the zoom boolean, preventing 5000ms blur lag!
     // Unlike the Selector widget, this allows local setState (taps) to trigger rebuilds.
     final isZoomedIn = context.select<MapProvider, bool>(
-      (provider) => provider.currentZoomLevel >= 11.0,
+      (provider) => provider.currentZoomLevel >= 10.0,
     );
 
     if (!isZoomedIn) return const SizedBox.shrink();

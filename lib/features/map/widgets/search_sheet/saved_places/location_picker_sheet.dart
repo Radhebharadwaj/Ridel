@@ -61,7 +61,8 @@ class _AnimatedMapPinState extends State<AnimatedMapPin>
       builder: (context, child) {
         return Transform.rotate(
           angle: _swayAnimation.value,
-          alignment: Alignment.bottomCenter, // CRITICAL: Locks the sharp point to the map
+          alignment: Alignment
+              .bottomCenter, // CRITICAL: Locks the sharp point to the map
           child: child,
         );
       },
@@ -311,8 +312,7 @@ class SavedPlacesRow extends StatelessWidget {
           onTap: () async {
             if (home != null) {
               // Navigate to saved home
-              final provider =
-                  Provider.of<MapProvider>(context, listen: false);
+              final provider = Provider.of<MapProvider>(context, listen: false);
               await provider.cancelAndClearRoute(resetCamera: false);
               provider.flyToPlace(home.lat, home.lng);
               onPlaceTapped?.call();
@@ -338,8 +338,7 @@ class SavedPlacesRow extends StatelessWidget {
           hasValue: work != null,
           onTap: () async {
             if (work != null) {
-              final provider =
-                  Provider.of<MapProvider>(context, listen: false);
+              final provider = Provider.of<MapProvider>(context, listen: false);
               await provider.cancelAndClearRoute(resetCamera: false);
               provider.flyToPlace(work.lat, work.lng);
               onPlaceTapped?.call();
@@ -484,15 +483,18 @@ class SavedPlacesRow extends StatelessWidget {
                       final provider = context.read<MapProvider>();
                       final selectedLocation = provider.targetDestination;
 
-                      if (provider.isAddingStopMode && selectedLocation != null) {
+                      if (provider.isAddingStopMode &&
+                          selectedLocation != null) {
                         AppHaptics.success();
 
                         // 1. Add the stop to the list
                         provider.addIntermediateStop(
                           PlaceModel(
-                            placeId: 'pinned_${DateTime.now().millisecondsSinceEpoch}',
+                            placeId:
+                                'pinned_${DateTime.now().millisecondsSinceEpoch}',
                             name: 'Dropped Pin',
-                            address: '${selectedLocation.latitude.toStringAsFixed(4)}, ${selectedLocation.longitude.toStringAsFixed(4)}',
+                            address:
+                                '${selectedLocation.latitude.toStringAsFixed(4)}, ${selectedLocation.longitude.toStringAsFixed(4)}',
                             latitude: selectedLocation.latitude,
                             longitude: selectedLocation.longitude,
                             categories: ['unknown'],
@@ -510,7 +512,8 @@ class SavedPlacesRow extends StatelessWidget {
 
                         pickerController.cancelSelection();
                       } else {
-                        final success = await pickerController.confirmSelection();
+                        final success =
+                            await pickerController.confirmSelection();
                         if (success && context.mounted) {
                           ToastService.showSuccess(
                             context,
@@ -785,8 +788,8 @@ class _SavedPlaceChip extends StatelessWidget {
               ),
             ),
             child: Icon(
-              icon, 
-              size: 30.0, 
+              icon,
+              size: 30.0,
               color: iconColor,
               shadows: const [
                 Shadow(

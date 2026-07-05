@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:sunrise_sunset_calc/sunrise_sunset_calc.dart';
@@ -38,9 +39,12 @@ class ThemeService with WidgetsBindingObserver {
 
       // 2. ASYNC UPDATE: If location is already granted or becomes available, update silently
       try {
-        final pos = await Geolocator.getLastKnownPosition();
-        if (pos != null) {
-          _applySolarTheme(now, pos.latitude, pos.longitude);
+        // 🚀 CRITICAL FIX: getLastKnownPosition is NOT supported on Web!
+        if (!kIsWeb) {
+          final pos = await Geolocator.getLastKnownPosition();
+          if (pos != null) {
+            _applySolarTheme(now, pos.latitude, pos.longitude);
+          }
         }
       } catch (e) {
         debugPrint("Location denied or failed, using default coordinates for theme computation.");

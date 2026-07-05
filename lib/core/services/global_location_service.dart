@@ -111,11 +111,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> autoDetectAndSetRegion({bool isManualTrigger = false}) async {
     await initializeEcoLocation(isManualTrigger: isManualTrigger);
     
-    // 🚀 TASK 3: Wire the Weather Cascade
-    final pos = currentPositionNotifier.value;
-    if (pos != null) {
-      WeatherService.getWeather(pos.latitude, pos.longitude);
-    }
+    // 🚀 TASK 3: Wire the Weather Cascade (Moved to resolveCityName)
     
     // 🚀 TASK 4: Aggressive UI Rebuild
     notifyListeners();
@@ -195,30 +191,40 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
       }
 
-      // 🚀 OPTIMIZATION: Fast Cache for Location
+      // 🚀 OPTIMIZATION: Fast Cache for Location (Native Only)
       try {
-        final lastPos = await Geolocator.getLastKnownPosition();
-        if (lastPos != null && currentPositionNotifier.value == null) {
-          debugPrint("⚡ Instant Location: Using last known position.");
-          currentPositionNotifier.value = lastPos;
-          _isUsingIpFallback = false;
-          
-          return; // 🚀 Nuke the satellite delay by returning early!
+        if (!kIsWeb) {
+          final lastPos = await Geolocator.getLastKnownPosition();
+          if (lastPos != null && currentPositionNotifier.value == null) {
+            debugPrint("⚡ Instant Location: Using last known position.");
+            currentPositionNotifier.value = lastPos;
+            _isUsingIpFallback = false;
+            
+            return; // 🚀 Nuke the satellite delay by returning early!
+          }
         }
       } on Object catch (_) {}
 
       try {
-        final pos = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.low, // 🚀 Changed to Low for instant region extraction
-          ),
-        ).timeout(const Duration(seconds: 8));
+        Position pos;
+        if (!kIsWeb) {
+          pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.low, // 🚀 Changed to Low for instant region extraction
+            ),
+          ).timeout(const Duration(seconds: 8));
+        } else {
+          pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high, // Web-safe accuracy
+            ),
+          ).timeout(const Duration(seconds: 8));
+        }
 
         currentPositionNotifier.value = pos;
         _isUsingIpFallback = false;
         
-        // 🚀 TRIGGER WEATHER FETCH
-        WeatherService.getWeather(pos.latitude, pos.longitude);
+        // 🚀 TRIGGER WEATHER FETCH (Moved to resolveCityName)
         
         notifyListeners(); // Notify city/fallback changes
       } on Object catch (e) {
@@ -226,7 +232,9 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
         
         Position? lastPos;
         try {
-          lastPos = await Geolocator.getLastKnownPosition();
+          if (!kIsWeb) {
+            lastPos = await Geolocator.getLastKnownPosition();
+          }
         } on Object catch (_) {}
         
         if (lastPos != null) {
@@ -234,7 +242,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           currentPositionNotifier.value = lastPos;
           _isUsingIpFallback = false;
           
-          WeatherService.getWeather(lastPos.latitude, lastPos.longitude);
+          // Weather fetch moved to resolveCityName
           notifyListeners();
         } else {
           await _fetchLocationFromIP();
@@ -373,6 +381,10 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     
     // 🚀 THE FIX: Instantly match and switch the region in the DB
     await _autoMatchAndSwitchRegion(newCity);
+    
+    debugPrint("🌤️ [WeatherService] Valid city resolved ($newCity). Fetching weather now...");
+    WeatherService.getWeatherByCity(newCity);
+    
     notifyListeners();
   }
 
@@ -583,25 +595,15 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
       if (response.statusCode == 200) {
         final data = await compute(jsonDecode, response.body);
 
-        // 🚀 Create a Mock 'Position' object so MapEngine doesn't crash
-        currentPositionNotifier.value = Position(
-          latitude: data['latitude'],
-          longitude: data['longitude'],
-          timestamp: DateTime.now(),
-          accuracy: 5000.0, // Low accuracy since it's an IP
-          altitude: 0.0,
-          altitudeAccuracy: 0.0,
-          heading: 0.0,
-          headingAccuracy: 0.0,
-          speed: 0.0,
-          speedAccuracy: 0.0,
-          isMocked: true, // Tells the app this is not exact GPS
-        );
-
         String fetchedCityName = data['city']?.toString() ?? "Location Disabled";
         if (fetchedCityName.trim().isEmpty || fetchedCityName.toLowerCase().contains('select city') || fetchedCityName == "Current Location") {
             fetchedCityName = 'Location Disabled';
         }
+
+        // 🚀 SAFEGUARD: Fallback mapped coordinates instead of IP center points
+        _applyCityFallbackCoordinates(fetchedCityName);
+
+
 
         _currentCity = forceSelectCityUI ? "Location Disabled" : fetchedCityName;
         _currentState = forceSelectCityUI ? "Location Disabled" : (data['region']?.toString() ?? "");
@@ -622,13 +624,18 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  void _setFallbackIndiaCenter({bool forceSelectCityUI = false}) {
+  void _setFallbackIndiaCenter({bool forceSelectCityUI = false}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cachedLat = prefs.getDouble('cachedLat') ?? 28.6139; // Default to Delhi NCR instead of Nagpur
+    final cachedLng = prefs.getDouble('cachedLng') ?? 77.2090;
+
     currentPositionNotifier.value = Position(
-      latitude: 21.1458, // Nagpur Center
-      longitude: 79.0882,
+      latitude: cachedLat,
+      longitude: cachedLng,
       timestamp: DateTime.now(),
       accuracy: 10000.0, altitude: 0, altitudeAccuracy: 0, heading: 0,
-      headingAccuracy: 0, speed: 0, speedAccuracy: 0, isMocked: true,
+      headingAccuracy: 0, speed: 0, speedAccuracy: 0, 
+      isMocked: true, // 🚀 STRICTLY MARK AS MOCKED
     );
     _currentCity = forceSelectCityUI ? "Location Disabled" : "Location Disabled";
     _currentState = forceSelectCityUI ? "Location Disabled" : "Location Disabled";
@@ -636,6 +643,33 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     _isUsingIpFallback = true;
     ProfileRepository.userCity.value = _currentCity;
     notifyListeners();
+  }
+
+  void _applyCityFallbackCoordinates(String cityName) {
+    double lat = 28.6139; // Default Delhi NCR
+    double lng = 77.2090;
+
+    final cleanCity = cityName.toLowerCase().trim();
+    if (cleanCity.contains("delhi") || cleanCity.contains("noida") || cleanCity.contains("gurugram")) {
+      lat = 28.6139; lng = 77.2090;
+    } else if (cleanCity.contains("mumbai")) {
+      lat = 19.0760; lng = 72.8777;
+    } else if (cleanCity.contains("bengaluru") || cleanCity.contains("bangalore")) {
+      lat = 12.9716; lng = 77.5946;
+    } else if (cleanCity.contains("kolkata")) {
+      lat = 22.5726; lng = 88.3639;
+    }
+
+    currentPositionNotifier.value = Position(
+      latitude: lat,
+      longitude: lng,
+      timestamp: DateTime.now(),
+      accuracy: 10000.0, altitude: 0, altitudeAccuracy: 0, heading: 0,
+      headingAccuracy: 0, speed: 0, speedAccuracy: 0,
+      isMocked: true, // 🚀 CRITICAL: Tells the map NOT to zoom to street level!
+    );
+
+    // Trigger weather fetch moved to resolveCityName
   }
 
   // ==========================================

@@ -1475,6 +1475,7 @@ snapAnimationDuration:
                                     // 🚀 1. DISCRETE STATE LOCKS (Kills 60fps processor recalculations)
                                     // Transforms continuous drag values into strict boolean states
                                     final bool isClosedMode = progress <= (minS + 0.05);
+                                    final bool isFullyOpen = progress >= (maxS - 0.02);
 
                                     final double staticHeaderHeight = provider.isActiveNavigation
                                         ? (_isNavSheetExpanded ? navExpandedHeight - 40 : navCollapsedHeight)
@@ -1494,7 +1495,7 @@ snapAnimationDuration:
                                                 ? (_isNavSheetExpanded ? navExpandedHeight : navCollapsedHeight)
                                                 : (_showDirections 
                                                     ? 190.0 // Strictly locked for Directions View
-                                                    : (isClosedMode ? 70.0 : (constraints.maxHeight - 44.0)));
+                                                    : (isClosedMode ? 70.0 : (isFullyOpen ? constraints.maxHeight : (constraints.maxHeight - 44.0))));
 
                                             return ConstrainedBox(
                                               constraints: BoxConstraints(maxWidth: isDesktop ? 800 : 400),
@@ -1511,9 +1512,9 @@ snapAnimationDuration:
                                                       clipBehavior: Clip.hardEdge,
                                                       height: shellHeight,
                                                       margin: EdgeInsets.only(
-                                                        left: isClosedMode ? 24.0 : 16.0,
-                                                        right: isClosedMode ? 24.0 : 16.0,
-                                                        bottom: 44.0, // Strictly locked floor margin!
+                                                        left: isFullyOpen ? 0.0 : (isClosedMode ? 24.0 : 16.0),
+                                                        right: isFullyOpen ? 0.0 : (isClosedMode ? 24.0 : 16.0),
+                                                        bottom: isFullyOpen ? 0.0 : 44.0, // 👉 Strictly locked floor margin, except fully open
                                                       ),
                                                       decoration: BoxDecoration(
                                                         borderRadius: BorderRadius.circular(35.0),

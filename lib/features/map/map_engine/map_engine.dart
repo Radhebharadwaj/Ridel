@@ -62,7 +62,6 @@ class MapEngine {
   bool isFullyBooted = false;
   StreamSubscription<Position>? _positionStream;
   DateTime? _lastActionTime;
-  bool _isNavPuckInitialized = false;
   static const Duration _debounceInterval = Duration(milliseconds: 300);
 
   MapEngine() {
@@ -112,7 +111,7 @@ class MapEngine {
 
     // 🚀 FIX: Passed both mapController and camera to match your init signature
     navigation.init(camera!);
-
+    
     // 🚀 CRITICAL WIRE: Inject reroute callback → RouteEngineService
     navigation.onRerouteRequested = (LatLng userPos) async {
       if (_navigationDestination == null) return null;
@@ -147,11 +146,6 @@ class MapEngine {
       }
 
       try {
-        final Uint8List puckBytes = await MapProvider.loadAndResizeImage('assets/images/nav_puck.png', 36);
-        await safeAddEngineImage('nav_puck', puckBytes);
-      } catch (_) {}
-
-      try {
         final Uint8List pinBytes = await MapProvider.loadAndResizeImage('assets/images/custom_pin.png', 36);
         await safeAddEngineImage('custom_pin', pinBytes);
       } catch (_) {}
@@ -170,34 +164,6 @@ class MapEngine {
         ]);
         await safeAddEngineImage('Arrow', transparentPixel);
       } catch (_) {}
-
-      // 🚀 Init GeoJsonSource and SymbolLayer for 3D Puck
-      if (!_isNavPuckInitialized) {
-        try {
-          await controller.addGeoJsonSource('nav_puck_source', {
-            "type": "FeatureCollection",
-            "features": []
-          });
-        } catch (_) {}
-        
-        try {
-          await controller.addSymbolLayer(
-            'nav_puck_source',
-            'nav_puck_layer',
-            const SymbolLayerProperties(
-              iconImage: 'nav_puck',
-              iconPitchAlignment: 'map',
-              iconRotationAlignment: 'map',
-              iconAllowOverlap: true,
-              iconIgnorePlacement: true,
-              iconSize: 1.0,
-              iconOpacity: 1.0,
-              iconRotate: ['get', 'bearing'],
-            ),
-          );
-        } catch (_) {}
-        _isNavPuckInitialized = true;
-      }
 
       await layers?.initLayerSystem();
 

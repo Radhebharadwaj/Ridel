@@ -115,6 +115,32 @@ class MapProvider extends ChangeNotifier {
   MapLibreMapController? get controller => engine.mapController;
   bool get _isMapReady => controller != null;
 
+  // 🚀 CRITICAL FIX: Expose location permission state to the UI layer!
+  bool get hasLocationPermission {
+    return engine.locService?.hasLocationPermission ?? false;
+  }
+
+  // 🚀 TWO-KEY GATEKEEPER FOR MAP PROVIDER
+  double _getClampedZoom(double requestedZoom) {
+    final pos = engine.locService?.currentPosition;
+    final bool isRealGps = pos != null && 
+                           !pos.isMocked && 
+                           hasLocationPermission && 
+                           pos.accuracy <= 150.0 &&
+                           pos.accuracy > 0.0;
+    
+    // Check dummy coordinates as well
+    final bool isDummyCenter = pos != null && (
+        (pos.latitude.toStringAsFixed(4) == "28.6139" && pos.longitude.toStringAsFixed(4) == "77.2090") || 
+        (pos.latitude.toStringAsFixed(4) == "21.1458" && pos.longitude.toStringAsFixed(4) == "79.0882") || 
+        (pos.latitude == 0.0 && pos.longitude == 0.0));
+    
+    if (!isRealGps || isDummyCenter) {
+      return requestedZoom > 10.5 ? 10.5 : requestedZoom;
+    }
+    return requestedZoom;
+  }
+
   MyLocationTrackingMode _currentTrackingMode = kIsWeb
       ? MyLocationTrackingMode.tracking
       : MyLocationTrackingMode.trackingCompass;
@@ -176,11 +202,13 @@ class MapProvider extends ChangeNotifier {
       
       if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
         // STEP 1: INSTANT CACHED FETCH (0ms lag)
-        // Immediately grab the last known position from the OS/browser cache to unblock the UI
-        final Position? cachedPosition = await Geolocator.getLastKnownPosition();
-        if (cachedPosition != null) {
-          currentLocation = LatLng(cachedPosition.latitude, cachedPosition.longitude);
-          notifyListeners(); // Instantly triggers initial centering in the UI
+        // 🚀 CRITICAL FIX: getLastKnownPosition is NOT supported on Web!
+        if (!kIsWeb) {
+          final Position? cachedPosition = await Geolocator.getLastKnownPosition();
+          if (cachedPosition != null) {
+            currentLocation = LatLng(cachedPosition.latitude, cachedPosition.longitude);
+            notifyListeners(); // Instantly triggers initial centering in the UI
+          }
         }
         
         // STEP 2: ASYNCHRONOUS HIGH-ACCURACY REFINEMENT (Short 2.5s timeout)
@@ -232,39 +260,71 @@ class MapProvider extends ChangeNotifier {
           ? 1.0
           : 0.0;
 
+  bool _isNavPuckInitialized = false;
+
   Future<void> _updatePuckGeoJson(
       LatLng location, double bearing, double opacity) async {
     if (controller == null) return;
     try {
-      final bool isVisible = opacity > 0.0;
-
-      final Map<String, dynamic> puckGeoJson = isVisible
-          ? {
-              "type": "FeatureCollection",
-              "features": [
-                {
-                  "type": "Feature",
-                  "geometry": {
-                    "type": "Point",
-                    "coordinates": [
-                      location.longitude,
-                      location.latitude
-                    ] // 🚀 STRICTLY LNG, LAT
-                  },
-                  "properties": {
-                    "rotation":
-                        (bearing).toDouble(), // 🚀 STRICTLY NON-NULL DOUBLE
-                  }
-                }
-              ]
+      final Map<String, dynamic> puckGeoJson = {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [location.longitude, location.latitude]
+            },
+            "properties": {
+              "bearing": bearing.toDouble(),
             }
-          : {"type": "FeatureCollection", "features": []};
+          }
+        ]
+      };
 
-      try {
-        await controller!.addSource(
-            "nav_puck_source", GeojsonSourceProperties(data: puckGeoJson));
-      } catch (e) {
-        await controller!.setGeoJsonSource("nav_puck_source", puckGeoJson);
+      if (!_isNavPuckInitialized) {
+        // 1. Force cleanup before drawing a new puck
+        try { await controller!.removeLayer('nav_puck_layer'); } catch (_) {}
+        try { await controller!.removeSource('nav_puck_source'); } catch (_) {}
+
+        // 2. Guard against missing image ID crash
+        // Only add the symbol layer if 'nav_puck' is registered in the style
+        // Then add source and layer...
+        try {
+          final Uint8List puckBytes = await loadAndResizeImage('assets/images/nav_puck.png', 40);
+          await controller!.addImage('nav_puck', puckBytes);
+        } catch (_) {}
+
+        try {
+          await controller!.addSource(
+              "nav_puck_source", GeojsonSourceProperties(data: puckGeoJson));
+
+          await controller!.addSymbolLayer(
+            "nav_puck_source",
+            "nav_puck_layer",
+            SymbolLayerProperties(
+              iconImage: 'nav_puck',
+              iconSize: 0.35 * mapItemScale,
+              iconAllowOverlap: true,
+              iconIgnorePlacement: true,
+              iconRotate: const ['get', 'bearing'],
+              iconRotationAlignment: 'map',
+              iconPitchAlignment: 'map',
+              iconOpacity: opacity,
+            ),
+          );
+          _isNavPuckInitialized = true;
+        } catch (e) {
+          debugPrint("Safe Guard: Puck draw failed: $e");
+        }
+      } else {
+        try {
+          await controller!.setGeoJsonSource("nav_puck_source", puckGeoJson);
+          await controller!.setLayerProperties(
+            'nav_puck_layer',
+            SymbolLayerProperties(iconOpacity: opacity),
+          );
+        } catch (_) {}
       }
 
       _lastPuckLocation = location;
@@ -313,7 +373,7 @@ class MapProvider extends ChangeNotifier {
             CameraPosition(
               target: location,
               bearing: newBearing,
-              zoom: 16.5,
+              zoom: _getClampedZoom(16.5),
               tilt: 45.0,
             ),
           ),
@@ -373,10 +433,166 @@ class MapProvider extends ChangeNotifier {
   bool get hasActiveRoute =>
       isRouteCalculated || engine.mapUIState.value == MapUIState.routeDrawn;
 
+  // 🚀 HELPER: Strictly validates if the user's current location is a real physical GPS lock
+  bool _isRealPhysicalGpsAvailable(BuildContext context) {
+    final locService = Provider.of<GlobalLocationService>(context, listen: false);
+    final pos = locService.currentPosition;
+    
+    if (pos == null || !locService.hasLocationPermission || pos.isMocked) return false;
+    
+    // Precision Check: True GPS precision is < 100m. IP fallbacks return > 100m or 0.0.
+    if (pos.accuracy > 150.0 || pos.accuracy == 0.0) return false;
+
+    // Fallback Coordinate Check (Delhi NCR & Nagpur dummy centers)
+    final latStr = pos.latitude.toStringAsFixed(4);
+    final lngStr = pos.longitude.toStringAsFixed(4);
+    final isDummyCenter = (latStr == "28.6139" && lngStr == "77.2090") || 
+                          (latStr == "21.1458" && lngStr == "79.0882") || 
+                          (pos.latitude == 0.0 && pos.longitude == 0.0);
+
+    return !isDummyCenter;
+  }
+
+  void _showLocationPermissionRequiredPopup(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161E28),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.location_on_rounded, color: Colors.blueAccent, size: 24),
+            SizedBox(width: 10),
+            Text("Location Required", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: const Text(
+          "To calculate routes and navigate, please enable location permissions for Ridel Maps.",
+          style: TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text("CANCEL", style: TextStyle(color: Colors.white54, fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blueAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _handlePermissionGrantAndRetry(context);
+            },
+            child: const Text("ENABLE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handlePermissionGrantAndRetry(BuildContext context) async {
+    if (!context.mounted) return;
+    
+    final locService = Provider.of<GlobalLocationService>(context, listen: false);
+    
+    // 🌐 PLATFORM 1: FLUTTER WEB
+    if (kIsWeb) {
+      LocationPermission perm = await Geolocator.checkPermission();
+      
+      if (!context.mounted) return;
+      
+      // If permanently denied in browser, standard request will silently fail!
+      if (perm == LocationPermission.deniedForever) {
+        ToastService.showActionToast(
+          context,
+          message: "Location blocked in browser! Click the lock/info icon in your address bar to reset permissions.",
+          actionLabel: "OK",
+          onActionTap: () {},
+        );
+        return;
+      }
+
+      // 🚀 CRITICAL: Must actively request and AWAIT the browser dialog resolution!
+      perm = await Geolocator.requestPermission();
+      
+      if (perm == LocationPermission.whileInUse || perm == LocationPermission.always) {
+        debugPrint("✅ [Web Handshake] Permission granted via browser prompt!");
+        await locService.initializeEcoLocation(isManualTrigger: true);
+      } else {
+        debugPrint("❌ [Web Handshake] User denied browser prompt.");
+        return;
+      }
+    } 
+    // 📱 PLATFORM 2: ANDROID / iOS NATIVE
+    else {
+      bool isServiceEnabled = await Geolocator.isLocationServiceEnabled();
+      
+      // Step A: If GPS Hardware toggle is OFF, invoke native OS location settings/dialog
+      if (!isServiceEnabled) {
+        await Geolocator.openLocationSettings();
+        // Allow 1 second for user to toggle OS switch and return to app
+        await Future.delayed(const Duration(seconds: 1));
+        isServiceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!isServiceEnabled) return; // Abort if user left GPS turned off
+      }
+
+      // Step B: If permission is denied, invoke native OS runtime prompt
+      LocationPermission perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      } else if (perm == LocationPermission.deniedForever) {
+        await Geolocator.openAppSettings();
+        return;
+      }
+
+      if (perm == LocationPermission.whileInUse || perm == LocationPermission.always) {
+        await locService.initializeEcoLocation(isManualTrigger: true);
+      } else {
+        return;
+      }
+    }
+
+    // 🚀 STAGE 2: VERIFIED RETRY PIPELINE
+    // Only after the handshake succeeds and high-accuracy GPS arrives do we draw the route!
+    if (!context.mounted) return;
+    await Future.delayed(const Duration(milliseconds: 300)); // Allow Blue Dot to mount in WebGL
+    
+    final pos = locService.currentPosition;
+    final bool isPhysicalGps = pos != null && !pos.isMocked && locService.hasLocationPermission && pos.accuracy <= 150.0;
+    
+    if (isPhysicalGps) {
+      debugPrint("🎯 [Handshake Success] High-accuracy GPS verified! Executing auto-retry for routing...");
+      
+      // 1. Ignite the native Blue Dot tracking
+      if (controller != null) {
+        await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+      }
+      
+      // 2. Automatically retry calculating and drawing the driving route
+      if (!context.mounted) return;
+      await calculateAndDrawNativeRoute(context, 'driving', isAutoTriggered: true);
+    } else {
+      debugPrint("⏳ [Handshake Waiting] Permission granted, but high-accuracy coordinate still settling...");
+    }
+  }
+
   Future<void> calculateAndDrawNativeRoute(
     BuildContext context,
-    String mode,
-  ) async {
+    String mode, {
+    bool isAutoTriggered = false,
+  }) async {
+    // 🛡️ THE ROUTING GATEKEEPER: Abort routing if real physical GPS is missing!
+    if (!_isRealPhysicalGpsAvailable(context)) {
+      debugPrint("🛑 [Routing Gatekeeper] Aborted route calculation! No verified physical GPS / Blue Dot detected.");
+      
+      // 🚀 CRITICAL UX FIX: Do not fail silently! Trigger interactive UI Popup/Toast:
+      if (!isAutoTriggered && context.mounted) {
+        _showLocationPermissionRequiredPopup(context);
+      }
+      return; // 🚀 INSTANT ABORT: Do not draw polyline!
+    }
+
     isCalculatingRoute = true;
     notifyListeners();
 
@@ -561,6 +777,13 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<void> start3DNavigation() async {
+    final context = ToastService.navigatorKey.currentContext;
+    if (context != null && !_isRealPhysicalGpsAvailable(context)) {
+      debugPrint("🛑 [Routing Gatekeeper] Aborted 3D navigation! No verified physical GPS / Blue Dot detected.");
+      _showLocationPermissionRequiredPopup(context);
+      return;
+    }
+
     if (controller == null) return;
 
     isActiveNavigation = true;
@@ -597,7 +820,7 @@ class MapProvider extends ChangeNotifier {
           CameraUpdate.newCameraPosition(
             CameraPosition(
               target: targetLoc,
-              zoom: 18.0, // Deep zoom for navigation
+              zoom: _getClampedZoom(18.0), // Deep zoom for navigation
               tilt: 50.0, // 3D Pitch angle
               bearing: pos?.heading ?? 0.0,
             ),
@@ -642,7 +865,7 @@ class MapProvider extends ChangeNotifier {
           CameraUpdate.newCameraPosition(
             CameraPosition(
               target: targetLoc,
-              zoom: 18.0,
+              zoom: _getClampedZoom(18.0),
               tilt: 50.0,
               bearing: pos?.heading ?? 0.0,
             ),
@@ -741,6 +964,13 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<bool> handleRouteClick(Point<double> point, LatLng coordinates) async {
+    final context = ToastService.navigatorKey.currentContext;
+    if (context != null && !_isRealPhysicalGpsAvailable(context)) {
+      debugPrint("🛑 [Routing Gatekeeper] Aborted route selection! No verified physical GPS / Blue Dot detected.");
+      _showLocationPermissionRequiredPopup(context);
+      return false;
+    }
+
     // 1. Guard clause: Do nothing if actively navigating
     if (isActiveNavigation ||
         engine.mapUIState.value == MapUIState.navigating) {
@@ -841,8 +1071,7 @@ class MapProvider extends ChangeNotifier {
     Future<void> safeAddLineLayer(
         String sourceId, String layerId, LineLayerProperties props) async {
       try {
-        await controller!.addLineLayer(sourceId, layerId, props,
-            belowLayerId: 'nav_puck_layer');
+        await controller!.addLineLayer(sourceId, layerId, props);
       } catch (e) {
         debugPrint("🗺️ LINE DRAW ERROR for $layerId: $e");
       }
@@ -1061,7 +1290,7 @@ class MapProvider extends ChangeNotifier {
         final centerLng =
             (bounds.southwest.longitude + bounds.northeast.longitude) / 2;
         await controller!.animateCamera(CameraUpdate.newCameraPosition(
-            CameraPosition(target: LatLng(centerLat, centerLng), zoom: 12.0)));
+            CameraPosition(target: LatLng(centerLat, centerLng), zoom: _getClampedZoom(12.0))));
       }
     }
 
@@ -1218,8 +1447,6 @@ class MapProvider extends ChangeNotifier {
               iconAllowOverlap: isPrimary ? true : false,
               iconIgnorePlacement: isPrimary ? true : false,
             ),
-            belowLayerId:
-                'nav_puck_layer', // CRITICAL Z-INDEX FIX: Forces tags beneath the user dot
           );
         } catch (_) {}
       } catch (e) {
@@ -1267,7 +1494,6 @@ class MapProvider extends ChangeNotifier {
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
           ),
-          belowLayerId: 'nav_puck_layer',
         );
       } catch (_) {}
     }
@@ -1309,44 +1535,14 @@ class MapProvider extends ChangeNotifier {
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
           ),
-          belowLayerId: 'nav_puck_layer',
         );
       } catch (e) {
         debugPrint("🗺️ INTERMEDIATE PIN DROP ERROR: $e");
       }
     }
 
-    // 9. FIX Z-INDEX RENDER SEQUENCE (Puck MUST be top-most)
     if (targetDestination != null) {
       await clearNativeDestinationPin();
-
-      // Step D: Strictly remove the puck layer
-      try {
-        await controller!.removeLayer("nav_puck_layer");
-      } catch (_) {}
-
-      // Step E: Re-add the puck's SymbolLayer at the very end
-      try {
-        // Re-inject image before adding layer
-        final bytes = await rootBundle.load('assets/images/nav_puck.png');
-        await controller!.addImage('nav_puck', bytes.buffer.asUint8List());
-
-        await controller!.addSymbolLayer(
-          "nav_puck_source",
-          "nav_puck_layer",
-          SymbolLayerProperties(
-            iconImage: 'nav_puck',
-            iconSize: 0.35 * mapItemScale, // 🚀 REVERTED TO PERFECT SIZE
-            iconAllowOverlap: true,
-            iconIgnorePlacement: true,
-            iconRotate: const ['get', 'rotation'],
-            iconRotationAlignment: 'map', // MUST BE MAP
-            iconPitchAlignment: 'map', // Keeps it stable in 3D
-          ),
-        );
-      } catch (e) {
-        debugPrint("Puck Top Layer error: $e");
-      }
     }
 
     notifyListeners();
@@ -1366,6 +1562,7 @@ class MapProvider extends ChangeNotifier {
       try {
         await controller?.removeLayer("nav_puck_layer");
         await controller?.removeSource("nav_puck_source");
+        _isNavPuckInitialized = false;
       } catch (_) {}
     }
 
@@ -1448,7 +1645,7 @@ class MapProvider extends ChangeNotifier {
               CameraUpdate.newCameraPosition(
                 CameraPosition(
                   target: currentLocation!,
-                  zoom: 15.0, // Comfortable default zoom
+                  zoom: _getClampedZoom(15.0), // Comfortable default zoom
                   tilt: 0.0, // Strictly reset to flat 2D
                   bearing: 0.0, // Strictly reset rotation
                 ),
@@ -1459,9 +1656,12 @@ class MapProvider extends ChangeNotifier {
 
             // Wait for the flight to finish smoothly BEFORE locking the tracking
             await Future.delayed(const Duration(milliseconds: 1250));
-            // Reset tracking mode after animation
+            // Reset tracking mode after animation only if we have GPS
+            final bool isRealGps = engine.locService?.currentPosition != null &&
+                !(engine.locService!.currentPosition!.isMocked) &&
+                hasLocationPermission;
             await setTrackingMode(
-              MyLocationTrackingMode.tracking,
+              isRealGps ? MyLocationTrackingMode.tracking : MyLocationTrackingMode.none,
             );
           } catch (e) {
             debugPrint("⚠️ Native Tracking Reset Error: $e");
@@ -1481,6 +1681,23 @@ class MapProvider extends ChangeNotifier {
 
     // Hide the static puck layer
     await hideNavigationPuck();
+
+    // 🚀 EXPLICIT PUCK CLEANUP ON END ROUTE
+    // 1. FIRST, safely remove the layer
+    try {
+      await controller?.removeLayer('nav_puck_layer');
+    } catch (e) {
+      debugPrint('Safe Cleanup: Layer not found or already removed.');
+    }
+
+    // 2. SECOND, safely remove the source
+    try {
+      await controller?.removeSource('nav_puck_source');
+    } catch (e) {
+      debugPrint('Safe Cleanup: Source not found or already removed.');
+    }
+    
+    _isNavPuckInitialized = false;
 
     // 1. Clear MapLibre Native Layers (Lines AND ETA Pills)
     if (controller != null) {
@@ -1587,7 +1804,7 @@ class MapProvider extends ChangeNotifier {
           CameraPosition(
             target:
                 LatLng(currentLocation!.latitude, currentLocation!.longitude),
-            zoom: 15.0,
+            zoom: _getClampedZoom(15.0),
             tilt: 0.0,
             bearing: 0.0,
           ),
@@ -1597,8 +1814,12 @@ class MapProvider extends ChangeNotifier {
 
       // Wait for the flight to finish smoothly BEFORE locking the tracking
       await Future.delayed(const Duration(milliseconds: 1250));
+      
+      final bool isRealGps = engine.locService?.currentPosition != null &&
+          !(engine.locService!.currentPosition!.isMocked) &&
+          hasLocationPermission;
       await controller!
-          .updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+          .updateMyLocationTrackingMode(isRealGps ? MyLocationTrackingMode.tracking : MyLocationTrackingMode.none);
     }
 
     // 🌟 Explicitly Restore All Dimmed/Hidden Background Layers & Hide Puck
@@ -1606,6 +1827,8 @@ class MapProvider extends ChangeNotifier {
     await hideNavigationPuck();
 
     // 3. Notify the UI to rebuild (This brings the Search Bar back!)
+    isRouteCalculated = false;
+    isActiveNavigation = false;
     notifyListeners();
   }
 
@@ -2120,7 +2343,7 @@ class MapProvider extends ChangeNotifier {
           CameraUpdate.newCameraPosition(
             CameraPosition(
               target: latLng, // strictly center on the PIN, not the user!
-              zoom: 16.0, // Clean, immersive street-level zoom
+              zoom: _getClampedZoom(16.0), // Clean, immersive street-level zoom
               tilt: 0.0, // Clean flat cartographic angle
               bearing: 0.0, // North-up alignment
             ),
@@ -2447,7 +2670,7 @@ class MapProvider extends ChangeNotifier {
           final centerLng = (minLng + maxLng) / 2;
           await controller?.animateCamera(CameraUpdate.newCameraPosition(
               CameraPosition(
-                  target: LatLng(centerLat, centerLng), zoom: 12.0)));
+                  target: LatLng(centerLat, centerLng), zoom: _getClampedZoom(12.0))));
         }
       } else {
         debugPrint("No places found for $category");
@@ -2596,7 +2819,6 @@ class MapProvider extends ChangeNotifier {
           textHaloColor: '#000000',
           textHaloWidth: 1.0,
         ),
-        belowLayerId: 'nav_puck_layer',
       );
 
       // 4. Zoom bounds to fit nearby stops
@@ -2752,7 +2974,7 @@ class MapProvider extends ChangeNotifier {
           final centerLng = (minLng + maxLng) / 2;
           await controller?.animateCamera(CameraUpdate.newCameraPosition(
               CameraPosition(
-                  target: LatLng(centerLat, centerLng), zoom: 12.0)));
+                  target: LatLng(centerLat, centerLng), zoom: _getClampedZoom(12.0))));
         }
       } else {
         await _fallbackFlyTo(stationLoc);
@@ -2843,7 +3065,7 @@ class MapProvider extends ChangeNotifier {
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: LatLng(pos.latitude, pos.longitude),
-            zoom: 17.0,
+            zoom: _getClampedZoom(17.0),
             tilt: 45.0,
             bearing: 0,
           ),
@@ -2929,7 +3151,7 @@ class MapProvider extends ChangeNotifier {
               CameraPosition(
                 target: LatLng(
                     lat, lng), // strictly center on the PIN, not the user!
-                zoom: 16.0, // Clean, immersive street-level zoom
+                zoom: _getClampedZoom(16.0), // Clean, immersive street-level zoom
                 tilt: 0.0, // Clean flat cartographic angle
                 bearing: 0.0, // North-up alignment
               ),
@@ -3005,7 +3227,7 @@ class MapProvider extends ChangeNotifier {
           ?.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
       await controller?.animateCamera(
         CameraUpdate.newCameraPosition(
-          CameraPosition(target: target, zoom: zoom, tilt: tilt, bearing: 0),
+          CameraPosition(target: target, zoom: _getClampedZoom(zoom), tilt: tilt, bearing: 0),
         ),
         duration: const Duration(milliseconds: 1500),
       );
@@ -3108,7 +3330,7 @@ class MapProvider extends ChangeNotifier {
           final centerLng = (minLng + maxLng) / 2;
           await controller!.animateCamera(CameraUpdate.newCameraPosition(
               CameraPosition(
-                  target: LatLng(centerLat, centerLng), zoom: 12.0)));
+                  target: LatLng(centerLat, centerLng), zoom: _getClampedZoom(12.0))));
         }
       }
     } catch (e) {
@@ -3147,7 +3369,7 @@ class MapProvider extends ChangeNotifier {
       CameraUpdate.newCameraPosition(
         CameraPosition(
           target: LatLng(pos.latitude, pos.longitude),
-          zoom: 18.0,
+          zoom: _getClampedZoom(18.0),
           tilt: 50.0,
         ),
       ),

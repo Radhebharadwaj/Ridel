@@ -442,10 +442,12 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                                       // Cinematic Flow 4: End Route Focus (Back to neutral 2D view)
                                       if (p.controller != null &&
                                           p.currentLocation != null) {
-                                        p.controller!
-                                            .updateMyLocationTrackingMode(
-                                                MyLocationTrackingMode
-                                                    .tracking);
+                                        try {
+                                          p.controller!
+                                              .updateMyLocationTrackingMode(
+                                                  MyLocationTrackingMode
+                                                      .tracking);
+                                        } catch (_) {}
                                         p.controller!.animateCamera(
                                           CameraUpdate.newCameraPosition(
                                             CameraPosition(

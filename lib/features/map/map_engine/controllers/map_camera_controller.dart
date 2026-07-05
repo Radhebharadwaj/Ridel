@@ -59,6 +59,24 @@ class MapCameraController {
   SpringSimulation? _dotLngSim;
   LatLng? _currentDotPos;
 
+  Future<void> _safeSetTrackingMode(MyLocationTrackingMode mode) async {
+    final pos = locService.currentPosition;
+    final bool isPhysicalGps = pos != null && !pos.isMocked && locService.hasLocationPermission;
+    final bool isRouteActive = currentMode != CameraMode.explore;
+    final bool shouldShowNativePuck = isPhysicalGps && !isRouteActive;
+
+    if (!shouldShowNativePuck && mode != MyLocationTrackingMode.none) {
+      try {
+        await map.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+      } catch (_) {}
+      return;
+    }
+    
+    try {
+      await map.updateMyLocationTrackingMode(mode);
+    } catch (_) {}
+  }
+
   MapCameraController(this.map, this.locService, this.vsync) {
     _cameraTicker = vsync.createTicker(_onCameraTick);
     _blueDotTicker = vsync.createTicker(_onBlueDotTick);
@@ -332,7 +350,7 @@ class MapCameraController {
       case CameraMode.transit:
         state = MapCameraState.free;
         if (!kIsWeb) {
-          map.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+          await _safeSetTrackingMode(MyLocationTrackingMode.none);
         }
         if (cam != null) {
           await animateCameraCinematic(
@@ -347,8 +365,7 @@ class MapCameraController {
         state = MapCameraState.heading;
 
         if (!kIsWeb) {
-          map.updateMyLocationTrackingMode(
-              MyLocationTrackingMode.trackingCompass);
+          await _safeSetTrackingMode(MyLocationTrackingMode.trackingCompass);
         }
 
         try {
@@ -374,8 +391,7 @@ class MapCameraController {
         state = MapCameraState.heading;
 
         if (!kIsWeb) {
-          map.updateMyLocationTrackingMode(
-              MyLocationTrackingMode.trackingCompass);
+          await _safeSetTrackingMode(MyLocationTrackingMode.trackingCompass);
         }
 
         try {
@@ -449,7 +465,7 @@ class MapCameraController {
     }
   }
 
-  void resetCompass() {
+  Future<void> resetCompass() async {
     try {
       final cam = map.cameraPosition;
       if (cam != null) {
@@ -459,7 +475,7 @@ class MapCameraController {
       if (state == MapCameraState.heading) {
         state = MapCameraState.follow;
         if (!kIsWeb) {
-          map.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+          await _safeSetTrackingMode(MyLocationTrackingMode.tracking);
         }
       }
     } catch (_) {
@@ -471,7 +487,7 @@ class MapCameraController {
     try {
       state = MapCameraState.free;
       if (!kIsWeb) {
-        await map.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+        await _safeSetTrackingMode(MyLocationTrackingMode.none);
       }
 
       double southOffset = 0.0015;
@@ -492,23 +508,36 @@ class MapCameraController {
       return;
     }
 
-    final userPos = LatLng(locService.currentPosition!.latitude,
-        locService.currentPosition!.longitude);
-    double heading = locService.currentPosition!.heading >= 0 ? locService.currentPosition!.heading : _currentBearing;
+    final pos = locService.currentPosition!;
+    final bool isRealGps = !pos.isMocked && locService.hasLocationPermission;
+
+    final userPos = LatLng(pos.latitude, pos.longitude);
+    double heading = pos.heading >= 0 ? pos.heading : _currentBearing;
     await _drawOrUpdateCustomBlueDot(userPos, ignoreThrottle: true, heading: heading);
 
     double targetTilt = is3DMode ? 45.0 : 0.0;
+    
+    // Altitude Gatekeeper check!
+    final double defaultZoom1 = isRealGps ? 16.5 : 10.5;
+    final double defaultZoom2 = isRealGps ? 17.5 : 10.5;
 
     if (state == MapCameraState.free || state == MapCameraState.heading) {
       await animateCameraCinematic(
-          center: userPos, zoom: 16.5, pitch: targetTilt, bearing: 0.0);
+          center: userPos, zoom: defaultZoom1, pitch: targetTilt, bearing: 0.0);
       state = MapCameraState.follow;
-      map.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+      if (isRealGps) {
+        await _safeSetTrackingMode(MyLocationTrackingMode.tracking);
+      } else {
+        await _safeSetTrackingMode(MyLocationTrackingMode.none);
+      }
     } else if (state == MapCameraState.follow) {
-      await animateCameraCinematic(center: userPos, zoom: 17.5, pitch: 50.0);
+      await animateCameraCinematic(center: userPos, zoom: defaultZoom2, pitch: 50.0);
       state = MapCameraState.heading;
-      map.updateMyLocationTrackingMode(
-          MyLocationTrackingMode.trackingCompass);
+      if (isRealGps) {
+        await _safeSetTrackingMode(MyLocationTrackingMode.trackingCompass);
+      } else {
+        await _safeSetTrackingMode(MyLocationTrackingMode.none);
+      }
     }
 
     if (currentMode == CameraMode.explore) {

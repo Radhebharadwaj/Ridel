@@ -22,11 +22,11 @@ import 'package:ridel/features/map/widgets/weather_floating_widget.dart';
 import 'package:ridel/features/map/widgets/quick_action_buttons.dart';
 import 'package:ridel/features/map/widgets/turn_by_turn_banner.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:ridel/core/services/weather_service.dart'; // 🚀 NEW
-
+import 'package:ridel/core/utils/toast_service.dart';
 
 import 'package:ridel/core/config/app_config.dart';
 import 'package:ridel/main.dart';
+
 class FullScreenMapPage extends StatefulWidget {
   final ValueNotifier<double> searchSheetProgressNotifier;
   final bool isMapTabActive;
@@ -43,6 +43,7 @@ class FullScreenMapPage extends StatefulWidget {
 
 class _FullScreenMapPageState extends State<FullScreenMapPage>
     with TickerProviderStateMixin {
+  bool _hasSnappedToRealGps = false; // 🚀 Reactive GPS snap guard
   static int mapBuildCount = 0;
   final Set<String> _addedImages = {};
   late AnimationController _fadeScaleController;
@@ -54,8 +55,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   MapLibreMapController? _tempController;
   MapThemeType? _currentTheme;
   CameraPosition? _currentCameraPosition;
-  bool _hasInitialCentered = false; // 🚀 Task 2: Guard flag for initial auto-center
-  final GlobalKey _mapKey = GlobalKey(debugLabel: 'primary_map_view'); // 🚀 Static GlobalKey to prevent WebGL context teardowns
+  bool _hasInitialCentered =
+      false; // 🚀 Task 2: Guard flag for initial auto-center
+  final GlobalKey _mapKey = GlobalKey(
+      debugLabel:
+          'primary_map_view'); // 🚀 Static GlobalKey to prevent WebGL context teardowns
 
   final ValueNotifier<bool> _showScaleBarNotifier = ValueNotifier(false);
   Timer? _scaleBarTimer;
@@ -65,7 +69,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   // 🚀 ADAPTIVE LOD CONTROLLER
   bool _isPerformanceMode = false;
-
 
   // 🚀 WEB GESTURE SHIELDS
   DateTime _lastTapTime = DateTime.now();
@@ -241,23 +244,113 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
     widget.searchSheetProgressNotifier.addListener(_onProgressChanged);
 
-    // 🚀 NEW: Eager Weather Fetch in microtask
-    Future.microtask(() async {
-      try {
-        final pos = await Geolocator.getLastKnownPosition();
-        if (pos != null) {
-          WeatherService.getWeather(pos.latitude, pos.longitude);
-        }
-      } catch (_) {}
-    });
+    // 🚀 NEW: Eager Weather Fetch has been moved to global_location_service.dart to ensure City-First Gating
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeApp();
-      
+
       final mapProvider = Provider.of<MapProvider>(context, listen: false);
       mapProvider.addListener(() {
-        if (!_hasInitialCentered && mapProvider.currentLocation != null) {
-          _attemptInitialCameraCenter();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_hasInitialCentered && mapProvider.currentLocation != null) {
+            _attemptInitialCameraCenter();
+          }
+        });
+      });
+
+      // 🚀 REACTIVE PERMISSION HOOK: Snap to real GPS the instant it arrives
+      final locService =
+          Provider.of<GlobalLocationService>(context, listen: false);
+      locService.addListener(() {
+        final pos = locService.currentPosition;
+        final ctrl = mapProvider.controller ?? _tempController;
+        if (pos == null || ctrl == null) return;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (!mounted) return;
+
+          // Only react if we have explicit permission and a valid coordinate
+          final bool isVerifiedPhysicalGps =
+              _isVerifiedPhysicalGps(pos, locService.hasLocationPermission);
+
+          if (!isVerifiedPhysicalGps) {
+            // Ensure tracking is off. If camera is somehow at street level, pull it up to 10.5
+            try {
+              ctrl.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+            } catch (_) {}
+            final currentZoom = ctrl.cameraPosition?.zoom ?? 0.0;
+            if (!_hasInitialCentered || currentZoom > 11.0) {
+              _hasInitialCentered = true;
+              await _safeAnimateCamera(
+                LatLng(pos.latitude, pos.longitude),
+                10.5,
+                duration: const Duration(milliseconds: 800),
+              );
+            }
+            return;
+          }
+
+          // Snipe ONLY if this is the first time we've verified real GPS
+          if (isVerifiedPhysicalGps && !_hasSnappedToRealGps) {
+            _hasSnappedToRealGps = true;
+            _hasInitialCentered = true;
+
+            if (!mapProvider.isRouteCalculated &&
+                !mapProvider.isActiveNavigation) {
+              try {
+                ctrl.updateMyLocationTrackingMode(
+                    MyLocationTrackingMode.tracking);
+              } catch (_) {}
+            }
+            await Future.delayed(
+                const Duration(milliseconds: 250)); // Allow puck to render
+
+            await _safeAnimateCamera(
+              LatLng(pos.latitude, pos.longitude),
+              15.5,
+              duration: const Duration(milliseconds: 1200),
+            );
+
+            Future.delayed(const Duration(milliseconds: 1500), () {
+              if (mounted &&
+                  ctrl == (_tempController ?? mapProvider.controller)) {
+                try {
+                  ctrl.updateMyLocationTrackingMode(
+                      MyLocationTrackingMode.none);
+                } catch (_) {}
+              }
+            });
+          }
+        });
+      });
+
+      locService.currentCityName.addListener(() {
+        final cityName = locService.currentCityName.value;
+        final pos = locService.currentPosition;
+        final ctrl =
+            Provider.of<MapProvider>(context, listen: false).controller ??
+                _tempController;
+
+        if (ctrl == null || !mounted || cityName.trim().isEmpty) return;
+
+        // 🛡️ GOLDEN RULE: If we lack verified high-precision physical GPS (< 100m accuracy + permission),
+        // we MUST anchor over the resolved App Header city at strictly Zoom 10.5 (5km scale)!
+        final bool isPhysicalGps = pos != null &&
+            !pos.isMocked &&
+            locService.hasLocationPermission &&
+            pos.accuracy <= 150.0;
+
+        if (!isPhysicalGps && pos != null) {
+          debugPrint(
+              "🏙️ [Header City Anchor] Header resolved '$cityName'. Anchoring camera at 5km regional overview (Zoom 10.5).");
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            if (!mounted) return;
+            await _safeAnimateCamera(
+              LatLng(pos.latitude, pos.longitude),
+              10.5, // Strictly hold at regional 5km overview
+              duration: const Duration(milliseconds: 1000),
+            );
+          });
         }
       });
     });
@@ -266,34 +359,53 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   Future<void> _attemptInitialCameraCenter() async {
     final mapProvider = Provider.of<MapProvider>(context, listen: false);
     if (_hasInitialCentered || _tempController == null) return;
-    
+
     final location = mapProvider.currentLocation;
     if (location != null && location.latitude != 0.0) {
       _hasInitialCentered = true;
-      
-      try {
-        // CRITICAL FOR WEB GL: Allow 150ms for native style sprites to finish registering in memory
-        await Future.delayed(const Duration(milliseconds: 150));
-        
-        if (!mounted) return;
-        
-        // 🚀 THE "DEFIBRILLATOR SHOCK": Force the native SDK to wake the GPS puck
-        await _tempController!.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
-        
-        await _tempController!.animateCamera(
-          CameraUpdate.newLatLngZoom(
-            LatLng(location.latitude, location.longitude),
-            16.5,
-          ),
-          duration: const Duration(milliseconds: 400),
-        );
+      final locService =
+          Provider.of<GlobalLocationService>(context, listen: false);
+      final bool isPhysicalGps = _isVerifiedPhysicalGps(
+          locService.currentPosition, locService.hasLocationPermission);
 
-        // 🚀 Switch back to .none so the camera is free for user interaction
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted && _tempController != null) {
-            _tempController!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+      try {
+        await Future.delayed(const Duration(milliseconds: 150));
+        if (!mounted) return;
+
+        if (isPhysicalGps && !_hasSnappedToRealGps) {
+          // 🚀 STAGE 1: VERIFIED HIGH-PRECISION GPS -> Allow Street Snipe
+          _hasSnappedToRealGps = true;
+          // Unlock the shield
+          if (!mapProvider.isRouteCalculated &&
+              !mapProvider.isActiveNavigation) {
+            try {
+              await _tempController!.updateMyLocationTrackingMode(
+                  MyLocationTrackingMode.tracking);
+            } catch (_) {}
           }
-        });
+          await Future.delayed(const Duration(milliseconds: 250));
+          if (!mounted) return;
+
+          await _safeAnimateCamera(
+            LatLng(location.latitude, location.longitude),
+            15.5,
+            duration: const Duration(milliseconds: 1200),
+          );
+        } else {
+          // 🚀 STAGE 2: UNPERMISSIONED OR LOW-PRECISION IP -> Strictly hold at 5km+ altitude
+          debugPrint(
+              "⏳ [Startup] Low precision or unpermissioned. Anchoring at regional zoom 10.5.");
+          // Keep shield locked!
+          try {
+            await _tempController!
+                .updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+          } catch (_) {}
+          await _safeAnimateCamera(
+            LatLng(location.latitude, location.longitude),
+            10.5,
+            duration: const Duration(milliseconds: 800),
+          );
+        }
       } catch (e) {
         debugPrint("❌ Initial camera snap intercepted: $e");
       }
@@ -368,13 +480,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    
+
     // 🚀 Task 2: Bind System/App Appearance Change Listener
     // Automatically trigger the map style push when Theme.of(context).brightness changes
     final isSystemDark = Theme.of(context).brightness == Brightness.dark;
     final systemTheme = isSystemDark ? MapThemeType.dark : MapThemeType.light;
-    
-    Future.microtask(() {
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final provider = Provider.of<MapProvider>(context, listen: false);
         final themeToSet = _currentTheme ?? systemTheme;
@@ -382,6 +494,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       }
     });
   }
+
   Future<void> _initMapStyle({bool updateExisting = false}) async {
     if (!mounted) return;
     if (!updateExisting) {
@@ -393,7 +506,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       final isDark = _currentTheme != null
           ? (_currentTheme == MapThemeType.dark)
           : isSystemDark;
-      final style = await MapStyleHelper.getOlaStyle(isSystemDark, themeType: _currentTheme);
+      final style = await MapStyleHelper.getOlaStyle(isSystemDark,
+          themeType: _currentTheme);
 
       if (mounted) {
         setState(() {
@@ -409,7 +523,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       // removed empty setState
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -452,16 +565,22 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       }
 
                       // Calculate safe initial position BEFORE passing it to MapLibre
-                      final userCurrentLocation =
-                          Provider.of<MapProvider>(context, listen: false)
-                              .currentLocation;
+                      final mapProvider =
+                          Provider.of<MapProvider>(context, listen: false);
+                      final userCurrentLocation = mapProvider.currentLocation;
+                      final locService = Provider.of<GlobalLocationService>(
+                          context,
+                          listen: false);
                       final hasLocationPermission =
-                          context.select<GlobalLocationService, bool>((s) => s.hasLocationPermission);
-                      
+                          context.select<GlobalLocationService, bool>(
+                              (s) => s.hasLocationPermission);
+                      final currentPos = locService.currentPosition;
+                      final bool isRealGps = _isVerifiedPhysicalGps(
+                          currentPos, hasLocationPermission);
+
                       // 🚀 TASK 1: Dynamic Native Puck Visibility
                       final isRouteActive = context.select<MapProvider, bool>(
                           (p) => p.isRouteCalculated || p.isActiveNavigation);
-                      final shouldShowNativePuck = hasLocationPermission && !isRouteActive;
 
                       final double safeLat =
                           userCurrentLocation?.latitude ?? 21.1458;
@@ -471,29 +590,39 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       debugPrint(
                           "🛠️ DEBUG INITIAL CAMERA: Lat:$safeLat, Lng:$safeLng");
 
-
                       return RepaintBoundary(
                         child: Listener(
                           behavior: HitTestBehavior.translucent,
                           onPointerDown: (PointerDownEvent event) {
                             // 🚀 INSTANT KILL-SWITCH
-                            final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                            final mapProvider = Provider.of<MapProvider>(
+                                context,
+                                listen: false);
                             if (mapProvider.isAutoTracking) {
                               mapProvider.setAutoTracking(false);
                             }
-                            
+
                             // 🚀 TASK 2: SYNTHETIC WEB LONG-PRESS
                             if (kIsWeb) {
                               _webLongPressTimer?.cancel();
-                              _webLongPressTimer = Timer(const Duration(milliseconds: 500), () async {
-                                if (!mounted || mapProvider.controller == null) return;
-                                
-                                if (mapProvider.isActiveNavigation || mapProvider.engine.mapUIState.value == MapUIState.navigating) {
-                                  debugPrint("Web simulated long-click ignored: Active navigation shield is ON.");
-                                  return; 
+                              _webLongPressTimer = Timer(
+                                  const Duration(milliseconds: 500), () async {
+                                if (!mounted ||
+                                    mapProvider.controller == null) {
+                                  return;
                                 }
 
-                                LatLng point = await mapProvider.controller!.toLatLng(Point(event.localPosition.dx, event.localPosition.dy));
+                                if (mapProvider.isActiveNavigation ||
+                                    mapProvider.engine.mapUIState.value ==
+                                        MapUIState.navigating) {
+                                  debugPrint(
+                                      "Web simulated long-click ignored: Active navigation shield is ON.");
+                                  return;
+                                }
+
+                                LatLng point = await mapProvider.controller!
+                                    .toLatLng(Point(event.localPosition.dx,
+                                        event.localPosition.dy));
                                 mapProvider.setAutoTracking(false);
                                 mapProvider.setUserPanning(true);
                                 if (mapProvider.mapSelectionPlaceType != null) {
@@ -509,480 +638,664 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           onPointerMove: (_) => _webLongPressTimer?.cancel(),
                           child: MapLibreMap(
                             key: _mapKey,
-                            styleString: _loadedMapStyle!,
-                            myLocationEnabled: shouldShowNativePuck,
-                            myLocationTrackingMode: MyLocationTrackingMode.tracking,
-                            myLocationRenderMode: shouldShowNativePuck 
-                                ? MyLocationRenderMode.gps 
-                                : MyLocationRenderMode.normal,
-                          minMaxZoomPreference:
-                              const MinMaxZoomPreference(3.0, 18.5),
-                          cameraTargetBounds: CameraTargetBounds(
-                            LatLngBounds(
-                              southwest: const LatLng(6.5,
-                                  68.0), // Bottom-Left (Arabian Sea / Indian Ocean)
-                              northeast: const LatLng(37.5,
-                                  97.5), // Top-Right (Himalayas / North East)
+                            initialCameraPosition: const CameraPosition(
+                              target: LatLng(28.6139,
+                                  77.2090), // Default Regional Overview
+                              zoom:
+                                  10.5, // 🚀 Hard lock initial frame to >5km altitude
                             ),
-                          ),
-                          onMapCreated: (controller) {
-                            debugPrint(
-                                "✅ MAP ENGINE: onMapCreated fired. WebGL context locked.");
-                            if (_tempController != null) return;
-                            _tempController = controller;
+                            styleString: _loadedMapStyle!,
+                            // 🚀 CRITICAL FIX: Synchronize RenderMode with Enabled state
+                            myLocationEnabled: isRealGps && !isRouteActive,
+                            myLocationRenderMode: MyLocationRenderMode.normal,
+                            myLocationTrackingMode: MyLocationTrackingMode.none,
+                            minMaxZoomPreference:
+                                const MinMaxZoomPreference(3.0, 18.5),
+                            cameraTargetBounds: CameraTargetBounds(
+                              LatLngBounds(
+                                southwest: const LatLng(6.5,
+                                    68.0), // Bottom-Left (Arabian Sea / Indian Ocean)
+                                northeast: const LatLng(37.5,
+                                    97.5), // Top-Right (Himalayas / North East)
+                              ),
+                            ),
+                            onMapCreated: (controller) {
+                              debugPrint(
+                                  "✅ MAP ENGINE: onMapCreated fired. WebGL context locked.");
+                              if (_tempController != null) return;
+                              _tempController = controller;
 
-                            // 🚀 CRITICAL FIX 1: Engine ko controller pass karna zaroori hai!
-                            final mapProvider = Provider.of<MapProvider>(
-                                context,
-                                listen: false);
-                            mapProvider.engine.mapController = controller;
+                              final mapProvider = Provider.of<MapProvider>(
+                                  context,
+                                  listen: false);
 
-                            // Call proactive permission request and snap
-                            mapProvider.initializeMapAndPermissions();
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (!mounted) return;
+                                // 🚀 CRITICAL FIX 1: Engine ko controller pass karna zaroori hai!
+                                mapProvider.engine.mapController = controller;
+                                // Call proactive permission request and snap
+                                mapProvider.initializeMapAndPermissions();
+                              });
 
-                            // 🚀 TASK 3: Explicitly sync initial theme on map startup
-                            final isSystemDark = Theme.of(context).brightness == Brightness.dark;
-                            MapStyleHelper.getOlaStyle(
-                              isSystemDark,
-                              themeType: mapProvider.currentTheme,
-                              showLabels: mapProvider.showLabels,
-                              showPOIs: mapProvider.showPOIs,
-                            ).then((styleString) {
-                              controller.setStyle(styleString);
-                            }).catchError((e) {
-                              debugPrint("❌ Failed to set initial style: $e");
-                            });
+                              // 🚀 TASK 3: Explicitly sync initial theme on map startup
+                              final isSystemDark =
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark;
+                              MapStyleHelper.getOlaStyle(
+                                isSystemDark,
+                                themeType: mapProvider.currentTheme,
+                                showLabels: mapProvider.showLabels,
+                                showPOIs: mapProvider.showPOIs,
+                              ).then((styleString) {
+                                controller.setStyle(styleString);
+                              }).catchError((e) {
+                                debugPrint("❌ Failed to set initial style: $e");
+                              });
 
-                            // Removed premature camera animation to prevent WebGL style race condition
-                          },
-                          onStyleLoadedCallback: () async {
-                            final controller = _tempController;
-                            if (controller == null) return;
+                              // Removed premature camera animation to prevent WebGL style race condition
+                            },
+                            onStyleLoadedCallback: () async {
+                              final controller = _tempController;
+                              if (controller == null) return;
 
-                            Future<void> safeAddImage(
-                                String? id, Uint8List bytes) async {
-                              if (id == null || id.trim().isEmpty) return;
-                              if (_addedImages.contains(id)) {
-                                return; // Use boolean flag check to prevent JS interop calls
-                              }
-                              try {
-                                await controller.addImage(id, bytes);
-                                _addedImages.add(id);
-                              } catch (e) {
-                                // Ignore if it already exists or fails
-                                debugPrint("Image add warning: $e");
-                              }
-                            }
+                              // 🚀 CRITICAL FIX: Clear the image registry on every style reload!
+                              // WebGL loses all textures when the style is swapped, so we must
+                              // re-register every sprite from scratch.
+                              _addedImages.clear();
 
-                            try {
-                              final Uint8List bytes =
-                                  await MapProvider.loadAndResizeImage(
-                                      'assets/images/custom_pin.png', 36);
-                              await safeAddImage('custom_pin', bytes);
-                            } catch (_) {}
-
-                            try {
-                              final Uint8List yellowPinBytes =
-                                  await MapProvider.loadAndResizeImage(
-                                      'assets/images/add_places.png', 32);
-                              await safeAddImage(
-                                  'intermediate_pin', yellowPinBytes);
-                            } catch (_) {}
-
-                            try {
-                              final ByteData bytes = await rootBundle.load('assets/images/nav_puck.png'); // Verify your asset path
-                              final Uint8List imageData = bytes.buffer.asUint8List();
-                              await controller.addImage('nav_puck', imageData);
-                              _addedImages.add('nav_puck');
-                              debugPrint("✅ Nav Puck Image successfully injected into MapLibre");
-                            } catch (e) {
-                              debugPrint("❌ Failed to load Nav Puck Image: $e");
-                            }
-
-                            try {
-                              final Uint8List transparentPixel =
-                                  Uint8List.fromList([
-                                137,
-                                80,
-                                78,
-                                71,
-                                13,
-                                10,
-                                26,
-                                10,
-                                0,
-                                0,
-                                0,
-                                13,
-                                73,
-                                72,
-                                68,
-                                82,
-                                0,
-                                0,
-                                0,
-                                1,
-                                0,
-                                0,
-                                0,
-                                1,
-                                8,
-                                6,
-                                0,
-                                0,
-                                0,
-                                31,
-                                21,
-                                196,
-                                137,
-                                0,
-                                0,
-                                0,
-                                11,
-                                73,
-                                68,
-                                65,
-                                84,
-                                8,
-                                215,
-                                99,
-                                96,
-                                0,
-                                2,
-                                0,
-                                0,
-                                5,
-                                0,
-                                1,
-                                226,
-                                38,
-                                5,
-                                155,
-                                0,
-                                0,
-                                0,
-                                0,
-                                73,
-                                69,
-                                78,
-                                68,
-                                174,
-                                66,
-                                96,
-                                130
-                              ]);
-                              await safeAddImage('Arrow', transparentPixel);
-                            } catch (_) {}
-
-                            try {
-                              final Uint8List transparentPixel =
-                                  Uint8List.fromList([
-                                137,
-                                80,
-                                78,
-                                71,
-                                13,
-                                10,
-                                26,
-                                10,
-                                0,
-                                0,
-                                0,
-                                13,
-                                73,
-                                72,
-                                68,
-                                82,
-                                0,
-                                0,
-                                0,
-                                1,
-                                0,
-                                0,
-                                0,
-                                1,
-                                8,
-                                6,
-                                0,
-                                0,
-                                0,
-                                31,
-                                21,
-                                196,
-                                137,
-                                0,
-                                0,
-                                0,
-                                11,
-                                73,
-                                68,
-                                65,
-                                84,
-                                8,
-                                215,
-                                99,
-                                96,
-                                0,
-                                2,
-                                0,
-                                0,
-                                5,
-                                0,
-                                1,
-                                226,
-                                38,
-                                5,
-                                155,
-                                0,
-                                0,
-                                0,
-                                0,
-                                73,
-                                69,
-                                78,
-                                68,
-                                174,
-                                66,
-                                96,
-                                130
-                              ]);
-                              await safeAddImage('arrow', transparentPixel);
-                            } catch (_) {}
-
-                            try {
-                              final Uint8List transparentPixel =
-                                  Uint8List.fromList([
-                                137,
-                                80,
-                                78,
-                                71,
-                                13,
-                                10,
-                                26,
-                                10,
-                                0,
-                                0,
-                                0,
-                                13,
-                                73,
-                                72,
-                                68,
-                                82,
-                                0,
-                                0,
-                                0,
-                                1,
-                                0,
-                                0,
-                                0,
-                                1,
-                                8,
-                                6,
-                                0,
-                                0,
-                                0,
-                                31,
-                                21,
-                                196,
-                                137,
-                                0,
-                                0,
-                                0,
-                                11,
-                                73,
-                                68,
-                                65,
-                                84,
-                                8,
-                                215,
-                                99,
-                                96,
-                                0,
-                                2,
-                                0,
-                                0,
-                                5,
-                                0,
-                                1,
-                                226,
-                                38,
-                                5,
-                                155,
-                                0,
-                                0,
-                                0,
-                                0,
-                                73,
-                                69,
-                                78,
-                                68,
-                                174,
-                                66,
-                                96,
-                                130
-                              ]);
-                              await safeAddImage(
-                                  'custom-marker', transparentPixel);
-                            } catch (_) {}
-
-                            if (!context.mounted) return;
-                            final mapProvider = Provider.of<MapProvider>(
-                                context,
-                                listen: false);
-                            mapProvider.engine.onMapCreated(
-                                controller,
-                                isDark,
-                                Provider.of<GlobalLocationService>(context,
-                                    listen: false),
-                                this);
-
-                            // 🚀 Task 1: Re-inject location tracking cleanly after style loads
-                            try {
-                              await controller.updateMyLocationTrackingMode(
-                                  kIsWeb ? MyLocationTrackingMode.tracking : MyLocationTrackingMode.trackingCompass
-                              );
-                            } catch (e) {
-                              debugPrint("❌ Puck restoration intercepted: $e");
-                            }
-
-                            // 🚀 Task 2: Auto-center on startup
-                            await _attemptInitialCameraCenter();
-                          },
-                          onMapClick: (point, latLng) async {
-                            _lastTapTime = DateTime.now(); // 🚀 TASK 1: UPDATE DEBOUNCER
-                            FocusScope.of(context).unfocus();
-                            final mapProvider = Provider.of<MapProvider>(
-                                context,
-                                listen: false);
-
-                            // 🚀 STRICT GUARD CLAUSE: Prevent accidental pin drops during active routing
-                            if (mapProvider.isActiveNavigation || mapProvider.engine.mapUIState.value == MapUIState.navigating) {
-                              debugPrint("Map click ignored: Active navigation shield is ON.");
-                              return; 
-                            }
-
-                            // 1. Break tracking immediately to avoid snap-back on pin drop
-                            if (mapProvider.controller != null) {
-                              await mapProvider.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
-                            }
-
-                            // PIN DROP LOGIC MOVED EXCLUSIVELY TO onMapLongClick
-
-                            if (mapProvider.isFlying) {
-                              mapProvider.stopCameraFlight();
-                              return;
-                            }
-
-                            // 🚀 FIX: Guard against clearing destination state when a place/route is active.
-                            // On web, onMapClick fires AFTER the synthetic long-press timer,
-                            // which would nuke the targetDestination just set by the pin-drop flow.
-                            final currentUIState = mapProvider.engine.mapUIState.value;
-                            if (currentUIState == MapUIState.placeSelected ||
-                                currentUIState == MapUIState.routeDrawn ||
-                                mapProvider.isDestinationSelected) {
-                              debugPrint("Map click ignored: Destination is already selected (UIState: $currentUIState).");
-                              return;
-                            }
-
-                            bool handled = await mapProvider.handleRouteClick(
-                                point, latLng);
-                            if (!handled) {
-                              mapProvider.clearTargetLocation();
-                            }
-                          },
-                          onMapLongClick:
-                              (Point<double> point, LatLng coordinates) async {
-                            // 🚀 TASK 1: DOUBLE-TAP SHIELD
-                            if (DateTime.now().difference(_lastTapTime).inMilliseconds < 500) {
-                              debugPrint("Long-click BLOCKED by Double-Tap Shield.");
-                              return;
-                            }
-
-                            final mapProvider = Provider.of<MapProvider>(
-                                context,
-                                listen: false);
-
-                            // 🚀 STRICT GUARD CLAUSE: Prevent accidental pin drops during active routing
-                            if (mapProvider.isActiveNavigation || mapProvider.engine.mapUIState.value == MapUIState.navigating) {
-                              debugPrint("Map long-click ignored: Active navigation shield is ON.");
-                              return; 
-                            }
-
-                            // 🚀 Free the camera from blue dot
-                            mapProvider.setAutoTracking(false);
-                            mapProvider.setUserPanning(true);
-
-                            // 🚀 EXCLUSIVE PIN DROP DELEGATION
-                            if (mapProvider.mapSelectionPlaceType != null) {
-                              mapProvider.setTargetDestination(coordinates);
-                              mapProvider.addNativeDestinationPin(coordinates);
-                              return;
-                            }
-
-                            mapProvider.handleMapLongPress(coordinates);
-
-                          },
-                          initialCameraPosition: CameraPosition(
-                              target: LatLng(safeLat, safeLng),
-                              zoom: userCurrentLocation == null ? 4.5 : 14.0,
-                              tilt: 0.0,
-                              bearing: 0.0),
-
-                          compassEnabled: false,
-                          doubleClickZoomEnabled: true,
-                          scrollGesturesEnabled: true,
-                          zoomGesturesEnabled: true,
-                          tiltGesturesEnabled: true,
-
-                          // Removed duplicate myLocationEnabled
-
-                          trackCameraPosition: false,
-
-                          logoViewMargins: const Point(-5000, -5000),
-                          attributionButtonMargins: const Point(-5000, -5000),
-                          onCameraTrackingDismissed: () {
-                            final mapProvider = Provider.of<MapProvider>(
-                                context,
-                                listen: false);
-                            if (mapProvider.isActiveNavigation) {
-                              mapProvider.setAutoTracking(false);
-                              mapProvider.setUserPanning(true);
-                            }
-                            mapProvider.engine.onUserPannedMap();
-                          },
-                          onUserLocationUpdated: (location) {
-                            // 🚀 STRICT GUARD: Prevent async context crashes (Fixes line 648)
-                            if (!mounted) return;
-
-                            // Push the state update outside the current render cycle
-                            Future.microtask(() {
-                              if (context.mounted) {
-                                Provider.of<MapProvider>(context, listen: false)
-                                    .updateCurrentLocation(location.position);
-                                    
-                                // 🚀 Task 2: Auto-center on initial GPS stream emit
-                                if (!_hasInitialCentered && _tempController != null) {
-                                  _hasInitialCentered = true;
-                                  _tempController!.animateCamera(
-                                    CameraUpdate.newLatLngZoom(
-                                      location.position,
-                                      16.0,
-                                    ),
-                                    duration: const Duration(milliseconds: 800),
-                                  );
+                              Future<void> safeAddImage(
+                                  String? id, Uint8List bytes) async {
+                                if (id == null || id.trim().isEmpty) return;
+                                if (_addedImages.contains(id)) {
+                                  return; // Use boolean flag check to prevent JS interop calls
+                                }
+                                try {
+                                  await controller.addImage(id, bytes);
+                                  _addedImages.add(id);
+                                } catch (e) {
+                                  // Ignore if it already exists or fails
+                                  debugPrint("Image add warning: $e");
                                 }
                               }
-                            });
-                          },
-                          onCameraIdle: _onCameraIdle,
-                          onCameraMove: (position) {
-                            if (!_isPerformanceMode) {
-                              _togglePerformanceMode(
-                                  true); // 🚀 Instantly drop complexity to save CPU/GPU for the panning animation
-                            }
-                            _onCameraMove(position);
-                          },
-                        ),
+
+                              try {
+                                final Uint8List bytes =
+                                    await MapProvider.loadAndResizeImage(
+                                        'assets/images/custom_pin.png', 36);
+                                await safeAddImage('custom_pin', bytes);
+                              } catch (_) {}
+
+                              try {
+                                final Uint8List yellowPinBytes =
+                                    await MapProvider.loadAndResizeImage(
+                                        'assets/images/add_places.png', 32);
+                                await safeAddImage(
+                                    'intermediate_pin', yellowPinBytes);
+                              } catch (_) {}
+
+                              try {
+                                // 🚀 CRITICAL FIX: Resize nav_puck to 40 pixels to prevent WebGL crash and giant icon bug!
+                                final Uint8List puckBytes =
+                                    await MapProvider.loadAndResizeImage(
+                                        'assets/images/nav_puck.png', 40);
+                                await safeAddImage('nav_puck', puckBytes);
+                                debugPrint(
+                                    "✅ Nav Puck Image successfully injected and resized");
+                              } catch (e) {
+                                debugPrint(
+                                    "Safe Web Sprite Notice (nav_puck): $e");
+                              }
+
+                              try {
+                                final Uint8List transparentPixel =
+                                    Uint8List.fromList([
+                                  137,
+                                  80,
+                                  78,
+                                  71,
+                                  13,
+                                  10,
+                                  26,
+                                  10,
+                                  0,
+                                  0,
+                                  0,
+                                  13,
+                                  73,
+                                  72,
+                                  68,
+                                  82,
+                                  0,
+                                  0,
+                                  0,
+                                  1,
+                                  0,
+                                  0,
+                                  0,
+                                  1,
+                                  8,
+                                  6,
+                                  0,
+                                  0,
+                                  0,
+                                  31,
+                                  21,
+                                  196,
+                                  137,
+                                  0,
+                                  0,
+                                  0,
+                                  11,
+                                  73,
+                                  68,
+                                  65,
+                                  84,
+                                  8,
+                                  215,
+                                  99,
+                                  96,
+                                  0,
+                                  2,
+                                  0,
+                                  0,
+                                  5,
+                                  0,
+                                  1,
+                                  226,
+                                  38,
+                                  5,
+                                  155,
+                                  0,
+                                  0,
+                                  0,
+                                  0,
+                                  73,
+                                  69,
+                                  78,
+                                  68,
+                                  174,
+                                  66,
+                                  96,
+                                  130
+                                ]);
+                                await safeAddImage('Arrow', transparentPixel);
+                              } catch (_) {}
+
+                              try {
+                                final Uint8List transparentPixel =
+                                    Uint8List.fromList([
+                                  137,
+                                  80,
+                                  78,
+                                  71,
+                                  13,
+                                  10,
+                                  26,
+                                  10,
+                                  0,
+                                  0,
+                                  0,
+                                  13,
+                                  73,
+                                  72,
+                                  68,
+                                  82,
+                                  0,
+                                  0,
+                                  0,
+                                  1,
+                                  0,
+                                  0,
+                                  0,
+                                  1,
+                                  8,
+                                  6,
+                                  0,
+                                  0,
+                                  0,
+                                  31,
+                                  21,
+                                  196,
+                                  137,
+                                  0,
+                                  0,
+                                  0,
+                                  11,
+                                  73,
+                                  68,
+                                  65,
+                                  84,
+                                  8,
+                                  215,
+                                  99,
+                                  96,
+                                  0,
+                                  2,
+                                  0,
+                                  0,
+                                  5,
+                                  0,
+                                  1,
+                                  226,
+                                  38,
+                                  5,
+                                  155,
+                                  0,
+                                  0,
+                                  0,
+                                  0,
+                                  73,
+                                  69,
+                                  78,
+                                  68,
+                                  174,
+                                  66,
+                                  96,
+                                  130
+                                ]);
+                                await safeAddImage('arrow', transparentPixel);
+                              } catch (_) {}
+
+                              try {
+                                final Uint8List transparentPixel =
+                                    Uint8List.fromList([
+                                  137,
+                                  80,
+                                  78,
+                                  71,
+                                  13,
+                                  10,
+                                  26,
+                                  10,
+                                  0,
+                                  0,
+                                  0,
+                                  13,
+                                  73,
+                                  72,
+                                  68,
+                                  82,
+                                  0,
+                                  0,
+                                  0,
+                                  1,
+                                  0,
+                                  0,
+                                  0,
+                                  1,
+                                  8,
+                                  6,
+                                  0,
+                                  0,
+                                  0,
+                                  31,
+                                  21,
+                                  196,
+                                  137,
+                                  0,
+                                  0,
+                                  0,
+                                  11,
+                                  73,
+                                  68,
+                                  65,
+                                  84,
+                                  8,
+                                  215,
+                                  99,
+                                  96,
+                                  0,
+                                  2,
+                                  0,
+                                  0,
+                                  5,
+                                  0,
+                                  1,
+                                  226,
+                                  38,
+                                  5,
+                                  155,
+                                  0,
+                                  0,
+                                  0,
+                                  0,
+                                  73,
+                                  69,
+                                  78,
+                                  68,
+                                  174,
+                                  66,
+                                  96,
+                                  130
+                                ]);
+                                await safeAddImage(
+                                    'custom-marker', transparentPixel);
+                              } catch (e) {
+                                debugPrint("Sprite pre-load handled: $e");
+                              }
+
+                              try {
+                                // Ensure ALL required images are added to WebGL texture memory BEFORE any layer uses them
+                                final List<String> requiredSpriteIds = [
+                                  'custom_pin',
+                                  'intermediate_pin',
+                                  'nav_puck',
+                                  'Arrow',
+                                  'arrow',
+                                  'custom-marker'
+                                ];
+                                for (final id in requiredSpriteIds) {
+                                  if (!_addedImages.contains(id)) {
+                                    try {
+                                      // Register transparent pixel as fallback to prevent WebGL crash
+                                      final Uint8List transparentPixel =
+                                          Uint8List.fromList([
+                                        137,
+                                        80,
+                                        78,
+                                        71,
+                                        13,
+                                        10,
+                                        26,
+                                        10,
+                                        0,
+                                        0,
+                                        0,
+                                        13,
+                                        73,
+                                        72,
+                                        68,
+                                        82,
+                                        0,
+                                        0,
+                                        0,
+                                        1,
+                                        0,
+                                        0,
+                                        0,
+                                        1,
+                                        8,
+                                        6,
+                                        0,
+                                        0,
+                                        0,
+                                        31,
+                                        21,
+                                        196,
+                                        137,
+                                        0,
+                                        0,
+                                        0,
+                                        11,
+                                        73,
+                                        68,
+                                        65,
+                                        84,
+                                        8,
+                                        215,
+                                        99,
+                                        96,
+                                        0,
+                                        2,
+                                        0,
+                                        0,
+                                        5,
+                                        0,
+                                        1,
+                                        226,
+                                        38,
+                                        5,
+                                        155,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        73,
+                                        69,
+                                        78,
+                                        68,
+                                        174,
+                                        66,
+                                        96,
+                                        130
+                                      ]);
+                                      await controller.addImage(
+                                          id, transparentPixel);
+                                      _addedImages.add(id);
+                                    } catch (e) {
+                                      debugPrint(
+                                          "Sprite registration barrier: $e");
+                                    }
+                                  }
+                                }
+                                debugPrint(
+                                    "✅ WebGL Sprite Registry fully verified. Safe to render layers.");
+                              } catch (e) {
+                                debugPrint(
+                                    "⚠️ Sprite registration barrier notice: $e");
+                              }
+
+                              if (!context.mounted) return;
+                              final mapProvider = Provider.of<MapProvider>(
+                                  context,
+                                  listen: false);
+                              await mapProvider.engine.onMapCreated(
+                                  controller,
+                                  isDark,
+                                  Provider.of<GlobalLocationService>(context,
+                                      listen: false),
+                                  this);
+
+                              // 🚀 Task 1: Re-inject location tracking cleanly after style loads
+                              try {
+                                if (!context.mounted) return;
+                                final locSvc =
+                                    Provider.of<GlobalLocationService>(context,
+                                        listen: false);
+                                final pos = locSvc.currentPosition;
+                                final bool isRealGps = pos != null &&
+                                    !pos.isMocked &&
+                                    mapProvider.hasLocationPermission;
+
+                                if (isRealGps) {
+                                  final isRouteActive =
+                                      mapProvider.isRouteCalculated ||
+                                          mapProvider.isActiveNavigation;
+                                  if (!isRouteActive) {
+                                    try {
+                                      await controller
+                                          .updateMyLocationTrackingMode(kIsWeb
+                                              ? MyLocationTrackingMode.tracking
+                                              : MyLocationTrackingMode
+                                                  .trackingCompass);
+                                    } catch (_) {}
+                                  }
+                                } else {
+                                  try {
+                                    await controller
+                                        .updateMyLocationTrackingMode(
+                                            MyLocationTrackingMode.none);
+                                  } catch (_) {}
+                                }
+                              } catch (e) {
+                                debugPrint(
+                                    "❌ Puck restoration intercepted: $e");
+                              }
+
+                              // 🚀 Task 2: Auto-center on startup
+                              if (!context.mounted) return;
+                              final locSvc = Provider.of<GlobalLocationService>(
+                                  context,
+                                  listen: false);
+                              final currentPos = locSvc.currentPosition;
+
+                              if (currentPos != null &&
+                                  _isVerifiedPhysicalGps(currentPos,
+                                      locSvc.hasLocationPermission)) {
+                                await _attemptInitialCameraCenter();
+                              } else {
+                                // Keep map firmly locked at initialCameraPosition (Zoom 10.5)
+                                debugPrint(
+                                    "⏳ [Startup] Holding at regional zoom 10.5 until exact GPS is verified.");
+                              }
+                            },
+                            onMapClick: (point, latLng) async {
+                              _lastTapTime =
+                                  DateTime.now(); // 🚀 TASK 1: UPDATE DEBOUNCER
+                              FocusScope.of(context).unfocus();
+                              final mapProvider = Provider.of<MapProvider>(
+                                  context,
+                                  listen: false);
+
+                              // 🚀 STRICT GUARD CLAUSE: Prevent accidental pin drops during active routing
+                              if (mapProvider.isActiveNavigation ||
+                                  mapProvider.engine.mapUIState.value ==
+                                      MapUIState.navigating) {
+                                debugPrint(
+                                    "Map click ignored: Active navigation shield is ON.");
+                                return;
+                              }
+
+                              // 1. Break tracking immediately to avoid snap-back on pin drop
+                              if (mapProvider.controller != null) {
+                                await mapProvider.controller!
+                                    .updateMyLocationTrackingMode(
+                                        MyLocationTrackingMode.none);
+                              }
+
+                              // PIN DROP LOGIC MOVED EXCLUSIVELY TO onMapLongClick
+
+                              if (mapProvider.isFlying) {
+                                mapProvider.stopCameraFlight();
+                                return;
+                              }
+
+                              // 🚀 FIX: Guard against clearing destination state when a place/route is active.
+                              // On web, onMapClick fires AFTER the synthetic long-press timer,
+                              // which would nuke the targetDestination just set by the pin-drop flow.
+                              final currentUIState =
+                                  mapProvider.engine.mapUIState.value;
+                              if (currentUIState == MapUIState.placeSelected ||
+                                  currentUIState == MapUIState.routeDrawn ||
+                                  mapProvider.isDestinationSelected) {
+                                debugPrint(
+                                    "Map click ignored: Destination is already selected (UIState: $currentUIState).");
+                                return;
+                              }
+
+                              bool handled = await mapProvider.handleRouteClick(
+                                  point, latLng);
+                              if (!handled) {
+                                mapProvider.clearTargetLocation();
+                              }
+                            },
+                            onMapLongClick: (Point<double> point,
+                                LatLng coordinates) async {
+                              // 🚀 TASK 1: DOUBLE-TAP SHIELD
+                              if (DateTime.now()
+                                      .difference(_lastTapTime)
+                                      .inMilliseconds <
+                                  500) {
+                                debugPrint(
+                                    "Long-click BLOCKED by Double-Tap Shield.");
+                                return;
+                              }
+
+                              final mapProvider = Provider.of<MapProvider>(
+                                  context,
+                                  listen: false);
+
+                              // 🚀 STRICT GUARD CLAUSE: Prevent accidental pin drops during active routing
+                              if (mapProvider.isActiveNavigation ||
+                                  mapProvider.engine.mapUIState.value ==
+                                      MapUIState.navigating) {
+                                debugPrint(
+                                    "Map long-click ignored: Active navigation shield is ON.");
+                                return;
+                              }
+
+                              // 🚀 Free the camera from blue dot
+                              mapProvider.setAutoTracking(false);
+                              mapProvider.setUserPanning(true);
+
+                              // 🚀 EXCLUSIVE PIN DROP DELEGATION
+                              if (mapProvider.mapSelectionPlaceType != null) {
+                                mapProvider.setTargetDestination(coordinates);
+                                mapProvider
+                                    .addNativeDestinationPin(coordinates);
+                                return;
+                              }
+
+                              // 1. Always allow placing the visual destination pin and UI sheet!
+                              mapProvider.handleMapLongPress(coordinates);
+
+                              // 2. Only attempt auto-routing if physical GPS is actively verified
+                              final locService =
+                                  Provider.of<GlobalLocationService>(context,
+                                      listen: false);
+                              final bool isPhysicalGps = locService
+                                      .hasLocationPermission &&
+                                  locService.currentPosition != null &&
+                                  !locService.currentPosition!.isMocked &&
+                                  locService.currentPosition!.accuracy <= 150.0;
+
+                              if (isPhysicalGps) {
+                                mapProvider.calculateAndDrawNativeRoute(
+                                    context, 'driving',
+                                    isAutoTriggered: true);
+                              } else {
+                                debugPrint(
+                                    "📍 [Pin Drop] Pin placed successfully. Auto-routing skipped until GPS is enabled.");
+                              }
+                            },
+
+                            compassEnabled: false,
+                            doubleClickZoomEnabled: true,
+                            scrollGesturesEnabled: true,
+                            zoomGesturesEnabled: true,
+                            tiltGesturesEnabled: true,
+
+                            // Removed duplicate myLocationEnabled
+
+                            trackCameraPosition: false,
+
+                            logoViewMargins: const Point(-5000, -5000),
+                            attributionButtonMargins: const Point(-5000, -5000),
+                            onCameraTrackingDismissed: () {
+                              final mapProvider = Provider.of<MapProvider>(
+                                  context,
+                                  listen: false);
+                              if (mapProvider.isActiveNavigation) {
+                                mapProvider.setAutoTracking(false);
+                                mapProvider.setUserPanning(true);
+                              }
+                              mapProvider.engine.onUserPannedMap();
+                            },
+                            onUserLocationUpdated: (location) {
+                              if (!mounted) return;
+                              WidgetsBinding.instance
+                                  .addPostFrameCallback((_) async {
+                                if (!context.mounted) return;
+                                final mapProvider = Provider.of<MapProvider>(
+                                    context,
+                                    listen: false);
+                                mapProvider
+                                    .updateCurrentLocation(location.position);
+
+                                // 🚀 ABSOLUTE LOCKDOWN: DO NOT AUTO-ZOOM HERE!
+                                // We only allow zooming via explicit button taps or when the permission state machine
+                                // in _attemptInitialCameraCenter actively verifies real GPS and mounts the Blue Dot.
+                              });
+                            },
+                            onCameraIdle: _onCameraIdle,
+                            onCameraMove: (position) {
+                              if (!_isPerformanceMode) {
+                                _togglePerformanceMode(
+                                    true); // 🚀 Instantly drop complexity to save CPU/GPU for the panning animation
+                              }
+                              _onCameraMove(position);
+                            },
+                          ),
                         ),
                       );
                     },
@@ -1073,7 +1386,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             onSearchSubmitted: (query) {},
                             onProgressChanged: (progress) {
                               if (mounted) {
-                                widget.searchSheetProgressNotifier.value = progress;
+                                widget.searchSheetProgressNotifier.value =
+                                    progress;
                               }
                             },
                             onBackToPreviousTab: () {
@@ -1317,12 +1631,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         child: pillChild!,
                       );
                     }
-                    final double screenHeight = MediaQuery.sizeOf(context).height;
+                    final double screenHeight =
+                        MediaQuery.sizeOf(context).height;
                     const double buttonGap = 16.0;
 
                     // This formula guarantees the buttons ALWAYS stay exactly 'buttonGap'
                     // distance above the top edge of the sheet.
-                    final double dynamicBottomPosition = (screenHeight * progress) + buttonGap;
+                    final double dynamicBottomPosition =
+                        (screenHeight * progress) + buttonGap;
 
                     final opacity = (progress <= 0.45)
                         ? 1.0
@@ -1393,10 +1709,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                               (isDark
                                                   ? MapThemeType.dark
                                                   : MapThemeType.light),
-                                          mapProvider: Provider.of<MapProvider>(context, listen: false),
+                                          mapProvider: Provider.of<MapProvider>(
+                                              context,
+                                              listen: false),
                                           onThemeSelected: (selectedTheme) {
                                         _currentTheme = selectedTheme;
-                                        Provider.of<MapProvider>(context, listen: false).setTheme(selectedTheme);
+                                        Provider.of<MapProvider>(context,
+                                                listen: false)
+                                            .setTheme(selectedTheme);
                                       });
                                     },
                                     onLocateTap: () {
@@ -1457,87 +1777,137 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     );
   }
 
-  bool _isCameraAnimating = false;
+  // 🚀 HELPER: Evaluates true physical GPS using accuracy precision (< 100 meters) and regional bounds
+  bool _isVerifiedPhysicalGps(Position? pos, bool hasPermission) {
+    if (pos == null || !hasPermission || pos.isMocked) return false;
+
+    // 1. Accuracy Check: IP/Cell-tower fallback accuracy is typically > 500m. True GPS is < 50m.
+    // If accuracy is worse than 150 meters, DO NOT treat as street-level GPS!
+    if (pos.accuracy > 150.0 || pos.accuracy == 0.0) {
+      debugPrint(
+          "🛑 [Accuracy Shield] Rejected location due to low precision (${pos.accuracy}m). Holding altitude.");
+      return false;
+    }
+
+    // 2. Default City Bounding Box Shield (Delhi NCR & Nagpur fallback zones)
+    final lat = pos.latitude;
+    final lng = pos.longitude;
+    final isDelhiFallback = (lat >= 28.40 && lat <= 28.88) &&
+        (lng >= 76.85 && lng <= 77.40) &&
+        (pos.accuracy > 100.0);
+    final isNagpurFallback = (lat >= 21.00 && lat <= 21.30) &&
+        (lng >= 78.90 && lng <= 79.20) &&
+        (pos.accuracy > 100.0);
+    final isZero = lat == 0.0 && lng == 0.0;
+
+    return !isDelhiFallback && !isNagpurFallback && !isZero;
+  }
+
+  // 🚀 THE ABSOLUTE GATEKEEPER: Rewrites illegal street zooms!
+  Future<void> _safeAnimateCamera(LatLng target, double requestedZoom,
+      {Duration duration = const Duration(milliseconds: 1000)}) async {
+    final mapController =
+        Provider.of<MapProvider>(context, listen: false).controller ??
+            _tempController;
+    if (!mounted || mapController == null) return;
+
+    final locService =
+        Provider.of<GlobalLocationService>(context, listen: false);
+    final pos = locService.currentPosition;
+
+    // Must be verified physical GPS (< 150m accuracy, not mocked, permission granted)
+    final bool isPhysicalGps = pos != null &&
+        !pos.isMocked &&
+        locService.hasLocationPermission &&
+        pos.accuracy <= 150.0;
+
+    double clampedZoom = requestedZoom;
+
+    // 🚀 THE GOLDEN RULE: If we do NOT have physical GPS, clamp strictly to 10.5!
+    // The map must calmly hold at the 5km overview until the Blue Dot officially mounts.
+    if (!isPhysicalGps && requestedZoom > 11.0) {
+      debugPrint(
+          "🛑 [Golden Rule] Prevented dive to $requestedZoom. Blue Dot not mounted. Holding at 10.5!");
+      clampedZoom = 10.5;
+    }
+
+    await mapController.animateCamera(
+      CameraUpdate.newLatLngZoom(target, clampedZoom),
+      duration: duration,
+    );
+  }
+
+  Future<void> _igniteBlueDotAndSnipe(Position realPos) async {
+    final mapController =
+        Provider.of<MapProvider>(context, listen: false).controller ??
+            _tempController;
+    if (!mounted || mapController == null) return;
+
+    // 1. Enable native location layer ONLY when we have a real, non-mocked coordinate and no route is active
+    final mapProvider = Provider.of<MapProvider>(context, listen: false);
+    if (!mapProvider.isRouteCalculated && !mapProvider.isActiveNavigation) {
+      try {
+        await mapController
+            .updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+      } catch (_) {}
+    }
+
+    // 2. Wait 200ms for MapLibre to mount the Blue Dot on the WebGL canvas
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!mounted) return;
+
+    // 3. Execute cinematic glide down to street level (200m scale)
+    await _safeAnimateCamera(
+      LatLng(realPos.latitude, realPos.longitude),
+      15.5, // 🚀 STREET LEVEL SNIPE
+      duration: const Duration(milliseconds: 1400),
+    );
+  }
 
   Future<void> _handleLocateMeTapped(MapProvider provider) async {
-    if (_isCameraAnimating) return; // Prevent animation stacking/spamming
+    final locService =
+        Provider.of<GlobalLocationService>(context, listen: false);
+    final permission = await Geolocator.checkPermission();
+    final bool isServiceOn = await Geolocator.isLocationServiceEnabled();
 
-    final locService = Provider.of<GlobalLocationService>(context, listen: false);
-    final position = locService.currentPosition;
-    
-    if (position == null) return;
-    final userPos = LatLng(position.latitude, position.longitude);
+    // 🚫 CASE 1: Permission Denied or GPS Off -> INTERCEPT & SHOW TOAST
+    if (!mounted) return;
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever ||
+        !isServiceOn) {
+      // Trigger interactive toast immediately. DO NOT move the map!
+      ToastService.showActionToast(
+        context,
+        message: "Location permission needed to show your exact position.",
+        actionLabel: "ENABLE",
+        onActionTap: () async {
+          if (kIsWeb) {
+            await Geolocator.requestPermission();
+          } else {
+            if (permission == LocationPermission.deniedForever) {
+              await Geolocator.openAppSettings();
+            } else if (!isServiceOn) {
+              await Geolocator.openLocationSettings();
+            } else {
+              await Geolocator.requestPermission();
+            }
+          }
+          if (mounted) {
+            Provider.of<GlobalLocationService>(context, listen: false)
+                .initializeEcoLocation(isManualTrigger: true);
+          }
+        },
+      );
+      return;
+    }
 
-    final mapController = provider.controller ?? _tempController;
-    if (mapController == null) return;
-
-    try {
-      _isCameraAnimating = true;
-
-      // 1. Calculate approximate distance between current camera center and user position
-      final currentTarget = mapController.cameraPosition?.target;
-      final double currentTilt = mapController.cameraPosition?.tilt ?? 0.0;
-
-      bool isAlreadyCentered = false;
-      if (currentTarget != null) {
-        // Simple bounding threshold check (~20 meters tolerance)
-        final latDiff = (currentTarget.latitude - userPos.latitude).abs();
-        final lngDiff = (currentTarget.longitude - userPos.longitude).abs();
-        isAlreadyCentered = (latDiff < 0.0002 && lngDiff < 0.0002) && provider.isAutoTracking;
-      }
-
-      if (!isAlreadyCentered) {
-        // STATE 1: Re-center smoothly onto user GPS
-        provider.setAutoTracking(true);
-        mapController.animateCamera(
-          CameraUpdate.newCameraPosition(
-            CameraPosition(
-              target: userPos,
-              zoom: 16.5,
-              tilt: currentTilt, // Preserve existing tilt during flight
-              bearing: mapController.cameraPosition?.bearing ?? 0.0,
-            ),
-          ),
-          duration: const Duration(milliseconds: 750),
-        );
-      } else if (currentTilt < 30.0) {
-        // STATE 2: Cinematic Tilt to 60° (3D Mode)
-        mapController.animateCamera(
-          CameraUpdate.newCameraPosition(
-            CameraPosition(
-              target: userPos,
-              zoom: 17.0,
-              tilt: 60.0, // Smooth 60% tilt!
-              bearing: mapController.cameraPosition?.bearing ?? 0.0,
-            ),
-          ),
-          duration: const Duration(milliseconds: 650),
-        );
-        provider.setIs3D(true);
-      } else {
-        // STATE 3: Reverse Animation back to Straight 0° Flat View
-        mapController.animateCamera(
-          CameraUpdate.newCameraPosition(
-            CameraPosition(
-              target: userPos,
-              zoom: 16.0,
-              tilt: 0.0,    // Flat 0° pitch
-              bearing: 0.0, // North-up alignment
-            ),
-          ),
-          duration: const Duration(milliseconds: 650),
-        );
-        provider.setIs3D(false);
-      }
-    } catch (e) {
-      debugPrint("[LocateFAB] Camera Animation Exception: $e");
-    } finally {
-      // Strictly release the debounce lock after animation finishes!
-      Future.delayed(const Duration(milliseconds: 750), () {
-        if (mounted) {
-          _isCameraAnimating = false;
-        }
-      });
+    // ✅ CASE 2: Permission Granted -> FETCH GPS & SNIPE
+    final pos = locService.currentPosition;
+    if (pos != null && !pos.isMocked && pos.accuracy <= 150.0) {
+      // 🚀 UNLOCK SHIELD ON MANUAL USER ACTION
+      await _igniteBlueDotAndSnipe(pos);
+    } else {
+      await locService.initializeEcoLocation(isManualTrigger: true);
     }
   }
 }
