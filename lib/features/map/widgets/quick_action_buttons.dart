@@ -477,8 +477,8 @@ class DesktopZoomPill extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final Color pillBgColor = isDark
-        ? const Color(0xFF0B0E17).withValues(alpha: 0.85)
-        : Colors.white.withValues(alpha: 0.85);
+        ? const Color(0xFF0B0E17).withValues(alpha: 0.65)
+        : Colors.white.withValues(alpha: 0.65);
 
     final Color pillBorderColor = isDark
         ? const Color(0xFF7CA1FF).withValues(alpha: 0.15)
@@ -513,11 +513,10 @@ class DesktopZoomPill extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(50),
-          child: RepaintBoundary(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
-              child: Container(
-                width: 48,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+            child: Container(
+              width: 48,
                 // INNER: COLOR & BORDER ONLY
                 decoration: BoxDecoration(
                   color: pillBgColor,
@@ -556,7 +555,6 @@ class DesktopZoomPill extends StatelessWidget {
                     ),
                   ],
                 ),
-              ),
             ),
           ),
         ),
@@ -641,8 +639,8 @@ class MapControlsPill extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final Color pillBgColor = isDark
-        ? const Color(0xFF0B0E17).withValues(alpha: 0.85)
-        : Colors.white.withValues(alpha: 0.85);
+        ? const Color(0xFF0B0E17).withValues(alpha: 0.65)
+        : Colors.white.withValues(alpha: 0.65);
 
     final Color pillBorderColor = isDark
         ? const Color(0xFF7CA1FF).withValues(alpha: 0.15)
@@ -673,11 +671,10 @@ class MapControlsPill extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(50),
-        child: RepaintBoundary(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
-            child: Container(
-              width: 48,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+          child: Container(
+            width: 48,
               decoration: BoxDecoration(
                   color: pillBgColor,
                   border: Border.all(color: pillBorderColor, width: 1.0),
@@ -720,7 +717,6 @@ class MapControlsPill extends StatelessWidget {
                     ),
                   ),
                 ],
-              ),
             ),
           ),
         ),

@@ -57,6 +57,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   CameraPosition? _currentCameraPosition;
   bool _hasInitialCentered =
       false; // 🚀 Task 2: Guard flag for initial auto-center
+  bool _isCameraLocked = true; // NEW: Global Lock for camera
+
+  void _unlockCamera() {
+    if (mounted && _isCameraLocked) {
+      setState(() => _isCameraLocked = false);
+    }
+  }
+
   final GlobalKey _mapKey = GlobalKey(
       debugLabel:
           'primary_map_view'); // 🚀 Static GlobalKey to prevent WebGL context teardowns
@@ -265,6 +273,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         final pos = locService.currentPosition;
         final ctrl = mapProvider.controller ?? _tempController;
         if (pos == null || ctrl == null) return;
+        
+        if (_isCameraLocked) return; // 🚀 Absolute Startup Camera Freeze
 
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           if (!mounted) return;
@@ -281,11 +291,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             final currentZoom = ctrl.cameraPosition?.zoom ?? 0.0;
             if (!_hasInitialCentered || currentZoom > 11.0) {
               _hasInitialCentered = true;
-              await _safeAnimateCamera(
-                LatLng(pos.latitude, pos.longitude),
-                10.5,
-                duration: const Duration(milliseconds: 800),
-              );
+              // 🚀 Removed auto-centering _safeAnimateCamera to respect absolute startup freeze
             }
             return;
           }
@@ -305,21 +311,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             await Future.delayed(
                 const Duration(milliseconds: 250)); // Allow puck to render
 
-            await _safeAnimateCamera(
-              LatLng(pos.latitude, pos.longitude),
-              15.5,
-              duration: const Duration(milliseconds: 1200),
-            );
-
-            Future.delayed(const Duration(milliseconds: 1500), () {
-              if (mounted &&
-                  ctrl == (_tempController ?? mapProvider.controller)) {
-                try {
-                  ctrl.updateMyLocationTrackingMode(
-                      MyLocationTrackingMode.none);
-                } catch (_) {}
-              }
-            });
+            // 🚀 Removed street level auto-zoom to respect startup freeze
           }
         });
       });
@@ -343,14 +335,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         if (!isPhysicalGps && pos != null) {
           debugPrint(
               "🏙️ [Header City Anchor] Header resolved '$cityName'. Anchoring camera at 5km regional overview (Zoom 10.5).");
-          WidgetsBinding.instance.addPostFrameCallback((_) async {
-            if (!mounted) return;
-            await _safeAnimateCamera(
-              LatLng(pos.latitude, pos.longitude),
-              10.5, // Strictly hold at regional 5km overview
-              duration: const Duration(milliseconds: 1000),
-            );
-          });
         }
       });
     });
@@ -359,6 +343,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   Future<void> _attemptInitialCameraCenter() async {
     final mapProvider = Provider.of<MapProvider>(context, listen: false);
     if (_hasInitialCentered || _tempController == null) return;
+    if (_isCameraLocked) return; // 🚀 Respect camera lock
 
     final location = mapProvider.currentLocation;
     if (location != null && location.latitude != 0.0) {
@@ -1262,6 +1247,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             logoViewMargins: const Point(-5000, -5000),
                             attributionButtonMargins: const Point(-5000, -5000),
                             onCameraTrackingDismissed: () {
+                              _unlockCamera(); // 🚀 Unlock on manual gesture
                               final mapProvider = Provider.of<MapProvider>(
                                   context,
                                   listen: false);
@@ -1289,6 +1275,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             },
                             onCameraIdle: _onCameraIdle,
                             onCameraMove: (position) {
+                              _unlockCamera(); // 🚀 Unlock on manual gesture
                               if (!_isPerformanceMode) {
                                 _togglePerformanceMode(
                                     true); // 🚀 Instantly drop complexity to save CPU/GPU for the panning animation
@@ -1856,10 +1843,16 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     await Future.delayed(const Duration(milliseconds: 200));
     if (!mounted) return;
 
-    // 3. Execute cinematic glide down to street level (200m scale)
-    await _safeAnimateCamera(
-      LatLng(realPos.latitude, realPos.longitude),
-      15.5, // 🚀 STREET LEVEL SNIPE
+    // 🚀 CINEMATIC DIVE: Lock to 15.5 zoom and explicitly reset tilt to 0.0 (Flat 2D)
+    await mapController.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: LatLng(realPos.latitude, realPos.longitude),
+          zoom: 15.5,
+          tilt: 0.0, // Force flat orientation on snipe
+          bearing: mapController.cameraPosition?.bearing ?? 0.0,
+        )
+      ),
       duration: const Duration(milliseconds: 1400),
     );
   }
@@ -1905,6 +1898,42 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     final pos = locService.currentPosition;
     if (pos != null && !pos.isMocked && pos.accuracy <= 150.0) {
       // 🚀 UNLOCK SHIELD ON MANUAL USER ACTION
+      _unlockCamera();
+
+      final mapController = provider.controller ?? _tempController;
+      if (mapController != null && mapController.cameraPosition != null) {
+        final camPos = mapController.cameraPosition!;
+        
+        // Calculate distance between current map center and actual user GPS
+        final double distanceInMeters = Geolocator.distanceBetween(
+          camPos.target.latitude,
+          camPos.target.longitude,
+          pos.latitude,
+          pos.longitude,
+        );
+
+        // 🚀 UX MAGIC: If already centered (< 50 meters), toggle the 3D Tilt!
+        if (distanceInMeters < 50.0) {
+          final double currentTilt = camPos.tilt;
+          final double targetTilt = currentTilt > 30.0 ? 0.0 : 60.0; // Toggle Flat vs 3D
+          
+          debugPrint("🔄 [Locate Button] Already centered. Toggling tilt from $currentTilt to $targetTilt.");
+          
+          await mapController.animateCamera(
+            CameraUpdate.newCameraPosition(
+              CameraPosition(
+                target: LatLng(pos.latitude, pos.longitude), // Lock exact center
+                zoom: camPos.zoom, // Preserve current user zoom
+                bearing: camPos.bearing, // Preserve current rotation
+                tilt: targetTilt, // 🚀 APPLY SMOOTH TILT
+              ),
+            ),
+            duration: const Duration(milliseconds: 1200),
+          );
+          return; // Exit early so we don't trigger the standard snipe
+        }
+      }
+
       await _igniteBlueDotAndSnipe(pos);
     } else {
       await locService.initializeEcoLocation(isManualTrigger: true);

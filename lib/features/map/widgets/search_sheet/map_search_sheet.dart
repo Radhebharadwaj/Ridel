@@ -1222,16 +1222,10 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       child: child,
     );
 
-    if (kIsWeb) {
-      return innerContainer;
-    } else {
-      return RepaintBoundary(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
-          child: innerContainer,
-        ),
-      );
-    }
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
+      child: innerContainer,
+    );
   }
 
   Widget _buildDynamicDragHandle(bool isDark) {
@@ -1482,8 +1476,8 @@ snapAnimationDuration:
                                         : (_showDirections ? 190.0 : 70.0);
 
                                     final Color sheetBgColor = isDark 
-                                        ? const Color(0xFF0B0E17).withValues(alpha: 0.85) 
-                                        : Colors.white.withValues(alpha: 0.85);
+                                        ? const Color(0xFF0B0E17).withValues(alpha: 0.70) 
+                                        : Colors.white.withValues(alpha: 0.70);
 
                                     return PointerInterceptor(
                                       child: Align(
@@ -1505,8 +1499,7 @@ snapAnimationDuration:
                                                 // Prevents the pill from ever floating upwards when sheet extent shifts!
                                                 alignment: Alignment.bottomCenter, 
                                                 children: [
-                                                  RepaintBoundary(
-                                                    child: AnimatedContainer( // Smooth morph only on state changes!
+                                                  AnimatedContainer( // Smooth morph only on state changes!
                                                       duration: const Duration(milliseconds: 250),
                                                       curve: Curves.easeOutCubic,
                                                       clipBehavior: Clip.hardEdge,
@@ -1684,7 +1677,6 @@ snapAnimationDuration:
                                                         ),
                                                       ),
                                                     ),
-                                                  ),
                                                   Positioned(
                                                     top: -7.5,
                                                     left: 0,

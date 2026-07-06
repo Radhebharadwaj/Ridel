@@ -418,8 +418,8 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
     final bool isDragging = _dragHeight != null;
     final glassColor = isLightMode
-        ? Colors.white.withValues(alpha: isDragging ? 0.95 : 0.85)
-        : const Color(0xFF0B0E17).withValues(alpha: isDragging ? 0.95 : 0.85);
+        ? Colors.white.withValues(alpha: isDragging ? 0.75 : 0.65)
+        : const Color(0xFF0B0E17).withValues(alpha: isDragging ? 0.80 : 0.65);
 
     final borderColor = isLightMode
         ? Colors.white.withValues(alpha: 0.9)
@@ -478,12 +478,11 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                           ),
                         ],
                 ),
-                child: RepaintBoundary(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
-                      child: Container(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                    child: Container(
                         decoration: BoxDecoration(
                           color: glassColor,
                           borderRadius: BorderRadius.circular(24),
@@ -574,7 +573,6 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                   ),
                 ),
               ),
-            ),
       );
     }
 
@@ -623,12 +621,11 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                           ),
                         ],
                 ),
-                child: RepaintBoundary(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(currentRadius),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
-                      child: Container(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(currentRadius),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                    child: Container(
                         decoration: BoxDecoration(
                           color: glassColor,
                           borderRadius: BorderRadius.circular(currentRadius),
@@ -681,7 +678,6 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                 ),
               ),
             ),
-          ),
       );
     }
 
