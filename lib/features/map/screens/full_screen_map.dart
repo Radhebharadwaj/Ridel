@@ -55,6 +55,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   MapLibreMapController? _tempController;
   MapThemeType? _currentTheme;
   CameraPosition? _currentCameraPosition;
+  bool _isPuckMounted = false; // 🚀 State variable for style-first location lifecycle
   bool _hasInitialCentered = false; // 🚀 Task 2: Guard flag for initial auto-center
 
   final GlobalKey _mapKey = GlobalKey(debugLabel: 'primary_map_view'); // 🚀 Static GlobalKey to prevent WebGL context teardowns
@@ -253,49 +254,56 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   Future<void> _attemptInitialCameraCenter() async {
     final mapProvider = Provider.of<MapProvider>(context, listen: false);
-    if (_hasInitialCentered || _tempController == null) return;
+    final locService = Provider.of<GlobalLocationService>(context, listen: false);
+    final ctrl = _tempController ?? mapProvider.controller;
+    
+    if (_hasInitialCentered || ctrl == null || !mounted) return;
 
-    final location = mapProvider.currentLocation;
-    if (location != null && location.latitude != 0.0) {
+    final pos = locService.currentPosition;
+    final bool isRealGps = _isVerifiedPhysicalGps(pos, locService.hasLocationPermission);
+
+    if (isRealGps && pos != null) {
+      // 🎯 CASE A: REAL GPS -> MOUNT PUCK FIRST, THEN ZOOM TO 15.5
       _hasInitialCentered = true;
-      final locService =
-          Provider.of<GlobalLocationService>(context, listen: false);
-      final bool isPhysicalGps = _isVerifiedPhysicalGps(
-          locService.currentPosition, locService.hasLocationPermission);
+      _hasSnappedToRealGps = true;
+      debugPrint("🎯 [Startup] Real GPS verified! Step 1: Mounting Blue Puck...");
 
+      // Step 1: Ignite tracking so WebGL mounts the puck texture
       try {
-        await Future.delayed(const Duration(milliseconds: 150));
-        if (!mounted) return;
+        await ctrl.updateMyLocationTrackingMode(
+          kIsWeb ? MyLocationTrackingMode.tracking : MyLocationTrackingMode.trackingCompass
+        );
+      } catch (_) {}
 
-        if (isPhysicalGps && !_hasSnappedToRealGps) {
-          // 🚀 STAGE 1: VERIFIED HIGH-PRECISION GPS -> Allow Street Snipe
-          _hasSnappedToRealGps = true;
-          // Unlock the shield
-          if (!mapProvider.isRouteCalculated &&
-              !mapProvider.isActiveNavigation) {
-          }
-          await Future.delayed(const Duration(milliseconds: 250));
-          if (!mounted) return;
+      // Step 2: AWAIT 350ms to guarantee dot appears on canvas BEFORE zooming
+      await Future.delayed(const Duration(milliseconds: 350));
+      if (!mounted) return;
 
-          await _safeAnimateCamera(
-            LatLng(location.latitude, location.longitude),
-            15.5,
-            duration: const Duration(milliseconds: 1200),
-          );
-        } else {
-          // 🚀 STAGE 2: UNPERMISSIONED OR LOW-PRECISION IP -> Strictly hold at 5km+ altitude
-          debugPrint(
-              "⏳ [Startup] Low precision or unpermissioned. Anchoring at regional zoom 10.5.");
-          // Keep shield locked!
-          await _safeAnimateCamera(
-            LatLng(location.latitude, location.longitude),
-            10.5,
-            duration: const Duration(milliseconds: 800),
-          );
-        }
-      } catch (e) {
-        debugPrint("❌ Initial camera snap intercepted: $e");
-      }
+      debugPrint("🚀 [Startup] Step 2: Gliding smoothly onto mounted Blue Puck (Zoom 15.5)...");
+      await _safeAnimateCamera(
+        LatLng(pos.latitude, pos.longitude),
+        15.5,
+        duration: const Duration(milliseconds: 1400),
+      );
+    } else {
+      // 🏙️ CASE B: NO GPS / DUMMY CITY -> STRICT HOLD AT ZOOM 10.5
+      _hasInitialCentered = true;
+      debugPrint("⏳ [Startup] City mode active. Anchoring strictly over App Header City at Zoom 10.5.");
+      
+      try {
+        await ctrl.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+      } catch (_) {}
+
+      // Use existing coordinate (which resolves to city center)
+      final fallbackLat = pos?.latitude ?? 28.6139; // Default Delhi
+      final fallbackLng = pos?.longitude ?? 77.2090;
+
+      // Strictly hold at 10.5 regional altitude. NEVER zoom into streets!
+      await _safeAnimateCamera(
+        LatLng(fallbackLat, fallbackLng),
+        10.5,
+        duration: const Duration(milliseconds: 800),
+      );
     }
   }
 
@@ -432,7 +440,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         isDesktop ? 32.0 : MediaQuery.of(context).padding.top + 24.0;
     final double sideMargin = isDesktop ? 32.0 : 28.0;
 
-    final bool isAutoTracking = context.select<MapProvider, bool>((p) => p.isAutoTracking);
+
 
     if (!_isMapReadyToLoad) {
       return const SizedBox
@@ -465,7 +473,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       // Calculate safe initial position BEFORE passing it to MapLibre
                       final mapProvider =
                           Provider.of<MapProvider>(context, listen: false);
-                      final userCurrentLocation = mapProvider.currentLocation;
                       final locService = Provider.of<GlobalLocationService>(
                           context,
                           listen: false);
@@ -476,17 +483,20 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       final bool isRealGps = _isVerifiedPhysicalGps(
                           currentPos, hasLocationPermission);
 
-                      // 🚀 TASK 1: Dynamic Native Puck Visibility
                       final isRouteActive = context.select<MapProvider, bool>(
                           (p) => p.isRouteCalculated || p.isActiveNavigation);
 
-                      final double safeLat =
-                          userCurrentLocation?.latitude ?? 21.1458;
-                      final double safeLng =
-                          userCurrentLocation?.longitude ?? 79.0882;
+                      // The puck MUST show whenever real GPS is verified and we aren't actively navigating a drawn route
+                      final bool shouldShowPuck = isRealGps && !isRouteActive;
+
+                      // 🚀 1. ABSOLUTE INITIAL CAMERA GATEKEEPER:
+                      // If physical GPS is not actively verified, strictly hardcode initial zoom to 10.5!
+                      final double safeInitialZoom = isRealGps ? 15.5 : 10.5;
+                      final double safeLat = currentPos?.latitude ?? 28.6139;
+                      final double safeLng = currentPos?.longitude ?? 77.2090;
 
                       debugPrint(
-                          "🛠️ DEBUG INITIAL CAMERA: Lat:$safeLat, Lng:$safeLng");
+                          "🛠️ DEBUG INITIAL CAMERA: Lat:$safeLat, Lng:$safeLng, Zoom:$safeInitialZoom");
 
                       return RepaintBoundary(
                         child: Listener(
@@ -536,20 +546,18 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           onPointerMove: (_) => _webLongPressTimer?.cancel(),
                           child: MapLibreMap(
                             key: _mapKey,
-                            initialCameraPosition: const CameraPosition(
-                              target: LatLng(28.6139,
-                                  77.2090), // Default Regional Overview
-                              zoom:
-                                  10.5, // 🚀 Hard lock initial frame to >5km altitude
+                            initialCameraPosition: CameraPosition(
+                              target: LatLng(safeLat, safeLng),
+                              zoom: safeInitialZoom, // 🚀 NEVER let this default or evaluate to > 11.0 without physical GPS!
                             ),
                             styleString: _loadedMapStyle!,
                             // 🚀 CRITICAL FIX: Synchronize RenderMode with Enabled state
-                            myLocationEnabled: isRealGps && !isRouteActive,
-                            myLocationRenderMode: MyLocationRenderMode.normal,
-                            // The absolute source of truth for tracking:
-                            myLocationTrackingMode: isAutoTracking 
-                                ? (isRouteActive ? MyLocationTrackingMode.trackingCompass : MyLocationTrackingMode.tracking)
-                                : MyLocationTrackingMode.none,
+                            myLocationEnabled: _isPuckMounted && shouldShowPuck,
+                            // 🚀 CRITICAL WEB FIX: Omit or safely set render mode on Web to prevent console crash!
+                            myLocationRenderMode: kIsWeb 
+                                ? MyLocationRenderMode.normal 
+                                : (shouldShowPuck ? MyLocationRenderMode.gps : MyLocationRenderMode.normal),
+                            myLocationTrackingMode: MyLocationTrackingMode.none, // We control camera manually via animations!
                             minMaxZoomPreference:
                                 const MinMaxZoomPreference(3.0, 18.5),
                             cameraTargetBounds: CameraTargetBounds(
@@ -883,7 +891,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                   'nav_puck',
                                   'Arrow',
                                   'arrow',
-                                  'custom-marker'
+                                  'custom-marker',
+                                  'metro_station',
+                                  'transit_station',
+                                  'bus',
+                                  'rail',
+                                  'highway-shield',
+                                  'road-shield',
+                                  'default_marker'
                                 ];
                                 for (final id in requiredSpriteIds) {
                                   if (!_addedImages.contains(id)) {
@@ -987,28 +1002,22 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                       listen: false),
                                   this);
 
-                              // 🚀 Task 1: Re-inject location tracking cleanly after style loads
+                              // 2. 🚀 STYLE LOADED: Now it is safe to turn on the Puck!
                               try {
-                                if (!context.mounted) return;
-                                final locSvc =
-                                    Provider.of<GlobalLocationService>(context,
-                                        listen: false);
-                                final pos = locSvc.currentPosition;
-                                final bool isRealGps = pos != null &&
-                                    !pos.isMocked &&
-                                    mapProvider.hasLocationPermission;
-
-                                if (isRealGps) {
-                                  final isRouteActive =
-                                      mapProvider.isRouteCalculated ||
-                                          mapProvider.isActiveNavigation;
-                                  if (!isRouteActive) {
-                                  }
-                                } else {
+                                debugPrint("🎨 [Style Loaded] Registering Puck & Enabling Location...");
+                                
+                                // Use specific tracking mode for Web vs Mobile
+                                final trackingMode = kIsWeb 
+                                    ? MyLocationTrackingMode.tracking 
+                                    : MyLocationTrackingMode.trackingCompass;
+                                    
+                                await controller.updateMyLocationTrackingMode(trackingMode);
+                                
+                                if (mounted) {
+                                  setState(() => _isPuckMounted = true);
                                 }
                               } catch (e) {
-                                debugPrint(
-                                    "❌ Puck restoration intercepted: $e");
+                                debugPrint("❌ Puck mount failed: $e");
                               }
 
                               // 🚀 Task 2: Auto-center on startup
@@ -1654,30 +1663,26 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     );
   }
 
-  // 🚀 HELPER: Evaluates true physical GPS using accuracy precision (< 100 meters) and regional bounds
   bool _isVerifiedPhysicalGps(Position? pos, bool hasPermission) {
     if (pos == null || !hasPermission || pos.isMocked) return false;
+    if (pos.latitude == 0.0 && pos.longitude == 0.0) return false;
 
-    // 1. Accuracy Check: IP/Cell-tower fallback accuracy is typically > 500m. True GPS is < 50m.
-    // If accuracy is worse than 150 meters, DO NOT treat as street-level GPS!
-    if (pos.accuracy > 150.0 || pos.accuracy == 0.0) {
-      debugPrint(
-          "🛑 [Accuracy Shield] Rejected location due to low precision (${pos.accuracy}m). Holding altitude.");
+    // 🚀 THE DUMMY TRAP SHIELD: Rejects Delhi/Nagpur IP fallback centers!
+    final latStr = pos.latitude.toStringAsFixed(3);
+    final lngStr = pos.longitude.toStringAsFixed(3);
+    
+    // Delhi Connaught Place / Railway station fallback centers
+    final isDelhiDummy = (latStr == "28.633" && lngStr == "77.220") || 
+                         (latStr == "28.614" && lngStr == "77.209");
+    final isNagpurDummy = (latStr == "21.146" && lngStr == "79.088");
+
+    if (isDelhiDummy || isNagpurDummy) {
+      debugPrint("🛑 [Dummy Shield] Blocked IP fallback coordinate ($latStr, $lngStr). Treating as City Overview.");
       return false;
     }
 
-    // 2. Default City Bounding Box Shield (Delhi NCR & Nagpur fallback zones)
-    final lat = pos.latitude;
-    final lng = pos.longitude;
-    final isDelhiFallback = (lat >= 28.40 && lat <= 28.88) &&
-        (lng >= 76.85 && lng <= 77.40) &&
-        (pos.accuracy > 100.0);
-    final isNagpurFallback = (lat >= 21.00 && lat <= 21.30) &&
-        (lng >= 78.90 && lng <= 79.20) &&
-        (pos.accuracy > 100.0);
-    final isZero = lat == 0.0 && lng == 0.0;
-
-    return !isDelhiFallback && !isNagpurFallback && !isZero;
+    // Require basic Wi-Fi/GPS accuracy (< 500m)
+    return pos.accuracy > 0.0 && pos.accuracy <= 500.0;
   }
 
   // 🚀 THE ABSOLUTE GATEKEEPER: Rewrites illegal street zooms!
