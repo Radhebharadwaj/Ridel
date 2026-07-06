@@ -265,6 +265,8 @@ class MapProvider extends ChangeNotifier {
   Future<void> _updatePuckGeoJson(
       LatLng location, double bearing, double opacity) async {
     if (controller == null) return;
+    // 🛑 FATAL CRASH GUARD: Do NOT rebuild the puck if we are just trying to hide a destroyed puck!
+    if (opacity == 0.0 && !_isNavPuckInitialized) return;
     try {
       final Map<String, dynamic> puckGeoJson = {
         "type": "FeatureCollection",
@@ -283,6 +285,8 @@ class MapProvider extends ChangeNotifier {
       };
 
       if (!_isNavPuckInitialized) {
+        _isNavPuckInitialized = true; // 🚀 Lock instantly to prevent async race condition loops
+        
         // 1. Force cleanup before drawing a new puck
         try { await controller!.removeLayer('nav_puck_layer'); } catch (_) {}
         try { await controller!.removeSource('nav_puck_source'); } catch (_) {}
@@ -453,43 +457,7 @@ class MapProvider extends ChangeNotifier {
     return !isDummyCenter;
   }
 
-  void _showLocationPermissionRequiredPopup(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF161E28),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.location_on_rounded, color: Colors.blueAccent, size: 24),
-            SizedBox(width: 10),
-            Text("Location Required", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-          ],
-        ),
-        content: const Text(
-          "To calculate routes and navigate, please enable location permissions for Ridel Maps.",
-          style: TextStyle(color: Colors.white70, fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text("CANCEL", style: TextStyle(color: Colors.white54, fontWeight: FontWeight.w600)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blueAccent,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _handlePermissionGrantAndRetry(context);
-            },
-            child: const Text("ENABLE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Future<void> _handlePermissionGrantAndRetry(BuildContext context) async {
     if (!context.mounted) return;
@@ -584,11 +552,11 @@ class MapProvider extends ChangeNotifier {
   }) async {
     // 🛡️ THE ROUTING GATEKEEPER: Abort routing if real physical GPS is missing!
     if (!_isRealPhysicalGpsAvailable(context)) {
-      debugPrint("🛑 [Routing Gatekeeper] Aborted route calculation! No verified physical GPS / Blue Dot detected.");
+      debugPrint("🛑 [Routing Gatekeeper] Aborted route calculation! Invoking native permission handshake directly.");
       
-      // 🚀 CRITICAL UX FIX: Do not fail silently! Trigger interactive UI Popup/Toast:
+      // 🚀 DIRECT NATIVE TRIGGER: Bypass custom UI and ask OS directly!
       if (!isAutoTriggered && context.mounted) {
-        _showLocationPermissionRequiredPopup(context);
+        await _handlePermissionGrantAndRetry(context); 
       }
       return; // 🚀 INSTANT ABORT: Do not draw polyline!
     }
@@ -779,8 +747,8 @@ class MapProvider extends ChangeNotifier {
   Future<void> start3DNavigation() async {
     final context = ToastService.navigatorKey.currentContext;
     if (context != null && !_isRealPhysicalGpsAvailable(context)) {
-      debugPrint("🛑 [Routing Gatekeeper] Aborted 3D navigation! No verified physical GPS / Blue Dot detected.");
-      _showLocationPermissionRequiredPopup(context);
+      debugPrint("🛑 [Routing Gatekeeper] Aborted 3D navigation! Invoking native permission handshake directly.");
+      await _handlePermissionGrantAndRetry(context);
       return;
     }
 
@@ -882,46 +850,12 @@ class MapProvider extends ChangeNotifier {
   }
 
   List<String> activeFocusLayerIds = [];
-  bool _isCurrentFocusModeActive = false;
 
   Future<void> _toggleFocusModeLayers(bool isFocusMode) async {
-    if (controller == null) return;
-    if (_isCurrentFocusModeActive == isFocusMode) return;
-    _isCurrentFocusModeActive = isFocusMode;
-
-    if (activeFocusLayerIds.isEmpty) {
-      final allLayers = await controller!.getLayerIds();
-      activeFocusLayerIds = allLayers.map((e) => e.toString()).where((id) {
-        final lowerId = id.toLowerCase();
-        bool isFocusTarget = lowerId.contains('poi') ||
-            lowerId.contains('amenity') ||
-            lowerId.contains('shop') ||
-            lowerId.contains('transit');
-
-        return isFocusTarget;
-      }).toList();
-      debugPrint("🔍 Tracked Focus Mode Layers: ${activeFocusLayerIds.length}");
-    }
-
-    if (activeFocusLayerIds.isEmpty) {
-      debugPrint("⚠️ Cannot set Focus Mode: Layer IDs list is empty!");
-      return;
-    }
-
-    // 🚨 Safe MapLibre Web Filter: Set a filter that matches nothing to hide the layer
-    // This avoids using setLayerProperties which destroys iconImages on the WebGL bridge.
-    final dynamic filter = isFocusMode ? ['==', 'id', 'nothing'] : null;
-
-    Future.microtask(() async {
-      for (String layerId in activeFocusLayerIds) {
-        try {
-          await controller!.setFilter(layerId, filter);
-        } catch (_) {}
-      }
-    });
-
-    debugPrint(
-        "🔍 Focus Mode set to $isFocusMode using non-destructive filters for ${activeFocusLayerIds.length} layers.");
+    // 🛑 FATAL CRASH GUARD: Completely disabled. 
+    // Overwriting native MapLibre filters with 'null' destroys the original style rules, 
+    // causing 'Missing required image id' WebGL fatal crashes and screen freezes.
+    return;
   }
 
   // 🚨 DYNAMIC FUEL STATIONS TOGGLE
@@ -966,8 +900,8 @@ class MapProvider extends ChangeNotifier {
   Future<bool> handleRouteClick(Point<double> point, LatLng coordinates) async {
     final context = ToastService.navigatorKey.currentContext;
     if (context != null && !_isRealPhysicalGpsAvailable(context)) {
-      debugPrint("🛑 [Routing Gatekeeper] Aborted route selection! No verified physical GPS / Blue Dot detected.");
-      _showLocationPermissionRequiredPopup(context);
+      debugPrint("🛑 [Routing Gatekeeper] Aborted route selection! Invoking native permission handshake directly.");
+      await _handlePermissionGrantAndRetry(context);
       return false;
     }
 
@@ -1549,231 +1483,147 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<void> clearNativeRoute({bool preserveState = false}) async {
-    // 1. LOCK THE STREAM IMMEDIATELY AND EXECUTE KILL-SWITCH (Before any awaits)
+    // 🚀 1. INSTANT STATE LOCK: Kill streams before touching WebGL memory
     if (!preserveState) {
-      isActiveNavigation = false;
       engine.setUIState(MapUIState.idle);
+      isActiveNavigation = false;
+      isRouteCalculated = false;
+      setAutoTracking(false);
+      setUserPanning(false);
 
-      final emptyGeoJson = {"type": "FeatureCollection", "features": []};
-      try {
-        await controller?.setGeoJsonSource("nav_puck_source", emptyGeoJson);
-      } catch (_) {}
-
-      try {
-        await controller?.removeLayer("nav_puck_layer");
-        await controller?.removeSource("nav_puck_source");
-        _isNavPuckInitialized = false;
-      } catch (_) {}
+      _isNavPuckInitialized = false;
+      try { await controller?.removeLayer("nav_puck_layer"); } catch (_) {}
+      try { await controller?.removeSource("nav_puck_source"); } catch (_) {}
     }
 
-    if (_drawnRoutesCount == 0) {
-      return; // Do not spam the bridge if already clear
-    }
+    if (_drawnRoutesCount == 0) return;
+
     if (controller != null && _drawnRoutesCount > 0) {
-      // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
-      try {
-        await controller!.removeLayer('primary-casing');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-core');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-shine');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('primary-walk-layer');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('connectors-layer');
-      } catch (_) {}
-      try {
-        await controller!.removeLayer('intermediate-pins-layer');
-      } catch (_) {}
-
+      // 🚀 2. BULK LAYER CLEANUP
+      final layersToRemove = [
+        'primary-casing', 'primary-core', 'primary-shine', 'primary-walk-layer',
+        'connectors-layer', 'intermediate-pins-layer'
+      ];
+      for (var layer in layersToRemove) {
+        try { await controller!.removeLayer(layer); } catch (_) {}
+      }
       for (int i = 0; i < 5; i++) {
-        try {
-          await controller!.removeLayer('route-layer-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('alt-walk-layer-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('time-tag-layer-$i');
-        } catch (_) {}
+        try { await controller!.removeLayer('route-layer-$i'); } catch (_) {}
+        try { await controller!.removeLayer('alt-walk-layer-$i'); } catch (_) {}
+        try { await controller!.removeLayer('time-tag-layer-$i'); } catch (_) {}
       }
 
-      // 2. SECURE SOURCE CLEANUP (Only safe to remove after layers are dead)
-      try {
-        await controller!.removeSource('primary-source');
-      } catch (_) {}
-      try {
-        await controller!.removeSource('connectors-source');
-      } catch (_) {}
-      try {
-        await controller!.removeSource('intermediate-pins-source');
-      } catch (_) {}
-
+      // 🚀 3. BULK SOURCE CLEANUP
+      final sourcesToRemove = ['primary-source', 'connectors-source', 'intermediate-pins-source'];
+      for (var source in sourcesToRemove) {
+        try { await controller!.removeSource(source); } catch (_) {}
+      }
       for (int i = 0; i < 5; i++) {
-        try {
-          await controller!.removeSource('route-source-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('alt-source-$i');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('time-tag-source-$i');
-        } catch (_) {}
+        try { await controller!.removeSource('route-source-$i'); } catch (_) {}
+        try { await controller!.removeSource('alt-source-$i'); } catch (_) {}
+        try { await controller!.removeSource('time-tag-source-$i'); } catch (_) {}
       }
 
       _drawnRoutesCount = 0;
+
       if (!preserveState) {
-        isRouteCalculated = false;
         _currentRouteResult = null;
         _lastRouteData = null;
 
-        // 🚨 Deactivate Focus Mode & Hide Puck
-        await _toggleFocusModeLayers(false);
-        await hideNavigationPuck();
-
-        // Native blue dot is reactively restored by hideNativeBlueDot getter. No controller call needed.
-        await updatePuckVisibility();
-
-        // 🚨 Cinematic Camera Reset
         if (controller != null && currentLocation != null) {
-          try {
-            await controller!.animateCamera(
-              CameraUpdate.newCameraPosition(
-                CameraPosition(
-                  target: currentLocation!,
-                  zoom: _getClampedZoom(15.0), // Comfortable default zoom
-                  tilt: 0.0, // Strictly reset to flat 2D
-                  bearing: 0.0, // Strictly reset rotation
-                ),
+          await controller!.animateCamera(
+            CameraUpdate.newCameraPosition(
+              CameraPosition(
+                target: LatLng(currentLocation!.latitude, currentLocation!.longitude),
+                zoom: _getClampedZoom(15.0),
+                tilt: 0.0,
+                bearing: 0.0,
               ),
-              duration: const Duration(
-                  milliseconds: 1200), // Smooth 1.2s premium flight
-            );
-
-            // Wait for the flight to finish smoothly BEFORE locking the tracking
-            await Future.delayed(const Duration(milliseconds: 1250));
-            // Reset tracking mode after animation only if we have GPS
-            final bool isRealGps = engine.locService?.currentPosition != null &&
-                !(engine.locService!.currentPosition!.isMocked) &&
-                hasLocationPermission;
-            await setTrackingMode(
-              isRealGps ? MyLocationTrackingMode.tracking : MyLocationTrackingMode.none,
-            );
-          } catch (e) {
-            debugPrint("⚠️ Native Tracking Reset Error: $e");
-          }
+            ),
+            duration: const Duration(milliseconds: 1200),
+          );
         }
       }
-
       notifyListeners();
     }
   }
 
-  // Helper to safely fully clear everything and notify UI
   Future<void> cancelAndClearRoute({bool resetCamera = true}) async {
+    debugPrint("🛑 [Navigation] Executing End Route Teardown...");
+
+    // 🚀 1. ABSOLUTE TOP PRIORITY: Free the camera immediately!
+    try {
+      if (controller != null) {
+        await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+        // Reset tilt and bearing for a clean 2D exit state
+        await controller!.animateCamera(
+          CameraUpdate.bearingTo(0.0), 
+          duration: const Duration(milliseconds: 600)
+        );
+        await controller!.animateCamera(
+          CameraUpdate.tiltTo(0.0), 
+          duration: const Duration(milliseconds: 600)
+        );
+      }
+    } catch (e) {
+      debugPrint("Warning: Failed to release camera tracking: $e");
+    }
+
+    // 2. INSTANT STATE LOCK TO KILL BACKGROUND LOGIC
+    engine.setUIState(MapUIState.idle);
+    isRouteCalculated = false;
+    isActiveNavigation = false;
+    setAutoTracking(false);
+    setUserPanning(false);
+
+    try {
+      engine.navigation.stopNavigation(); // 🚀 ABSOLUTE KILL SWITCH for navigation loops
+    } catch (e) {
+      debugPrint("⚠️ Navigation Controller teardown caught an error: $e");
+    }
+
     _liveLocationSub?.cancel();
     _liveLocationSub = null;
-    intermediateStops.clear();
-
-    // Hide the static puck layer
-    await hideNavigationPuck();
-
-    // 🚀 EXPLICIT PUCK CLEANUP ON END ROUTE
-    // 1. FIRST, safely remove the layer
     try {
-      await controller?.removeLayer('nav_puck_layer');
-    } catch (e) {
-      debugPrint('Safe Cleanup: Layer not found or already removed.');
+      intermediateStops.clear();
+    } catch (_) {
+      intermediateStops = [];
     }
 
-    // 2. SECOND, safely remove the source
-    try {
-      await controller?.removeSource('nav_puck_source');
-    } catch (e) {
-      debugPrint('Safe Cleanup: Source not found or already removed.');
-    }
-    
-    _isNavPuckInitialized = false;
+    // 2. EXPLICIT PUCK CLEANUP ON END ROUTE
+    _isNavPuckInitialized = false; 
+    try { await controller?.removeLayer('nav_puck_layer'); } catch (_) {}
+    try { await controller?.removeSource('nav_puck_source'); } catch (_) {}
 
-    // 1. Clear MapLibre Native Layers (Lines AND ETA Pills)
+    // 3. SECURE LAYER & SOURCE CLEANUP
     if (controller != null) {
-      if (_drawnRoutesCount > 0 || isRouteCalculated) {
-        // 1. SECURE LAYER CLEANUP (Must be removed first to free up sources)
-        try {
-          await controller!.removeLayer('primary-casing');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('primary-core');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('primary-shine');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('primary-walk-layer');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('connectors-layer');
-        } catch (_) {}
-        try {
-          await controller!.removeLayer('intermediate-pins-layer');
-        } catch (_) {}
-
-        for (int i = 0; i < 5; i++) {
-          try {
-            await controller!.removeLayer('route-layer-$i');
-          } catch (_) {}
-          try {
-            await controller!.removeLayer('alt-walk-layer-$i');
-          } catch (_) {}
-          try {
-            await controller!.removeLayer('time-tag-layer-$i');
-          } catch (_) {}
-        }
-
-        // 2. SECURE SOURCE CLEANUP (Only safe to remove after layers are dead)
-        try {
-          await controller!.removeSource('primary-source');
-        } catch (_) {}
-        try {
-          await controller!.removeSource('connectors-source');
-        } catch (_) {}
-
-        for (int i = 0; i < 5; i++) {
-          try {
-            await controller!.removeSource('route-source-$i');
-          } catch (_) {}
-          try {
-            await controller!.removeSource('alt-source-$i');
-          } catch (_) {}
-          try {
-            await controller!.removeSource('time-tag-source-$i');
-          } catch (_) {}
-        }
+      final layersToRemove = [
+        'primary-casing', 'primary-core', 'primary-shine', 'primary-walk-layer',
+        'connectors-layer', 'intermediate-pins-layer', 'ultimate-pin-layer',
+        'selected-destination-layer'
+      ];
+      for (var layer in layersToRemove) {
+        try { await controller!.removeLayer(layer); } catch (_) {}
+      }
+      for (int i = 0; i < 5; i++) {
+        try { await controller!.removeLayer('route-layer-$i'); } catch (_) {}
+        try { await controller!.removeLayer('alt-walk-layer-$i'); } catch (_) {}
+        try { await controller!.removeLayer('time-tag-layer-$i'); } catch (_) {}
       }
 
-      // Also clear destination pin circle if it exists
-      await clearNativeDestinationPin();
+      final sourcesToRemove = [
+        'primary-source', 'connectors-source', 'intermediate-pins-source',
+        'ultimate-pin-source', 'selected-destination-source'
+      ];
+      for (var source in sourcesToRemove) {
+        try { await controller!.removeSource(source); } catch (_) {}
+      }
+      for (int i = 0; i < 5; i++) {
+        try { await controller!.removeSource('route-source-$i'); } catch (_) {}
+        try { await controller!.removeSource('alt-source-$i'); } catch (_) {}
+        try { await controller!.removeSource('time-tag-source-$i'); } catch (_) {}
+      }
 
-      // Keep legacy cleanup just in case
-      try {
-        await controller!.removeLayer('selected-destination-layer');
-      } catch (_) {}
-      try {
-        await controller!.removeSource('selected-destination-source');
-      } catch (_) {}
-
-      try {
-        await controller!.removeLayer('ultimate-pin-layer');
-      } catch (_) {}
-      try {
-        await controller!.removeSource('ultimate-pin-source');
-      } catch (_) {}
-
-      // Remove the manual dropped pin or search symbol layer
       if (_droppedPinSymbol != null) {
         await controller!.removeSymbol(_droppedPinSymbol!);
         _droppedPinSymbol = null;
@@ -1781,9 +1631,8 @@ class MapProvider extends ChangeNotifier {
       await engine.layers?.removeSearchPin();
     }
 
-    // 2. Reset all routing state variables to null/empty
+    // 4. RESET ALL VARIABLES
     _drawnRoutesCount = 0;
-    isRouteCalculated = false;
     _currentRouteResult = null;
     _lastRouteData = null;
     targetDestination = null;
@@ -1791,19 +1640,14 @@ class MapProvider extends ChangeNotifier {
     isCinematicSearch = false;
     _activeDestination = null;
     _isDestinationSelected = false;
-    isActiveNavigation = false;
-    engine.setUIState(MapUIState.idle);
-    await updatePuckVisibility(); // Forces the puck to redraw if it was wiped
     currentNavMode = 'driving';
 
-    // 🚀 Cinematic Camera Reset
+    // 5. CINEMATIC CAMERA RESET
     if (resetCamera && currentLocation != null && controller != null) {
-      // 🚀 FIX: Smoothly fly back to the user FIRST
       await controller!.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
-            target:
-                LatLng(currentLocation!.latitude, currentLocation!.longitude),
+            target: LatLng(currentLocation!.latitude, currentLocation!.longitude),
             zoom: _getClampedZoom(15.0),
             tilt: 0.0,
             bearing: 0.0,
@@ -1811,25 +1655,11 @@ class MapProvider extends ChangeNotifier {
         ),
         duration: const Duration(milliseconds: 1200),
       );
-
-      // Wait for the flight to finish smoothly BEFORE locking the tracking
-      await Future.delayed(const Duration(milliseconds: 1250));
-      
-      final bool isRealGps = engine.locService?.currentPosition != null &&
-          !(engine.locService!.currentPosition!.isMocked) &&
-          hasLocationPermission;
-      await controller!
-          .updateMyLocationTrackingMode(isRealGps ? MyLocationTrackingMode.tracking : MyLocationTrackingMode.none);
     }
 
-    // 🌟 Explicitly Restore All Dimmed/Hidden Background Layers & Hide Puck
-    await _toggleFocusModeLayers(false);
-    await hideNavigationPuck();
-
-    // 3. Notify the UI to rebuild (This brings the Search Bar back!)
-    isRouteCalculated = false;
-    isActiveNavigation = false;
+    // 6. NOTIFY UI TO RESTORE DEFAULT STATE
     notifyListeners();
+    debugPrint("✅ [Navigation] End Route Teardown Complete. Camera is FREE.");
   }
 
   // Helper to calculate camera bounds
@@ -2131,9 +1961,7 @@ class MapProvider extends ChangeNotifier {
 
             if (!isActiveNavigation &&
                 engine.mapUIState.value == MapUIState.idle) {
-              // If the stream fires while navigation is off, mercilessly kill the layer again.
-              controller?.removeLayer("nav_puck_layer").catchError((_) {});
-              return; // 🚀 ABORT: Do not update puck logic!
+              return; // 🛑 CRITICAL FIX: Do NOT spam removeLayer here. cancelAndClearRoute handles cleanup.
             }
 
             if (engine.mapUIState.value == MapUIState.navigating ||

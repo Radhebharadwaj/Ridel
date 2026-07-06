@@ -416,56 +416,24 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                                 onPressed: () {
                                   debugPrint('End Route: Start');
                                   AppHaptics.heavyImpact();
-                                  rebuildState(
-                                      () => _isNavSheetExpanded = false);
+                                  
+                                  // 1. Force the Bottom Sheet UI back to the default Search mode
+                                  rebuildState(() {
+                                    _isNavSheetExpanded = false;
+                                    _currentMode = SheetMode.search;
+                                    _showDirections = false;
+                                    _selectedPlace = null;
+                                    _destPlace = null;
+                                    _originPlace = null;
+                                    _currentRoute = null;
+                                    _searchCtrl.clear();
+                                  });
 
+                                  // 2. Tell the Provider to clean the map (Fire and forget safely)
                                   Future.microtask(() async {
                                     if (!mounted) return;
-                                    final p = Provider.of<MapProvider>(context,
-                                        listen: false);
-
-                                    debugPrint(
-                                        'End Route: Calling cancelAndClearRoute');
-                                    try {
-                                      await p.cancelAndClearRoute();
-                                      debugPrint(
-                                          'End Route: cancelAndClearRoute success');
-                                    } catch (e) {
-                                      debugPrint(
-                                          'End Route Cleanup Failed: $e');
-                                    } finally {
-                                      debugPrint(
-                                          'End Route: Ensuring UI Dismissal');
-                                      p.isActiveNavigation = false;
-                                      p.clearError(); // Safely triggers notifyListeners()
-
-                                      // Cinematic Flow 4: End Route Focus (Back to neutral 2D view)
-                                      if (p.controller != null &&
-                                          p.currentLocation != null) {
-                                        try {
-                                          p.controller!
-                                              .updateMyLocationTrackingMode(
-                                                  MyLocationTrackingMode
-                                                      .tracking);
-                                        } catch (_) {}
-                                        p.controller!.animateCamera(
-                                          CameraUpdate.newCameraPosition(
-                                            CameraPosition(
-                                              target: LatLng(
-                                                  p.currentLocation!.latitude,
-                                                  p.currentLocation!.longitude),
-                                              zoom: 14.0,
-                                              tilt: 0.0,
-                                              bearing: 0.0,
-                                            ),
-                                          ),
-                                          duration: const Duration(
-                                              milliseconds: 1000),
-                                        );
-                                      }
-
-                                      debugPrint('End Route: Finished');
-                                    }
+                                    final p = Provider.of<MapProvider>(context, listen: false);
+                                    await p.cancelAndClearRoute();
                                   });
                                 },
                                 child: Container(

@@ -189,6 +189,8 @@ class MapEngine {
     }
   }
 
+  Position? _lastRoutedPosition;
+
   void _initGPS() {
     if (locService == null) return;
 
@@ -200,7 +202,19 @@ class MapEngine {
 
       // 🚀 CRITICAL WIRE: Feed navigation controller on every GPS tick
       if (navigation.isNavigating.value) {
+        if (_lastRoutedPosition != null) {
+          final distance = Geolocator.distanceBetween(
+            _lastRoutedPosition!.latitude,
+            _lastRoutedPosition!.longitude,
+            newPos.latitude,
+            newPos.longitude,
+          );
+          if (distance < 15.0) return; // 🛑 BREAK THE LOOP: Ignore micro-movements
+        }
+        _lastRoutedPosition = newPos;
         navigation.processLocationUpdate(newPos);
+      } else {
+        _lastRoutedPosition = null;
       }
     });
   }
@@ -285,6 +299,26 @@ class MapEngine {
 
   /// Stops navigation and cleans up all route visuals.
   Future<void> stopActiveNavigation() async {
+    debugPrint("🛑 [Navigation] Executing End Route Teardown...");
+    
+    // 🚀 1. ABSOLUTE TOP PRIORITY: Free the camera immediately!
+    try {
+      if (mapController != null) {
+        await mapController!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+        // Reset tilt and bearing for a clean 2D exit state
+        await mapController!.animateCamera(
+          CameraUpdate.bearingTo(0.0), 
+          duration: const Duration(milliseconds: 600)
+        );
+        await mapController!.animateCamera(
+          CameraUpdate.tiltTo(0.0), 
+          duration: const Duration(milliseconds: 600)
+        );
+      }
+    } catch (e) {
+      debugPrint("Warning: Failed to release camera tracking: $e");
+    }
+
     navigation.stopNavigation();
     _navigationDestination = null;
 

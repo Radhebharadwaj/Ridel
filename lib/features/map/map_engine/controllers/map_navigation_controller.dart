@@ -50,10 +50,9 @@ class MapNavigationController {
   // ───── Pre-computed Instruction Cache (Thread-safe) ─────
   List<String> _parsedInstructions = [];
   List<String> _maneuverIcons = [];
-  List<LatLng> _stepStartLocations = []; // Needed for step boundary mapping
   List<LatLng> _stepEndLocations = [];
   List<double> _stepDistances = [];
-  final Set<int> _spokenMilestones = {};
+  Set<int> _spokenMilestones = {};
 
   // ───── 🚀 NEW — Local Windowing State ─────
   /// Current start index of the sliding window over the polyline.
@@ -129,7 +128,6 @@ class MapNavigationController {
     _maneuverIcons = isolateResult.parsedSteps.maneuverIcons;
     _stepDistances = isolateResult.parsedSteps.stepDistances;
 
-    _stepStartLocations = isolateResult.stepStartLocations;
     _stepEndLocations = isolateResult.stepEndLocations;
     _stepBoundaries = isolateResult.stepBoundaries;
 
@@ -158,13 +156,12 @@ class MapNavigationController {
     _currentStepIndex = 0;
     _windowStart = 0;
     _consecutiveOffRouteTicks = 0;
-    _parsedInstructions.clear();
-    _maneuverIcons.clear();
-    _stepStartLocations.clear();
-    _stepEndLocations.clear();
-    _stepDistances.clear();
-    _stepBoundaries.clear();
-    _spokenMilestones.clear();
+    _parsedInstructions = [];
+    _maneuverIcons = [];
+    _stepEndLocations = [];
+    _stepDistances = [];
+    _stepBoundaries = [];
+    _spokenMilestones = {};
     _isRerouting = false;
     _snapResult.reset();
     remainingPolyline.value = [];
@@ -508,7 +505,7 @@ class MapNavigationController {
   // ═══════════════════════════════════════════════════════════════════════════
 
   static _IsolateResult _processRouteDataInIsolate(Map<String, dynamic> params) {
-    final List<Map<String, dynamic>> rawSteps = params['rawSteps'];
+    final dynamic rawSteps = params['rawSteps'];
     final List<LatLng> polyline = params['polyline'];
 
     final parsed = _parseStepsSync(rawSteps);
@@ -526,7 +523,7 @@ class MapNavigationController {
     return _IsolateResult(parsed, stepStartLocations, stepEndLocations, stepBoundaries);
   }
 
-  static _ParsedSteps _parseStepsSync(List<Map<String, dynamic>> steps) {
+  static _ParsedSteps _parseStepsSync(dynamic rawStepsData) {
     final instructions = <String>[];
     final icons = <String>[];
 
@@ -537,26 +534,63 @@ class MapNavigationController {
 
     final stepDistances = <double>[];
 
-    for (int i = 0; i < steps.length; i++) {
-      final step = steps[i];
-      final raw = step['html_instructions'] as String? ?? 'Continue';
-      final clean = raw.replaceAll(RegExp(r'<[^>]*>'), '');
-      instructions.add(clean.trim());
+    List<dynamic> parsedSteps = [];
+    try {
+      if (rawStepsData is List) {
+        for (var step in rawStepsData) {
+          if (step is Map<String, dynamic> || step is Map) {
+            parsedSteps.add(step);
+          }
+        }
+      } else if (rawStepsData is Map && rawStepsData.containsKey('steps')) {
+        final stepsList = rawStepsData['steps'];
+        if (stepsList is List) {
+          for (var step in stepsList) {
+            if (step is Map<String, dynamic> || step is Map) parsedSteps.add(step);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("🛑 [Navigation Parser] Suppressed fatal crash during step parsing: $e");
+    }
 
-      icons.add(step['maneuver'] as String? ?? '');
+    for (int i = 0; i < parsedSteps.length; i++) {
+      final step = parsedSteps[i];
+      try {
+        final raw = step['html_instructions'] as String? ?? 'Continue';
+        final clean = raw.replaceAll(RegExp(r'<[^>]*>'), '');
+        instructions.add(clean.trim());
 
-      // Parse Start Location (Fallback to end of previous if needed, but APIs usually provide it)
-      final start = step['start_location'] ?? step['end_location'];
-      startLats.add((start['lat'] as num).toDouble());
-      startLngs.add((start['lng'] as num).toDouble());
+        icons.add(step['maneuver'] as String? ?? '');
 
-      // Parse End Location
-      final end = step['end_location'];
-      endLats.add((end['lat'] as num).toDouble());
-      endLngs.add((end['lng'] as num).toDouble());
+        // Parse Start Location
+        final start = step['start_location'] ?? step['end_location'];
+        if (start != null && start is Map) {
+          startLats.add((start['lat'] as num?)?.toDouble() ?? 0.0);
+          startLngs.add((start['lng'] as num?)?.toDouble() ?? 0.0);
+        } else {
+          startLats.add(0.0);
+          startLngs.add(0.0);
+        }
 
-      stepDistances
-          .add((step['distance']?['value'] as num?)?.toDouble() ?? 0.0);
+        // Parse End Location
+        final end = step['end_location'];
+        if (end != null && end is Map) {
+          endLats.add((end['lat'] as num?)?.toDouble() ?? 0.0);
+          endLngs.add((end['lng'] as num?)?.toDouble() ?? 0.0);
+        } else {
+          endLats.add(0.0);
+          endLngs.add(0.0);
+        }
+
+        if (step['distance'] != null && step['distance'] is Map) {
+          stepDistances.add((step['distance']['value'] as num?)?.toDouble() ?? 0.0);
+        } else {
+          stepDistances.add(0.0);
+        }
+      } catch (e) {
+        debugPrint("🛑 [Navigation Parser] Error parsing step: $e");
+      }
     }
 
     return _ParsedSteps(instructions, icons, startLats, startLngs, endLats,

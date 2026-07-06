@@ -55,19 +55,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   MapLibreMapController? _tempController;
   MapThemeType? _currentTheme;
   CameraPosition? _currentCameraPosition;
-  bool _hasInitialCentered =
-      false; // 🚀 Task 2: Guard flag for initial auto-center
-  bool _isCameraLocked = true; // NEW: Global Lock for camera
+  bool _hasInitialCentered = false; // 🚀 Task 2: Guard flag for initial auto-center
 
-  void _unlockCamera() {
-    if (mounted && _isCameraLocked) {
-      setState(() => _isCameraLocked = false);
-    }
-  }
-
-  final GlobalKey _mapKey = GlobalKey(
-      debugLabel:
-          'primary_map_view'); // 🚀 Static GlobalKey to prevent WebGL context teardowns
+  final GlobalKey _mapKey = GlobalKey(debugLabel: 'primary_map_view'); // 🚀 Static GlobalKey to prevent WebGL context teardowns
 
   final ValueNotifier<bool> _showScaleBarNotifier = ValueNotifier(false);
   Timer? _scaleBarTimer;
@@ -75,21 +65,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   final ValueNotifier<String> _scaleTextNotifier = ValueNotifier('0 m');
   final ValueNotifier<double> _scaleWidthNotifier = ValueNotifier(60.0);
 
-  // 🚀 ADAPTIVE LOD CONTROLLER
-  bool _isPerformanceMode = false;
-
   // 🚀 WEB GESTURE SHIELDS
   DateTime _lastTapTime = DateTime.now();
   Timer? _webLongPressTimer;
-
-  void _togglePerformanceMode(bool enable) {
-    if (!mounted || _tempController == null || _isPerformanceMode == enable) {
-      return;
-    }
-    _isPerformanceMode = enable;
-
-    // Performance mode toggling logic omitted since heavyLayerIds was removed
-  }
 
   void _onCameraMove(CameraPosition? position) {
     // 🚀 FAST PATH: Just update local variable, DO NOT trigger Flutter rebuilds here!
@@ -97,64 +75,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   }
 
   void _onCameraIdle() {
-    _togglePerformanceMode(
-        false); // 🚀 Restore premium visuals once DOM has settled
-    _onCameraIdleScaleBar();
-
-    // 🚀 Update the LocationProvider so the rest of the app knows where the map is
-    if (_currentCameraPosition != null) {
-      final cam = _currentCameraPosition!;
-      final currentZoom = cam.zoom;
-      final lat = cam.target.latitude;
-
-      double metersPerPixel =
-          156543.03392 * cos(lat * pi / 180.0) / pow(2, currentZoom);
-      double maxPixelWidth = 80.0;
-      double maxMeters = metersPerPixel * maxPixelWidth;
-
-      const scaleValues = [
-        10,
-        20,
-        50,
-        100,
-        200,
-        500,
-        1000,
-        2000,
-        5000,
-        10000,
-        20000,
-        50000,
-        100000,
-        200000,
-        500000,
-        1000000
-      ];
-
-      int chosenMeters = 10;
-      for (int v in scaleValues) {
-        if (v <= maxMeters) {
-          chosenMeters = v;
-        } else {
-          break;
-        }
-      }
-
-      double newWidth = chosenMeters / metersPerPixel;
-      String newText = chosenMeters >= 1000
-          ? '${chosenMeters ~/ 1000} km'
-          : '$chosenMeters m';
-
-      if (!mounted) return;
-      _showScaleBarNotifier.value = true;
-      _scaleTextNotifier.value = newText;
-      _scaleWidthNotifier.value = newWidth.clamp(20.0, 150.0);
-
-      _scaleBarTimer?.cancel();
-      _scaleBarTimer = Timer(const Duration(milliseconds: 1500), () {
-        if (mounted) _showScaleBarNotifier.value = false;
-      });
-    }
+    _onCameraIdleScaleBar(); // 🚀 Only call the helper, removed the 40 lines of duplicate math!
 
     // 🚀 Defer the state update until AFTER the current rendering frame finishes
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -196,24 +117,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       double maxPixelWidth = 80.0;
       double maxMeters = metersPerPixel * maxPixelWidth;
 
-      const scaleValues = [
-        10,
-        20,
-        50,
-        100,
-        200,
-        500,
-        1000,
-        2000,
-        5000,
-        10000,
-        20000,
-        50000,
-        100000,
-        200000,
-        500000,
-        1000000
-      ];
+      const scaleValues = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000];
 
       int chosenMeters = 10;
       for (int v in scaleValues) {
@@ -241,6 +145,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     }
   }
 
+  // 🚀 CLASS-LEVEL LISTENER REFERENCES FOR DISPOSE
+  late VoidCallback _onMapProviderUpdated;
+  late VoidCallback _onLocServiceUpdated;
+  late VoidCallback _onLocServiceCityNameUpdated;
+
   @override
   void initState() {
     super.initState();
@@ -258,23 +167,27 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       _initializeApp();
 
       final mapProvider = Provider.of<MapProvider>(context, listen: false);
-      mapProvider.addListener(() {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!_hasInitialCentered && mapProvider.currentLocation != null) {
+      
+      // 🚀 ASSIGN TO CLASS FIELD
+      _onMapProviderUpdated = () {
+        if (!_hasInitialCentered) {
+          if (mapProvider.currentLocation != null) {
             _attemptInitialCameraCenter();
           }
-        });
-      });
+        }
+      };
+      mapProvider.addListener(_onMapProviderUpdated);
 
       // 🚀 REACTIVE PERMISSION HOOK: Snap to real GPS the instant it arrives
       final locService =
           Provider.of<GlobalLocationService>(context, listen: false);
-      locService.addListener(() {
+          
+      // 🚀 ASSIGN TO CLASS FIELD
+      _onLocServiceUpdated = () {
+        if (!mounted) return;
         final pos = locService.currentPosition;
         final ctrl = mapProvider.controller ?? _tempController;
         if (pos == null || ctrl == null) return;
-        
-        if (_isCameraLocked) return; // 🚀 Absolute Startup Camera Freeze
 
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           if (!mounted) return;
@@ -285,9 +198,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
           if (!isVerifiedPhysicalGps) {
             // Ensure tracking is off. If camera is somehow at street level, pull it up to 10.5
-            try {
-              ctrl.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
-            } catch (_) {}
             final currentZoom = ctrl.cameraPosition?.zoom ?? 0.0;
             if (!_hasInitialCentered || currentZoom > 11.0) {
               _hasInitialCentered = true;
@@ -303,10 +213,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
             if (!mapProvider.isRouteCalculated &&
                 !mapProvider.isActiveNavigation) {
-              try {
-                ctrl.updateMyLocationTrackingMode(
-                    MyLocationTrackingMode.tracking);
-              } catch (_) {}
+              ctrl.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
             }
             await Future.delayed(
                 const Duration(milliseconds: 250)); // Allow puck to render
@@ -314,16 +221,17 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             // 🚀 Removed street level auto-zoom to respect startup freeze
           }
         });
-      });
-
-      locService.currentCityName.addListener(() {
+      };
+      locService.addListener(_onLocServiceUpdated);
+      
+      // 🚀 ASSIGN TO CLASS FIELD
+      _onLocServiceCityNameUpdated = () {
+        if (!mounted) return;
         final cityName = locService.currentCityName.value;
         final pos = locService.currentPosition;
-        final ctrl =
-            Provider.of<MapProvider>(context, listen: false).controller ??
-                _tempController;
+        final ctrl = mapProvider.controller ?? _tempController;
 
-        if (ctrl == null || !mounted || cityName.trim().isEmpty) return;
+        if (ctrl == null || cityName.trim().isEmpty) return;
 
         // 🛡️ GOLDEN RULE: If we lack verified high-precision physical GPS (< 100m accuracy + permission),
         // we MUST anchor over the resolved App Header city at strictly Zoom 10.5 (5km scale)!
@@ -336,14 +244,16 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           debugPrint(
               "🏙️ [Header City Anchor] Header resolved '$cityName'. Anchoring camera at 5km regional overview (Zoom 10.5).");
         }
-      });
+      };
+      locService.currentCityName.addListener(_onLocServiceCityNameUpdated);
     });
   }
+
+
 
   Future<void> _attemptInitialCameraCenter() async {
     final mapProvider = Provider.of<MapProvider>(context, listen: false);
     if (_hasInitialCentered || _tempController == null) return;
-    if (_isCameraLocked) return; // 🚀 Respect camera lock
 
     final location = mapProvider.currentLocation;
     if (location != null && location.latitude != 0.0) {
@@ -363,10 +273,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           // Unlock the shield
           if (!mapProvider.isRouteCalculated &&
               !mapProvider.isActiveNavigation) {
-            try {
-              await _tempController!.updateMyLocationTrackingMode(
-                  MyLocationTrackingMode.tracking);
-            } catch (_) {}
           }
           await Future.delayed(const Duration(milliseconds: 250));
           if (!mounted) return;
@@ -381,10 +287,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           debugPrint(
               "⏳ [Startup] Low precision or unpermissioned. Anchoring at regional zoom 10.5.");
           // Keep shield locked!
-          try {
-            await _tempController!
-                .updateMyLocationTrackingMode(MyLocationTrackingMode.none);
-          } catch (_) {}
           await _safeAnimateCamera(
             LatLng(location.latitude, location.longitude),
             10.5,
@@ -452,6 +354,15 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   void dispose() {
     debugPrint(
         "🛠️ MAP LIFECYCLE: dispose called. WebGL context tearing down.");
+        
+    try {
+      final mapProvider = Provider.of<MapProvider>(context, listen: false);
+      mapProvider.removeListener(_onMapProviderUpdated);
+      final locService = Provider.of<GlobalLocationService>(context, listen: false);
+      locService.removeListener(_onLocServiceUpdated);
+      locService.currentCityName.removeListener(_onLocServiceCityNameUpdated);
+    } catch (_) {}
+
     _tempController?.dispose();
     _showScaleBarNotifier.dispose();
     _scaleTextNotifier.dispose();
@@ -520,6 +431,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     final double topMargin =
         isDesktop ? 32.0 : MediaQuery.of(context).padding.top + 24.0;
     final double sideMargin = isDesktop ? 32.0 : 28.0;
+
+    final bool isAutoTracking = context.select<MapProvider, bool>((p) => p.isAutoTracking);
 
     if (!_isMapReadyToLoad) {
       return const SizedBox
@@ -633,7 +546,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             // 🚀 CRITICAL FIX: Synchronize RenderMode with Enabled state
                             myLocationEnabled: isRealGps && !isRouteActive,
                             myLocationRenderMode: MyLocationRenderMode.normal,
-                            myLocationTrackingMode: MyLocationTrackingMode.none,
+                            // The absolute source of truth for tracking:
+                            myLocationTrackingMode: isAutoTracking 
+                                ? (isRouteActive ? MyLocationTrackingMode.trackingCompass : MyLocationTrackingMode.tracking)
+                                : MyLocationTrackingMode.none,
                             minMaxZoomPreference:
                                 const MinMaxZoomPreference(3.0, 18.5),
                             cameraTargetBounds: CameraTargetBounds(
@@ -1087,20 +1003,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                       mapProvider.isRouteCalculated ||
                                           mapProvider.isActiveNavigation;
                                   if (!isRouteActive) {
-                                    try {
-                                      await controller
-                                          .updateMyLocationTrackingMode(kIsWeb
-                                              ? MyLocationTrackingMode.tracking
-                                              : MyLocationTrackingMode
-                                                  .trackingCompass);
-                                    } catch (_) {}
                                   }
                                 } else {
-                                  try {
-                                    await controller
-                                        .updateMyLocationTrackingMode(
-                                            MyLocationTrackingMode.none);
-                                  } catch (_) {}
                                 }
                               } catch (e) {
                                 debugPrint(
@@ -1142,11 +1046,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               }
 
                               // 1. Break tracking immediately to avoid snap-back on pin drop
-                              if (mapProvider.controller != null) {
-                                await mapProvider.controller!
-                                    .updateMyLocationTrackingMode(
-                                        MyLocationTrackingMode.none);
-                              }
+                              mapProvider.setAutoTracking(false);
+                              mapProvider.setUserPanning(true);
 
                               // PIN DROP LOGIC MOVED EXCLUSIVELY TO onMapLongClick
 
@@ -1247,15 +1148,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             logoViewMargins: const Point(-5000, -5000),
                             attributionButtonMargins: const Point(-5000, -5000),
                             onCameraTrackingDismissed: () {
-                              _unlockCamera(); // 🚀 Unlock on manual gesture
                               final mapProvider = Provider.of<MapProvider>(
                                   context,
                                   listen: false);
-                              if (mapProvider.isActiveNavigation) {
-                                mapProvider.setAutoTracking(false);
-                                mapProvider.setUserPanning(true);
-                              }
-                              mapProvider.engine.onUserPannedMap();
+                              mapProvider.setAutoTracking(false);
+                              mapProvider.setUserPanning(true);
                             },
                             onUserLocationUpdated: (location) {
                               if (!mounted) return;
@@ -1274,14 +1171,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               });
                             },
                             onCameraIdle: _onCameraIdle,
-                            onCameraMove: (position) {
-                              _unlockCamera(); // 🚀 Unlock on manual gesture
-                              if (!_isPerformanceMode) {
-                                _togglePerformanceMode(
-                                    true); // 🚀 Instantly drop complexity to save CPU/GPU for the panning animation
-                              }
-                              _onCameraMove(position);
-                            },
+                            onCameraMove: _onCameraMove,
                           ),
                         ),
                       );
@@ -1833,10 +1723,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     // 1. Enable native location layer ONLY when we have a real, non-mocked coordinate and no route is active
     final mapProvider = Provider.of<MapProvider>(context, listen: false);
     if (!mapProvider.isRouteCalculated && !mapProvider.isActiveNavigation) {
-      try {
-        await mapController
-            .updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
-      } catch (_) {}
+      mapProvider.setAutoTracking(true);
     }
 
     // 2. Wait 200ms for MapLibre to mount the Blue Dot on the WebGL canvas
@@ -1897,9 +1784,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     // ✅ CASE 2: Permission Granted -> FETCH GPS & SNIPE
     final pos = locService.currentPosition;
     if (pos != null && !pos.isMocked && pos.accuracy <= 150.0) {
-      // 🚀 UNLOCK SHIELD ON MANUAL USER ACTION
-      _unlockCamera();
-
       final mapController = provider.controller ?? _tempController;
       if (mapController != null && mapController.cameraPosition != null) {
         final camPos = mapController.cameraPosition!;
