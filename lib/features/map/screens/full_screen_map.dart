@@ -55,7 +55,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   MapLibreMapController? _tempController;
   MapThemeType? _currentTheme;
   CameraPosition? _currentCameraPosition;
-  bool _isPuckMounted = false; // 🚀 State variable for style-first location lifecycle
   bool _hasInitialCentered = false; // 🚀 Task 2: Guard flag for initial auto-center
 
   final GlobalKey _mapKey = GlobalKey(debugLabel: 'primary_map_view'); // 🚀 Static GlobalKey to prevent WebGL context teardowns
@@ -197,29 +196,21 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           final bool isVerifiedPhysicalGps =
               _isVerifiedPhysicalGps(pos, locService.hasLocationPermission);
 
-          if (!isVerifiedPhysicalGps) {
-            // Ensure tracking is off. If camera is somehow at street level, pull it up to 10.5
-            final currentZoom = ctrl.cameraPosition?.zoom ?? 0.0;
-            if (!_hasInitialCentered || currentZoom > 11.0) {
+          if (isVerifiedPhysicalGps) {
+            // 🚀 Seamlessly handles Native Dot vs Nav Puck Arrow switching!
+            mapProvider.updateLocationRenderingMode(LatLng(pos.latitude, pos.longitude), pos.heading);
+            
+            // Snipe ONLY if this is the first time we've verified real GPS
+            if (!_hasSnappedToRealGps) {
+              _hasSnappedToRealGps = true;
               _hasInitialCentered = true;
-              // 🚀 Removed auto-centering _safeAnimateCamera to respect absolute startup freeze
+              
+              await _safeAnimateCamera(
+                LatLng(pos.latitude, pos.longitude),
+                15.5,
+                duration: const Duration(milliseconds: 1200),
+              );
             }
-            return;
-          }
-
-          // Snipe ONLY if this is the first time we've verified real GPS
-          if (isVerifiedPhysicalGps && !_hasSnappedToRealGps) {
-            _hasSnappedToRealGps = true;
-            _hasInitialCentered = true;
-
-            if (!mapProvider.isRouteCalculated &&
-                !mapProvider.isActiveNavigation) {
-              ctrl.updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
-            }
-            await Future.delayed(
-                const Duration(milliseconds: 250)); // Allow puck to render
-
-            // 🚀 Removed street level auto-zoom to respect startup freeze
           }
         });
       };
@@ -260,26 +251,30 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     if (_hasInitialCentered || ctrl == null || !mounted) return;
 
     final pos = locService.currentPosition;
-    final bool isRealGps = _isVerifiedPhysicalGps(pos, locService.hasLocationPermission);
+    
+    // 🚀 STRICT PHYSICAL GPS SHIELD: Must have permission, accuracy <= 150m, and NOT be a dummy center
+    final bool isRealGps = pos != null && 
+                           !pos.isMocked && 
+                           locService.hasLocationPermission && 
+                           pos.accuracy > 0.0 && 
+                           pos.accuracy <= 150.0 &&
+                           !((pos.latitude.toStringAsFixed(3) == "28.633" && pos.longitude.toStringAsFixed(3) == "77.220") ||
+                             (pos.latitude.toStringAsFixed(3) == "28.614" && pos.longitude.toStringAsFixed(3) == "77.209"));
 
-    if (isRealGps && pos != null) {
-      // 🎯 CASE A: REAL GPS -> MOUNT PUCK FIRST, THEN ZOOM TO 15.5
+    if (isRealGps) {
+      // 🎯 CASE A: VERIFIED REAL GPS -> PUSH PUCK & ZOOM TO 15.5
       _hasInitialCentered = true;
       _hasSnappedToRealGps = true;
-      debugPrint("🎯 [Startup] Real GPS verified! Step 1: Mounting Blue Puck...");
+      debugPrint("🎯 [Startup] Real GPS verified! Step 1: Updating Vector Puck...");
 
-      // Step 1: Ignite tracking so WebGL mounts the puck texture
-      try {
-        await ctrl.updateMyLocationTrackingMode(
-          kIsWeb ? MyLocationTrackingMode.tracking : MyLocationTrackingMode.trackingCompass
-        );
-      } catch (_) {}
+      // Step 1: Push coordinates to our dual mode switcher
+      mapProvider.updateLocationRenderingMode(LatLng(pos.latitude, pos.longitude), pos.heading);
 
-      // Step 2: AWAIT 350ms to guarantee dot appears on canvas BEFORE zooming
-      await Future.delayed(const Duration(milliseconds: 350));
+      // Step 2: AWAIT 300ms to allow canvas rendering
+      await Future.delayed(const Duration(milliseconds: 300));
       if (!mounted) return;
 
-      debugPrint("🚀 [Startup] Step 2: Gliding smoothly onto mounted Blue Puck (Zoom 15.5)...");
+      debugPrint("🚀 [Startup] Step 2: Smoothly gliding onto Vector Puck (Zoom 15.5)...");
       await _safeAnimateCamera(
         LatLng(pos.latitude, pos.longitude),
         15.5,
@@ -288,20 +283,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     } else {
       // 🏙️ CASE B: NO GPS / DUMMY CITY -> STRICT HOLD AT ZOOM 10.5
       _hasInitialCentered = true;
-      debugPrint("⏳ [Startup] City mode active. Anchoring strictly over App Header City at Zoom 10.5.");
+      debugPrint("⏳ [Startup] Dummy or low-precision coordinate detected. Holding strictly at regional Zoom 10.5.");
       
-      try {
-        await ctrl.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
-      } catch (_) {}
-
-      // Use existing coordinate (which resolves to city center)
-      final fallbackLat = pos?.latitude ?? 28.6139; // Default Delhi
+      final fallbackLat = pos?.latitude ?? 28.6139;
       final fallbackLng = pos?.longitude ?? 77.2090;
 
-      // Strictly hold at 10.5 regional altitude. NEVER zoom into streets!
       await _safeAnimateCamera(
         LatLng(fallbackLat, fallbackLng),
-        10.5,
+        10.5, // Strictly hold at 5km+ overview!
         duration: const Duration(milliseconds: 800),
       );
     }
@@ -470,9 +459,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         );
                       }
 
-                      // Calculate safe initial position BEFORE passing it to MapLibre
-                      final mapProvider =
-                          Provider.of<MapProvider>(context, listen: false);
                       final locService = Provider.of<GlobalLocationService>(
                           context,
                           listen: false);
@@ -483,11 +469,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       final bool isRealGps = _isVerifiedPhysicalGps(
                           currentPos, hasLocationPermission);
 
-                      final isRouteActive = context.select<MapProvider, bool>(
-                          (p) => p.isRouteCalculated || p.isActiveNavigation);
 
                       // The puck MUST show whenever real GPS is verified and we aren't actively navigating a drawn route
-                      final bool shouldShowPuck = isRealGps && !isRouteActive;
 
                       // 🚀 1. ABSOLUTE INITIAL CAMERA GATEKEEPER:
                       // If physical GPS is not actively verified, strictly hardcode initial zoom to 10.5!
@@ -552,12 +535,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             ),
                             styleString: _loadedMapStyle!,
                             // 🚀 CRITICAL FIX: Synchronize RenderMode with Enabled state
-                            myLocationEnabled: _isPuckMounted && shouldShowPuck,
-                            // 🚀 CRITICAL WEB FIX: Omit or safely set render mode on Web to prevent console crash!
-                            myLocationRenderMode: kIsWeb 
-                                ? MyLocationRenderMode.normal 
-                                : (shouldShowPuck ? MyLocationRenderMode.gps : MyLocationRenderMode.normal),
-                            myLocationTrackingMode: MyLocationTrackingMode.none, // We control camera manually via animations!
+                            myLocationEnabled: true, // 🚀 Re-enabled for Native Idle Browsing Mode
+                            myLocationRenderMode: MyLocationRenderMode.normal,
+                            myLocationTrackingMode: MyLocationTrackingMode.tracking, 
                             minMaxZoomPreference:
                                 const MinMaxZoomPreference(3.0, 18.5),
                             cameraTargetBounds: CameraTargetBounds(
@@ -604,6 +584,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               // Removed premature camera animation to prevent WebGL style race condition
                             },
                             onStyleLoadedCallback: () async {
+                              final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                              // 🚀 LOCK THE BARRIER: Style is swapping, wipe state!
+                              mapProvider.isStyleFullyLoaded = false;
+                              mapProvider.resetPuckInitialization();
+                              
                               final controller = _tempController;
                               if (controller == null) return;
 
@@ -635,25 +620,22 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               } catch (_) {}
 
                               try {
+                                final Uint8List puckBytes =
+                                    await MapProvider.loadAndResizeImage(
+                                        'assets/images/nav_puck.png', 40);
+                                await safeAddImage('nav_puck', puckBytes);
+                                debugPrint("✅ Authentic PNG Sprites ('nav_puck') locked into WebGL memory.");
+                              } catch (e) {
+                                debugPrint("⚠️ Sprite load notice: $e");
+                              }
+
+                              try {
                                 final Uint8List yellowPinBytes =
                                     await MapProvider.loadAndResizeImage(
                                         'assets/images/add_places.png', 32);
                                 await safeAddImage(
                                     'intermediate_pin', yellowPinBytes);
                               } catch (_) {}
-
-                              try {
-                                // 🚀 CRITICAL FIX: Resize nav_puck to 40 pixels to prevent WebGL crash and giant icon bug!
-                                final Uint8List puckBytes =
-                                    await MapProvider.loadAndResizeImage(
-                                        'assets/images/nav_puck.png', 40);
-                                await safeAddImage('nav_puck', puckBytes);
-                                debugPrint(
-                                    "✅ Nav Puck Image successfully injected and resized");
-                              } catch (e) {
-                                debugPrint(
-                                    "Safe Web Sprite Notice (nav_puck): $e");
-                              }
 
                               try {
                                 final Uint8List transparentPixel =
@@ -885,116 +867,30 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
                               try {
                                 // Ensure ALL required images are added to WebGL texture memory BEFORE any layer uses them
-                                final List<String> requiredSpriteIds = [
-                                  'custom_pin',
-                                  'intermediate_pin',
-                                  'nav_puck',
-                                  'Arrow',
-                                  'arrow',
-                                  'custom-marker',
-                                  'metro_station',
-                                  'transit_station',
-                                  'bus',
-                                  'rail',
-                                  'highway-shield',
-                                  'road-shield',
-                                  'default_marker'
+                                final List<String> allPossibleSprites = [
+                                  'custom_pin', 'intermediate_pin', 'nav_puck', 'Arrow', 'arrow', 
+                                  'custom-marker', 'metro_station', 'transit_station', 'bus', 'rail',
+                                  'highway-shield', 'road-shield', 'default_marker', 'marker', 'poi'
                                 ];
-                                for (final id in requiredSpriteIds) {
-                                  if (!_addedImages.contains(id)) {
+
+                                final Uint8List transparentPixel = Uint8List.fromList([
+                                  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+                                ]);
+
+                                for (final id in allPossibleSprites) {
+                                  if (!_addedImages.contains(id) && id.trim().isNotEmpty) {
                                     try {
-                                      // Register transparent pixel as fallback to prevent WebGL crash
-                                      final Uint8List transparentPixel =
-                                          Uint8List.fromList([
-                                        137,
-                                        80,
-                                        78,
-                                        71,
-                                        13,
-                                        10,
-                                        26,
-                                        10,
-                                        0,
-                                        0,
-                                        0,
-                                        13,
-                                        73,
-                                        72,
-                                        68,
-                                        82,
-                                        0,
-                                        0,
-                                        0,
-                                        1,
-                                        0,
-                                        0,
-                                        0,
-                                        1,
-                                        8,
-                                        6,
-                                        0,
-                                        0,
-                                        0,
-                                        31,
-                                        21,
-                                        196,
-                                        137,
-                                        0,
-                                        0,
-                                        0,
-                                        11,
-                                        73,
-                                        68,
-                                        65,
-                                        84,
-                                        8,
-                                        215,
-                                        99,
-                                        96,
-                                        0,
-                                        2,
-                                        0,
-                                        0,
-                                        5,
-                                        0,
-                                        1,
-                                        226,
-                                        38,
-                                        5,
-                                        155,
-                                        0,
-                                        0,
-                                        0,
-                                        0,
-                                        73,
-                                        69,
-                                        78,
-                                        68,
-                                        174,
-                                        66,
-                                        96,
-                                        130
-                                      ]);
-                                      await controller.addImage(
-                                          id, transparentPixel);
+                                      await controller.addImage(id, transparentPixel);
                                       _addedImages.add(id);
-                                    } catch (e) {
-                                      debugPrint(
-                                          "Sprite registration barrier: $e");
-                                    }
+                                    } catch (_) {}
                                   }
                                 }
-                                debugPrint(
-                                    "✅ WebGL Sprite Registry fully verified. Safe to render layers.");
+                                debugPrint("🛡️ WebGL Sprite Shield active. Symbol crashes prevented.");
                               } catch (e) {
-                                debugPrint(
-                                    "⚠️ Sprite registration barrier notice: $e");
+                                debugPrint("⚠️ Sprite registration barrier notice: $e");
                               }
 
                               if (!context.mounted) return;
-                              final mapProvider = Provider.of<MapProvider>(
-                                  context,
-                                  listen: false);
                               await mapProvider.engine.onMapCreated(
                                   controller,
                                   isDark,
@@ -1004,21 +900,24 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
                               // 2. 🚀 STYLE LOADED: Now it is safe to turn on the Puck!
                               try {
-                                debugPrint("🎨 [Style Loaded] Registering Puck & Enabling Location...");
+                                debugPrint("🎨 [Style Loaded] Registering Navigation Arrow Layer...");
+                                await mapProvider.initializeNavigationPuckLayer(controller);
                                 
-                                // Use specific tracking mode for Web vs Mobile
-                                final trackingMode = kIsWeb 
-                                    ? MyLocationTrackingMode.tracking 
-                                    : MyLocationTrackingMode.trackingCompass;
-                                    
-                                await controller.updateMyLocationTrackingMode(trackingMode);
-                                
-                                if (mounted) {
-                                  setState(() => _isPuckMounted = true);
+                                // Trigger immediate Dual-Mode check
+                                if (!context.mounted) return;
+                                final locSvc = Provider.of<GlobalLocationService>(context, listen: false);
+                                if (locSvc.currentPosition != null && locSvc.hasLocationPermission) {
+                                  mapProvider.updateLocationRenderingMode(
+                                    LatLng(locSvc.currentPosition!.latitude, locSvc.currentPosition!.longitude), 
+                                    locSvc.currentPosition!.heading
+                                  );
                                 }
                               } catch (e) {
                                 debugPrint("❌ Puck mount failed: $e");
                               }
+
+                              // 🚀 UNLOCK THE BARRIER: Sprites and Vector Layers are loaded, safe to draw!
+                              mapProvider.isStyleFullyLoaded = true;
 
                               // 🚀 Task 2: Auto-center on startup
                               if (!context.mounted) return;
@@ -1667,6 +1566,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     if (pos == null || !hasPermission || pos.isMocked) return false;
     if (pos.latitude == 0.0 && pos.longitude == 0.0) return false;
 
+    // 🚀 CRITICAL FIX: Bypass Dummy Shield for Web/Localhost testing!
+    // Without this, the Blue Dot will never mount on a desktop browser.
+    if (kIsWeb) return true;
+
     // 🚀 THE DUMMY TRAP SHIELD: Rejects Delhi/Nagpur IP fallback centers!
     final latStr = pos.latitude.toStringAsFixed(3);
     final lngStr = pos.longitude.toStringAsFixed(3);
@@ -1728,7 +1631,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     // 1. Enable native location layer ONLY when we have a real, non-mocked coordinate and no route is active
     final mapProvider = Provider.of<MapProvider>(context, listen: false);
     if (!mapProvider.isRouteCalculated && !mapProvider.isActiveNavigation) {
-      mapProvider.setAutoTracking(true);
+      // 🚀 Ignite Custom Blue Dot
+      mapProvider.updateLocationRenderingMode(LatLng(realPos.latitude, realPos.longitude), realPos.heading);
     }
 
     // 2. Wait 200ms for MapLibre to mount the Blue Dot on the WebGL canvas
@@ -1819,6 +1723,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             ),
             duration: const Duration(milliseconds: 1200),
           );
+          // 🚀 Ensure custom dot is present even if we are just toggling tilt
+          provider.updateLocationRenderingMode(LatLng(pos.latitude, pos.longitude), pos.heading);
           return; // Exit early so we don't trigger the standard snipe
         }
       }

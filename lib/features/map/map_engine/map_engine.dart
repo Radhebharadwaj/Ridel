@@ -304,7 +304,6 @@ class MapEngine {
     // 🚀 1. ABSOLUTE TOP PRIORITY: Free the camera immediately!
     try {
       if (mapController != null) {
-        await mapController!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
         // Reset tilt and bearing for a clean 2D exit state
         await mapController!.animateCamera(
           CameraUpdate.bearingTo(0.0), 

@@ -540,10 +540,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         // 🚀 TASK 1: FORCIBLY SEVER AUTO-TRACKING BEFORE CAMERA FLIGHT
         safeProvider.setAutoTracking(false);
 
-        // 🔥 CRITICAL FIX 1: Explicitly break the native MapLibre GPS tracking lock!
-        if (safeProvider.controller != null) {
-          await safeProvider.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
-        }
+        // 🔥 CRITICAL FIX 1: Explicitly break the native MapLibre GPS tracking lock! (Purged)
 
         safeProvider.setDestinationSelected(true);
         safeProvider.engine.setUIState(MapUIState.placeSelected);
@@ -770,10 +767,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
               // 🚀 TASK 1: FORCIBLY SEVER AUTO-TRACKING BEFORE CAMERA FLIGHT
               provider.setAutoTracking(false);
 
-              // 🔥 CRITICAL FIX 2: Explicitly break the native MapLibre GPS tracking lock!
-              if (provider.controller != null) {
-                await provider.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
-              }
+              // 🔥 CRITICAL FIX 2: Explicitly break the native MapLibre GPS tracking lock! (Purged)
 
               provider.setDestinationSelected(true);
               provider.engine.setUIState(MapUIState.placeSelected);

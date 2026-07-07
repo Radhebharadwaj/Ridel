@@ -60,21 +60,7 @@ class MapCameraController {
   LatLng? _currentDotPos;
 
   Future<void> _safeSetTrackingMode(MyLocationTrackingMode mode) async {
-    final pos = locService.currentPosition;
-    final bool isPhysicalGps = pos != null && !pos.isMocked && locService.hasLocationPermission;
-    final bool isRouteActive = currentMode != CameraMode.explore;
-    final bool shouldShowNativePuck = isPhysicalGps && !isRouteActive;
-
-    if (!shouldShowNativePuck && mode != MyLocationTrackingMode.none) {
-      try {
-        await map.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
-      } catch (_) {}
-      return;
-    }
-    
-    try {
-      await map.updateMyLocationTrackingMode(mode);
-    } catch (_) {}
+    // Native tracking purged
   }
 
   MapCameraController(this.map, this.locService, this.vsync) {

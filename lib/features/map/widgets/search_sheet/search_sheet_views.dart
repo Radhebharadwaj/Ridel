@@ -444,10 +444,7 @@ if (showRecentSearches)
                                                   // 🚀 TASK 1: FORCIBLY SEVER AUTO-TRACKING BEFORE CAMERA FLIGHT
                                                   safeProvider.setAutoTracking(false);
 
-                                                  // 🔥 CRITICAL FIX 3: Explicitly break the native MapLibre GPS tracking lock!
-                                                  if (safeProvider.controller != null) {
-                                                    await safeProvider.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
-                                                  }
+                                                  // 🔥 CRITICAL FIX 3: Explicitly break the native MapLibre GPS tracking lock! (Purged)
 
                                                   // 1. Set the tapped place so the bottom sheet shows the details UI
                                                   safeProvider
