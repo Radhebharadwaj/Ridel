@@ -192,24 +192,35 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           if (!mounted) return;
 
-          // Only react if we have explicit permission and a valid coordinate
-          final bool isVerifiedPhysicalGps =
-              _isVerifiedPhysicalGps(pos, locService.hasLocationPermission);
+          // 1. Always update the location puck coordinate silently in the background
+          mapProvider.updateLocationRenderingMode(LatLng(pos.latitude, pos.longitude), pos.heading);
 
-          if (isVerifiedPhysicalGps) {
-            // 🚀 Seamlessly handles Native Dot vs Nav Puck Arrow switching!
-            mapProvider.updateLocationRenderingMode(LatLng(pos.latitude, pos.longitude), pos.heading);
-            
-            // Snipe ONLY if this is the first time we've verified real GPS
-            if (!_hasSnappedToRealGps) {
-              _hasSnappedToRealGps = true;
-              _hasInitialCentered = true;
-              
-              await _safeAnimateCamera(
-                LatLng(pos.latitude, pos.longitude),
-                15.5,
-                duration: const Duration(milliseconds: 1200),
-              );
+          // 🚀 2. ABSOLUTE PRIORITY GATEKEEPER:
+          // If the user dropped a pin, selected a search result, or is navigating, strictly abort camera movements!
+          if (mapProvider.currentFocusMode == CameraFocusMode.destinationLocked ||
+              mapProvider.currentFocusMode == CameraFocusMode.routeBounds ||
+              mapProvider.currentFocusMode == CameraFocusMode.navigating ||
+              mapProvider.isUserPanning ||
+              mapProvider.targetDestination != null) {
+            return; // 🛑 STRICT STOP: Never divert camera mid-flight or away from pins!
+          }
+
+          // 3. Only animate camera to user GPS if we are strictly in userTracking mode
+          if (mapProvider.currentFocusMode == CameraFocusMode.userTracking) {
+            final bool isVerifiedPhysicalGps =
+                _isVerifiedPhysicalGps(pos, locService.hasLocationPermission);
+
+            if (isVerifiedPhysicalGps) {
+              if (!_hasSnappedToRealGps) {
+                _hasSnappedToRealGps = true;
+                _hasInitialCentered = true;
+                
+                await _safeAnimateCamera(
+                  LatLng(pos.latitude, pos.longitude),
+                  15.5,
+                  duration: const Duration(milliseconds: 1200),
+                );
+              }
             }
           }
         });
@@ -638,254 +649,25 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               } catch (_) {}
 
                               try {
-                                final Uint8List transparentPixel =
-                                    Uint8List.fromList([
-                                  137,
-                                  80,
-                                  78,
-                                  71,
-                                  13,
-                                  10,
-                                  26,
-                                  10,
-                                  0,
-                                  0,
-                                  0,
-                                  13,
-                                  73,
-                                  72,
-                                  68,
-                                  82,
-                                  0,
-                                  0,
-                                  0,
-                                  1,
-                                  0,
-                                  0,
-                                  0,
-                                  1,
-                                  8,
-                                  6,
-                                  0,
-                                  0,
-                                  0,
-                                  31,
-                                  21,
-                                  196,
-                                  137,
-                                  0,
-                                  0,
-                                  0,
-                                  11,
-                                  73,
-                                  68,
-                                  65,
-                                  84,
-                                  8,
-                                  215,
-                                  99,
-                                  96,
-                                  0,
-                                  2,
-                                  0,
-                                  0,
-                                  5,
-                                  0,
-                                  1,
-                                  226,
-                                  38,
-                                  5,
-                                  155,
-                                  0,
-                                  0,
-                                  0,
-                                  0,
-                                  73,
-                                  69,
-                                  78,
-                                  68,
-                                  174,
-                                  66,
-                                  96,
-                                  130
-                                ]);
-                                await safeAddImage('Arrow', transparentPixel);
-                              } catch (_) {}
-
-                              try {
-                                final Uint8List transparentPixel =
-                                    Uint8List.fromList([
-                                  137,
-                                  80,
-                                  78,
-                                  71,
-                                  13,
-                                  10,
-                                  26,
-                                  10,
-                                  0,
-                                  0,
-                                  0,
-                                  13,
-                                  73,
-                                  72,
-                                  68,
-                                  82,
-                                  0,
-                                  0,
-                                  0,
-                                  1,
-                                  0,
-                                  0,
-                                  0,
-                                  1,
-                                  8,
-                                  6,
-                                  0,
-                                  0,
-                                  0,
-                                  31,
-                                  21,
-                                  196,
-                                  137,
-                                  0,
-                                  0,
-                                  0,
-                                  11,
-                                  73,
-                                  68,
-                                  65,
-                                  84,
-                                  8,
-                                  215,
-                                  99,
-                                  96,
-                                  0,
-                                  2,
-                                  0,
-                                  0,
-                                  5,
-                                  0,
-                                  1,
-                                  226,
-                                  38,
-                                  5,
-                                  155,
-                                  0,
-                                  0,
-                                  0,
-                                  0,
-                                  73,
-                                  69,
-                                  78,
-                                  68,
-                                  174,
-                                  66,
-                                  96,
-                                  130
-                                ]);
-                                await safeAddImage('arrow', transparentPixel);
-                              } catch (_) {}
-
-                              try {
-                                final Uint8List transparentPixel =
-                                    Uint8List.fromList([
-                                  137,
-                                  80,
-                                  78,
-                                  71,
-                                  13,
-                                  10,
-                                  26,
-                                  10,
-                                  0,
-                                  0,
-                                  0,
-                                  13,
-                                  73,
-                                  72,
-                                  68,
-                                  82,
-                                  0,
-                                  0,
-                                  0,
-                                  1,
-                                  0,
-                                  0,
-                                  0,
-                                  1,
-                                  8,
-                                  6,
-                                  0,
-                                  0,
-                                  0,
-                                  31,
-                                  21,
-                                  196,
-                                  137,
-                                  0,
-                                  0,
-                                  0,
-                                  11,
-                                  73,
-                                  68,
-                                  65,
-                                  84,
-                                  8,
-                                  215,
-                                  99,
-                                  96,
-                                  0,
-                                  2,
-                                  0,
-                                  0,
-                                  5,
-                                  0,
-                                  1,
-                                  226,
-                                  38,
-                                  5,
-                                  155,
-                                  0,
-                                  0,
-                                  0,
-                                  0,
-                                  73,
-                                  69,
-                                  78,
-                                  68,
-                                  174,
-                                  66,
-                                  96,
-                                  130
-                                ]);
-                                await safeAddImage(
-                                    'custom-marker', transparentPixel);
-                              } catch (e) {
-                                debugPrint("Sprite pre-load handled: $e");
-                              }
-
-                              try {
-                                // Ensure ALL required images are added to WebGL texture memory BEFORE any layer uses them
-                                final List<String> allPossibleSprites = [
+                                final List<String> mandatorySprites = [
                                   'custom_pin', 'intermediate_pin', 'nav_puck', 'Arrow', 'arrow', 
                                   'custom-marker', 'metro_station', 'transit_station', 'bus', 'rail',
-                                  'highway-shield', 'road-shield', 'default_marker', 'marker', 'poi'
+                                  'highway-shield', 'road-shield', 'default_marker', 'marker', 'poi', ''
                                 ];
 
                                 final Uint8List transparentPixel = Uint8List.fromList([
                                   137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
                                 ]);
 
-                                for (final id in allPossibleSprites) {
-                                  if (!_addedImages.contains(id) && id.trim().isNotEmpty) {
+                                for (final id in mandatorySprites) {
+                                  if (!_addedImages.contains(id) && id.isNotEmpty) {
                                     try {
                                       await controller.addImage(id, transparentPixel);
                                       _addedImages.add(id);
                                     } catch (_) {}
                                   }
                                 }
-                                debugPrint("🛡️ WebGL Sprite Shield active. Symbol crashes prevented.");
+                                debugPrint("🛡️ [WebGL Shield] Pre-loaded mandatory fallback sprites.");
                               } catch (e) {
                                 debugPrint("⚠️ Sprite registration barrier notice: $e");
                               }
@@ -1008,20 +790,28 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 return;
                               }
 
-                              // 🚀 Free the camera from blue dot
-                              mapProvider.setAutoTracking(false);
-                              mapProvider.setUserPanning(true);
-
-                              // 🚀 EXCLUSIVE PIN DROP DELEGATION
+                              // 🚀 2. Set Pin Destination State
                               if (mapProvider.mapSelectionPlaceType != null) {
                                 mapProvider.setTargetDestination(coordinates);
-                                mapProvider
-                                    .addNativeDestinationPin(coordinates);
-                                return;
+                                mapProvider.addNativeDestinationPin(coordinates);
+                                
+                                // 🚀 FLY CAMERA IMMEDIATELY AFTER DROPPING PIN
+                                mapProvider.focusOnDestination(coordinates, zoom: 16.0);
+                                return; // Strict early return to bypass routing
+                              } else {
+                                // Wrap long press handling in try-catch to prevent 404 reverse-geocode crashes!
+                                try {
+                                  mapProvider.handleMapLongPress(coordinates);
+                                } catch (e) {
+                                  debugPrint("⚠️ Reverse geocode notice (suppressed crash): $e");
+                                }
+                                
+                                // 🚀 FLY CAMERA IMMEDIATELY AFTER DROPPING PIN
+                                mapProvider.focusOnDestination(coordinates, zoom: 16.0);
                               }
 
-                              // 1. Always allow placing the visual destination pin and UI sheet!
-                              mapProvider.handleMapLongPress(coordinates);
+                              // 🚀 STRICT ASYNC GAP GUARD: Prevents build context errors!
+                              if (!context.mounted) return;
 
                               // 2. Only attempt auto-routing if physical GPS is actively verified
                               final locService =
@@ -1420,17 +1210,52 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         MediaQuery.sizeOf(context).height;
                     const double buttonGap = 16.0;
 
-                    // This formula guarantees the buttons ALWAYS stay exactly 'buttonGap'
-                    // distance above the top edge of the sheet.
-                    final double dynamicBottomPosition =
-                        (screenHeight * progress) + buttonGap;
+                    // 🚀 EXACT VISUAL SYNC: Reconstruct the sheet's internal height logic
+                    final double extentHeight = screenHeight * progress;
+                    final double safeMinS = (70.0 + 44.0) / screenHeight; 
+                    final bool isClosedMode = progress <= (safeMinS + 0.05);
+                    final bool isFullyOpen = progress >= (0.90 - 0.02);
+
+                    final provider = Provider.of<MapProvider>(context, listen: false);
+                    final bool isNav = provider.isActiveNavigation;
+                    // Infer Directions View: Route calculated/calculating but NOT navigating
+                    final bool isDirectionsView = (provider.isRouteCalculated || provider.isCalculatingRoute || provider.currentRouteResult != null) && !isNav;
+
+                    double visualSheetHeight;
+
+                    if (isNav) {
+                        visualSheetHeight = extentHeight; // Navigation overlay takes full extent
+                    } else {
+                        // Replicate exact margins from map_search_sheet
+                        final double bottomMargin = isFullyOpen 
+                            ? 0.0 
+                            : (isClosedMode ? 44.0 : 16.0 + MediaQuery.paddingOf(context).bottom);
+                            
+                        double shellHeight;
+                        if (isDirectionsView) {
+                            shellHeight = 190.0; // Locked height for directions header
+                        } else if (isClosedMode) {
+                            shellHeight = 70.0;
+                        } else if (isFullyOpen) {
+                            shellHeight = extentHeight;
+                        } else {
+                            shellHeight = extentHeight - 44.0; // The internal shell shrink factor
+                        }
+                        
+                        visualSheetHeight = shellHeight + bottomMargin;
+                    }
+
+                    // Buttons will now perfectly track the visual glass edge at 60fps
+                    final double dynamicBottomPosition = visualSheetHeight + buttonGap;
 
                     final opacity = (progress <= 0.45)
                         ? 1.0
                         : (1.0 - ((progress - 0.45) / (0.90 - 0.45)))
                             .clamp(0.0, 1.0);
 
-                    return Positioned(
+                    return AnimatedPositioned(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOutCubic,
                       bottom: dynamicBottomPosition,
                       right: 16.0,
                       child: Opacity(
@@ -1623,13 +1448,17 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   }
 
   Future<void> _igniteBlueDotAndSnipe(Position realPos) async {
-    final mapController =
-        Provider.of<MapProvider>(context, listen: false).controller ??
-            _tempController;
+    final mapProvider = Provider.of<MapProvider>(context, listen: false);
+    final mapController = mapProvider.controller ?? _tempController;
     if (!mounted || mapController == null) return;
 
+    // 🚀 LOWER THE SHIELD: User explicitly wants to go back to their live GPS!
+    mapProvider.isDestinationLocked = false;
+    mapProvider.setUserPanning(false);
+    mapProvider.setAutoTracking(true);
+    mapProvider.setCameraFocusMode(CameraFocusMode.userTracking);
+
     // 1. Enable native location layer ONLY when we have a real, non-mocked coordinate and no route is active
-    final mapProvider = Provider.of<MapProvider>(context, listen: false);
     if (!mapProvider.isRouteCalculated && !mapProvider.isActiveNavigation) {
       // 🚀 Ignite Custom Blue Dot
       mapProvider.updateLocationRenderingMode(LatLng(realPos.latitude, realPos.longitude), realPos.heading);
@@ -1707,6 +1536,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
         // 🚀 UX MAGIC: If already centered (< 50 meters), toggle the 3D Tilt!
         if (distanceInMeters < 50.0) {
+          // 🚀 LOWER THE SHIELD: User explicitly wants to go back to their live GPS!
+          provider.isDestinationLocked = false;
+          provider.setUserPanning(false);
+          provider.setAutoTracking(true);
+          provider.setCameraFocusMode(CameraFocusMode.userTracking);
+
           final double currentTilt = camPos.tilt;
           final double targetTilt = currentTilt > 30.0 ? 0.0 : 60.0; // Toggle Flat vs 3D
           

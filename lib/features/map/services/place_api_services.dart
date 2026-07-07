@@ -115,9 +115,11 @@ class PlaceEnrichmentService {
           _saveToCache(_geocodeCache, cacheKey, place);
           return place;
         }
+      } else {
+        throw Exception("HTTP ${response?.statusCode ?? 'Network Error'}");
       }
     } catch (e) {
-      debugPrint("⚠️ Reverse Geocoding Error: $e");
+      debugPrint("🛑 [Reverse Geocode] Suppressed 404/Network error: $e");
     }
     return _createFallbackPin(lat, lng);
   }

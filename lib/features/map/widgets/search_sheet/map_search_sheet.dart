@@ -1501,7 +1501,15 @@ snapAnimationDuration:
                                                       margin: EdgeInsets.only(
                                                         left: isFullyOpen ? 0.0 : (isClosedMode ? 24.0 : 16.0),
                                                         right: isFullyOpen ? 0.0 : (isClosedMode ? 24.0 : 16.0),
-                                                        bottom: isFullyOpen ? 0.0 : 44.0, // 👉 Strictly locked floor margin, except fully open
+                                                        // 🚀 THE PERFECT PREMIUM FIX:
+                                                        // - isFullyOpen: Flush to screen (0.0)
+                                                        // - isClosedMode: Stays at the original 44.0 to preserve the idle look.
+                                                        // - Mid-State: Smoothly expands to 16.0 (matching the sides) + bottom safe area to clear the home bar.
+                                                        bottom: isFullyOpen 
+                                                            ? 0.0 
+                                                            : (isClosedMode 
+                                                                ? 44.0 
+                                                                : 16.0 + MediaQuery.paddingOf(context).bottom),
                                                       ),
                                                       decoration: BoxDecoration(
                                                         borderRadius: BorderRadius.circular(35.0),

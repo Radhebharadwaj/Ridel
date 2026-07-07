@@ -25,10 +25,27 @@ import 'package:ridel/features/map/services/route_engine_service.dart';
 import 'package:ridel/features/map/map_engine/controllers/map_camera_controller.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 
+// 🚀 ISOLATED STATE MACHINE: Sets strict ownership of the MapLibre camera
+enum CameraFocusMode {
+  userTracking,      // Priority 1: Follows live GPS Blue Dot
+  routeBounds,       // Priority 2: Showing entire route polyline overview
+  navigating,        // Priority 3: Turn-by-turn 3D tracking
+  destinationLocked, // Priority 4 (MAX): Strictly locked on Dropped Pin / Search Result
+}
+
 class MapProvider extends ChangeNotifier {
   final MapEngine engine = MapEngine();
   final RouteEngineService _routingService = RouteEngineService();
   int _routingSessionCounter = 0;
+
+  // 🚀 CAMERA FOCUS STATE MACHINE
+  CameraFocusMode currentFocusMode = CameraFocusMode.userTracking;
+
+  void setCameraFocusMode(CameraFocusMode newMode) {
+    debugPrint("🛡️ [Camera State Machine] Switching Focus Mode: $currentFocusMode -> $newMode");
+    currentFocusMode = newMode;
+    notifyListeners();
+  }
 
   // 🚀 STYLE BARRIER FLAGS
   bool isStyleFullyLoaded = false;
@@ -699,6 +716,8 @@ class MapProvider extends ChangeNotifier {
 
     isActiveNavigation = true;
     isAutoTracking = true;
+    isDestinationLocked = false;
+    setCameraFocusMode(CameraFocusMode.navigating);
 
     if (_currentRouteResult != null && targetDestination != null) {
       await engine.startActiveNavigation(
@@ -1145,28 +1164,34 @@ class MapProvider extends ChangeNotifier {
 
     // 5. Adjust Camera to fit the PRIMARY route
     if (allRoutes.isNotEmpty) {
-      try {
-        await controller!.animateCamera(
-          CameraUpdate.newLatLngBounds(
-            _calculateBounds(allRoutes.first),
-            bottom: 380,
-            left: 50,
-            right: 50,
-            top: 100,
-          ),
-          duration: const Duration(milliseconds: 1000),
-        );
-      } catch (e) {
-        debugPrint(
-            "⚠️ Bounds fit failed (screen too small), falling back to center focus: $e");
-        // Fallback to center point
-        final bounds = _calculateBounds(allRoutes.first);
-        final centerLat =
-            (bounds.southwest.latitude + bounds.northeast.latitude) / 2;
-        final centerLng =
-            (bounds.southwest.longitude + bounds.northeast.longitude) / 2;
-        await controller!.animateCamera(CameraUpdate.newCameraPosition(
-            CameraPosition(target: LatLng(centerLat, centerLng), zoom: _getClampedZoom(12.0))));
+      // 🚀 ROUTE GATEKEEPER: Only animate to route bounds if destination is NOT strictly locked by the user!
+      if (currentFocusMode != CameraFocusMode.destinationLocked && !isDestinationLocked && !_isUserPanning) {
+        setCameraFocusMode(CameraFocusMode.routeBounds);
+        try {
+          await controller!.animateCamera(
+            CameraUpdate.newLatLngBounds(
+              _calculateBounds(allRoutes.first),
+              bottom: 380,
+              left: 50,
+              right: 50,
+              top: 100,
+            ),
+            duration: const Duration(milliseconds: 1000),
+          );
+        } catch (e) {
+          debugPrint(
+              "⚠️ Bounds fit failed (screen too small), falling back to center focus: $e");
+          // Fallback to center point
+          final bounds = _calculateBounds(allRoutes.first);
+          final centerLat =
+              (bounds.southwest.latitude + bounds.northeast.latitude) / 2;
+          final centerLng =
+              (bounds.southwest.longitude + bounds.northeast.longitude) / 2;
+          await controller!.animateCamera(CameraUpdate.newCameraPosition(
+              CameraPosition(target: LatLng(centerLat, centerLng), zoom: _getClampedZoom(12.0))));
+        }
+      } else {
+        debugPrint("🛡️ [Route Gatekeeper] Polyline drawn silently. Maintaining Destination Lock!");
       }
     }
 
@@ -1507,6 +1532,8 @@ class MapProvider extends ChangeNotifier {
     isActiveNavigation = false;
     setAutoTracking(false);
     setUserPanning(false);
+    isDestinationLocked = false;
+    setCameraFocusMode(CameraFocusMode.userTracking);
 
     try { engine.navigation.stopNavigation(); } catch (_) {}
 
@@ -1677,6 +1704,40 @@ class MapProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 🚀 ISOLATED PROPERTY: The Unbreakable Destination Lock
+  bool isDestinationLocked = false;
+
+  // 🚀 ISOLATED MODULE: Guaranteed Camera Focus Engine
+  Future<void> focusOnDestination(LatLng target, {double zoom = 16.0}) async {
+    if (controller == null) return;
+
+    debugPrint("🎯 [Focus Engine] Locking camera on target: ${target.latitude}, ${target.longitude}");
+
+    // 🚀 1. ASSERT MAXIMUM PRIORITY IMMEDIATELY
+    setCameraFocusMode(CameraFocusMode.destinationLocked);
+    isDestinationLocked = true;
+    _isUserPanning = true;
+    isAutoTracking = false;
+
+    // 2. Sever native tracking so MapLibre doesn't fight our animation
+    try {
+      await controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+    } catch (_) {}
+
+    // 3. 50ms microtask buffer to allow GPU texture stabilization
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    // 4. Fly smoothly to destination without interference
+    try {
+      await controller!.animateCamera(
+        CameraUpdate.newLatLngZoom(target, zoom),
+        duration: const Duration(milliseconds: 1000),
+      );
+    } catch (e) {
+      debugPrint("❌ Camera flight notice: $e");
+    }
+  }
+
   bool isFlying = false;
 
   String? mapSelectionPlaceType;
@@ -1833,6 +1894,8 @@ class MapProvider extends ChangeNotifier {
   }
 
   void startTurnByTurnNavigation() {
+    isDestinationLocked = false;
+    setCameraFocusMode(CameraFocusMode.navigating);
     if (_lastRouteData != null) {
       engine.navigation.startNavigation(_lastRouteData!);
 
@@ -2211,6 +2274,8 @@ class MapProvider extends ChangeNotifier {
     await engine.resetUIState();
     _lastRouteData = null;
     isActiveNavigation = false;
+    isDestinationLocked = false;
+    setCameraFocusMode(CameraFocusMode.userTracking);
 
     notifyListeners(); // Force UI components and FAB to revert to standard states
     debugPrint("Map session completely cleared.");
@@ -2848,8 +2913,6 @@ class MapProvider extends ChangeNotifier {
   Future<void> flyToPlace(double lat, double lng) async {
     if (!_isMapReady) return;
 
-    // Native tracking purged
-
     final target = LatLng(lat, lng);
     targetDestination = target;
 
@@ -2862,24 +2925,6 @@ class MapProvider extends ChangeNotifier {
     notifyListeners(); // 🧭 Triggers Consumer → AnimatedMapPin overlay appears
 
     try {
-      // 🚀 TASK 2: Execute a cinematic flight strictly to the destination pin
-      Future.microtask(() async {
-        if (controller != null) {
-          await controller!.animateCamera(
-            CameraUpdate.newCameraPosition(
-              CameraPosition(
-                target: LatLng(
-                    lat, lng), // strictly center on the PIN, not the user!
-                zoom: _getClampedZoom(16.0), // Clean, immersive street-level zoom
-                tilt: 0.0, // Clean flat cartographic angle
-                bearing: 0.0, // North-up alignment
-              ),
-            ),
-            duration:
-                const Duration(milliseconds: 800), // Silky-smooth 60FPS glide
-          );
-        }
-      });
 
       // Clear existing pin if any
       if (_droppedPinSymbol != null && controller != null) {
@@ -2899,6 +2944,9 @@ class MapProvider extends ChangeNotifier {
             zIndex: 998,
           ),
         );
+
+        // 🚀 FLY CAMERA IMMEDIATELY AFTER SELECTING SEARCH RESULT
+        focusOnDestination(target, zoom: 16.0);
 
         // 2. Sway Left
         Future.delayed(const Duration(milliseconds: 150), () async {
