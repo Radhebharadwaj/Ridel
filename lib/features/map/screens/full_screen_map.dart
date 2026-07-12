@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/core/map/map_style_helper.dart';
+import 'package:ridel/core/map/map_style_interceptor.dart';
 import 'package:ridel/features/map/map_engine/map_engine.dart';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
@@ -45,7 +46,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     with TickerProviderStateMixin {
   bool _hasSnappedToRealGps = false; // 🚀 Reactive GPS snap guard
   static int mapBuildCount = 0;
-  final Set<String> _addedImages = {};
+  // 1. Instance-level cache, NOT static!
+  final Set<String> _verifiedTextures = {};
   late AnimationController _fadeScaleController;
   String? _loadedMapStyle;
 
@@ -55,9 +57,23 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   MapLibreMapController? _tempController;
   MapThemeType? _currentTheme;
   CameraPosition? _currentCameraPosition;
-  bool _hasInitialCentered = false; // 🚀 Task 2: Guard flag for initial auto-center
+  bool _hasInitialCentered =
+      false; // 🚀 Task 2: Guard flag for initial auto-center
+  bool _isCameraLocked = true; // NEW: Global Lock for camera
 
-  final GlobalKey _mapKey = GlobalKey(debugLabel: 'primary_map_view'); // 🚀 Static GlobalKey to prevent WebGL context teardowns
+  void _unlockCamera() {
+    if (mounted && _isCameraLocked) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() => _isCameraLocked = false);
+        }
+      });
+    }
+  }
+
+  final GlobalKey _mapKey = GlobalKey(
+      debugLabel:
+          'primary_map_view'); // 🚀 Static GlobalKey to prevent WebGL context teardowns
 
   final ValueNotifier<bool> _showScaleBarNotifier = ValueNotifier(false);
   Timer? _scaleBarTimer;
@@ -75,7 +91,62 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   }
 
   void _onCameraIdle() {
-    _onCameraIdleScaleBar(); // 🚀 Only call the helper, removed the 40 lines of duplicate math!
+    _onCameraIdleScaleBar();
+
+    // 🚀 Update the LocationProvider so the rest of the app knows where the map is
+    if (_currentCameraPosition != null) {
+      final cam = _currentCameraPosition!;
+      final currentZoom = cam.zoom;
+      final lat = cam.target.latitude;
+
+      double metersPerPixel =
+          156543.03392 * cos(lat * pi / 180.0) / pow(2, currentZoom);
+      double maxPixelWidth = 80.0;
+      double maxMeters = metersPerPixel * maxPixelWidth;
+
+      const scaleValues = [
+        10,
+        20,
+        50,
+        100,
+        200,
+        500,
+        1000,
+        2000,
+        5000,
+        10000,
+        20000,
+        50000,
+        100000,
+        200000,
+        500000,
+        1000000
+      ];
+
+      int chosenMeters = 10;
+      for (int v in scaleValues) {
+        if (v <= maxMeters) {
+          chosenMeters = v;
+        } else {
+          break;
+        }
+      }
+
+      double newWidth = chosenMeters / metersPerPixel;
+      String newText = chosenMeters >= 1000
+          ? '${chosenMeters ~/ 1000} km'
+          : '$chosenMeters m';
+
+      if (!mounted) return;
+      _showScaleBarNotifier.value = true;
+      _scaleTextNotifier.value = newText;
+      _scaleWidthNotifier.value = newWidth.clamp(20.0, 150.0);
+
+      _scaleBarTimer?.cancel();
+      _scaleBarTimer = Timer(const Duration(milliseconds: 1500), () {
+        if (mounted) _showScaleBarNotifier.value = false;
+      });
+    }
 
     // 🚀 Defer the state update until AFTER the current rendering frame finishes
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -92,13 +163,15 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           }
 
           // Notify engine about zoom updates for UI scaling
-          if (_currentCameraPosition != null) {
-            mapProvider.updateMapCenter(
-                _currentCameraPosition!.target, _currentCameraPosition!.zoom);
-          } else {
-            final cam = ctrl.cameraPosition;
-            if (cam != null) {
-              mapProvider.updateMapCenter(cam.target, cam.zoom);
+          if (mapProvider.currentFocusMode != CameraFocusMode.destinationLocked) {
+            if (_currentCameraPosition != null) {
+              mapProvider.updateMapCenter(
+                  _currentCameraPosition!.target, _currentCameraPosition!.zoom);
+            } else {
+              final cam = ctrl.cameraPosition;
+              if (cam != null) {
+                mapProvider.updateMapCenter(cam.target, cam.zoom);
+              }
             }
           }
         } catch (_) {}
@@ -117,7 +190,24 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       double maxPixelWidth = 80.0;
       double maxMeters = metersPerPixel * maxPixelWidth;
 
-      const scaleValues = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000];
+      const scaleValues = [
+        10,
+        20,
+        50,
+        100,
+        200,
+        500,
+        1000,
+        2000,
+        5000,
+        10000,
+        20000,
+        50000,
+        100000,
+        200000,
+        500000,
+        1000000
+      ];
 
       int chosenMeters = 10;
       for (int v in scaleValues) {
@@ -145,11 +235,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     }
   }
 
-  // 🚀 CLASS-LEVEL LISTENER REFERENCES FOR DISPOSE
-  late VoidCallback _onMapProviderUpdated;
-  late VoidCallback _onLocServiceUpdated;
-  late VoidCallback _onLocServiceCityNameUpdated;
-
   @override
   void initState() {
     super.initState();
@@ -167,74 +252,72 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       _initializeApp();
 
       final mapProvider = Provider.of<MapProvider>(context, listen: false);
-      
-      // 🚀 ASSIGN TO CLASS FIELD
-      _onMapProviderUpdated = () {
-        if (!_hasInitialCentered) {
-          if (mapProvider.currentLocation != null) {
+      mapProvider.addListener(() {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_hasInitialCentered && mapProvider.currentLocation != null) {
             _attemptInitialCameraCenter();
           }
-        }
-      };
-      mapProvider.addListener(_onMapProviderUpdated);
+        });
+      });
 
       // 🚀 REACTIVE PERMISSION HOOK: Snap to real GPS the instant it arrives
       final locService =
           Provider.of<GlobalLocationService>(context, listen: false);
-          
-      // 🚀 ASSIGN TO CLASS FIELD
-      _onLocServiceUpdated = () {
-        if (!mounted) return;
+      locService.addListener(() {
         final pos = locService.currentPosition;
         final ctrl = mapProvider.controller ?? _tempController;
         if (pos == null || ctrl == null) return;
 
+
+
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           if (!mounted) return;
 
-          // 1. Always update the location puck coordinate silently in the background
-          mapProvider.updateLocationRenderingMode(LatLng(pos.latitude, pos.longitude), pos.heading);
+          // Only react if we have explicit permission and a valid coordinate
+          final bool isVerifiedPhysicalGps =
+              _isVerifiedPhysicalGps(pos, locService.hasLocationPermission);
 
-          // 🚀 2. ABSOLUTE PRIORITY GATEKEEPER:
-          // If the user dropped a pin, selected a search result, or is navigating, strictly abort camera movements!
-          if (mapProvider.currentFocusMode == CameraFocusMode.destinationLocked ||
-              mapProvider.currentFocusMode == CameraFocusMode.routeBounds ||
-              mapProvider.currentFocusMode == CameraFocusMode.navigating ||
-              mapProvider.isUserPanning ||
-              mapProvider.targetDestination != null) {
-            return; // 🛑 STRICT STOP: Never divert camera mid-flight or away from pins!
+          if (!isVerifiedPhysicalGps) {
+            // Ensure tracking is off. If camera is somehow at street level, pull it up to 10.5
+            try {
+              ctrl.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+            } catch (_) {}
+            final currentZoom = ctrl.cameraPosition?.zoom ?? 0.0;
+            if (!_hasInitialCentered || currentZoom > 11.0) {
+              _hasInitialCentered = true;
+              // 🚀 Removed auto-centering _safeAnimateCamera to respect absolute startup freeze
+            }
+            return;
           }
 
-          // 3. Only animate camera to user GPS if we are strictly in userTracking mode
-          if (mapProvider.currentFocusMode == CameraFocusMode.userTracking) {
-            final bool isVerifiedPhysicalGps =
-                _isVerifiedPhysicalGps(pos, locService.hasLocationPermission);
+          // Snipe ONLY if this is the first time we've verified real GPS
+          if (isVerifiedPhysicalGps && !_hasSnappedToRealGps) {
+            _hasSnappedToRealGps = true;
+            _hasInitialCentered = true;
 
-            if (isVerifiedPhysicalGps) {
-              if (!_hasSnappedToRealGps) {
-                _hasSnappedToRealGps = true;
-                _hasInitialCentered = true;
-                
-                await _safeAnimateCamera(
-                  LatLng(pos.latitude, pos.longitude),
-                  15.5,
-                  duration: const Duration(milliseconds: 1200),
-                );
-              }
+            if (!mapProvider.isRouteCalculated &&
+                !mapProvider.isActiveNavigation) {
+              try {
+                ctrl.updateMyLocationTrackingMode(
+                    MyLocationTrackingMode.tracking);
+              } catch (_) {}
             }
+            await Future.delayed(
+                const Duration(milliseconds: 250)); // Allow puck to render
+
+            // 🚀 Removed street level auto-zoom to respect startup freeze
           }
         });
-      };
-      locService.addListener(_onLocServiceUpdated);
-      
-      // 🚀 ASSIGN TO CLASS FIELD
-      _onLocServiceCityNameUpdated = () {
-        if (!mounted) return;
+      });
+
+      locService.currentCityName.addListener(() {
         final cityName = locService.currentCityName.value;
         final pos = locService.currentPosition;
-        final ctrl = mapProvider.controller ?? _tempController;
+        final ctrl =
+            Provider.of<MapProvider>(context, listen: false).controller ??
+                _tempController;
 
-        if (ctrl == null || cityName.trim().isEmpty) return;
+        if (ctrl == null || !mounted || cityName.trim().isEmpty) return;
 
         // 🛡️ GOLDEN RULE: If we lack verified high-precision physical GPS (< 100m accuracy + permission),
         // we MUST anchor over the resolved App Header city at strictly Zoom 10.5 (5km scale)!
@@ -247,63 +330,64 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
           debugPrint(
               "🏙️ [Header City Anchor] Header resolved '$cityName'. Anchoring camera at 5km regional overview (Zoom 10.5).");
         }
-      };
-      locService.currentCityName.addListener(_onLocServiceCityNameUpdated);
+      });
     });
   }
 
-
-
   Future<void> _attemptInitialCameraCenter() async {
     final mapProvider = Provider.of<MapProvider>(context, listen: false);
-    final locService = Provider.of<GlobalLocationService>(context, listen: false);
-    final ctrl = _tempController ?? mapProvider.controller;
-    
-    if (_hasInitialCentered || ctrl == null || !mounted) return;
+    if (_hasInitialCentered || _tempController == null) return;
 
-    final pos = locService.currentPosition;
-    
-    // 🚀 STRICT PHYSICAL GPS SHIELD: Must have permission, accuracy <= 150m, and NOT be a dummy center
-    final bool isRealGps = pos != null && 
-                           !pos.isMocked && 
-                           locService.hasLocationPermission && 
-                           pos.accuracy > 0.0 && 
-                           pos.accuracy <= 150.0 &&
-                           !((pos.latitude.toStringAsFixed(3) == "28.633" && pos.longitude.toStringAsFixed(3) == "77.220") ||
-                             (pos.latitude.toStringAsFixed(3) == "28.614" && pos.longitude.toStringAsFixed(3) == "77.209"));
 
-    if (isRealGps) {
-      // 🎯 CASE A: VERIFIED REAL GPS -> PUSH PUCK & ZOOM TO 15.5
+    final location = mapProvider.currentLocation;
+    if (location != null && location.latitude != 0.0) {
       _hasInitialCentered = true;
-      _hasSnappedToRealGps = true;
-      debugPrint("🎯 [Startup] Real GPS verified! Step 1: Updating Vector Puck...");
+      final locService =
+          Provider.of<GlobalLocationService>(context, listen: false);
+      final bool isPhysicalGps = _isVerifiedPhysicalGps(
+          locService.currentPosition, locService.hasLocationPermission);
 
-      // Step 1: Push coordinates to our dual mode switcher
-      mapProvider.updateLocationRenderingMode(LatLng(pos.latitude, pos.longitude), pos.heading);
+      try {
+        await Future.delayed(const Duration(milliseconds: 150));
+        if (!mounted) return;
 
-      // Step 2: AWAIT 300ms to allow canvas rendering
-      await Future.delayed(const Duration(milliseconds: 300));
-      if (!mounted) return;
+        if (isPhysicalGps && !_hasSnappedToRealGps) {
+          // 🚀 STAGE 1: VERIFIED HIGH-PRECISION GPS -> Allow Street Snipe
+          _hasSnappedToRealGps = true;
+          // Unlock the shield
+          if (!mapProvider.isRouteCalculated &&
+              !mapProvider.isActiveNavigation) {
+            try {
+              await _tempController!.updateMyLocationTrackingMode(
+                  MyLocationTrackingMode.tracking);
+            } catch (_) {}
+          }
+          await Future.delayed(const Duration(milliseconds: 250));
+          if (!mounted) return;
 
-      debugPrint("🚀 [Startup] Step 2: Smoothly gliding onto Vector Puck (Zoom 15.5)...");
-      await _safeAnimateCamera(
-        LatLng(pos.latitude, pos.longitude),
-        15.5,
-        duration: const Duration(milliseconds: 1400),
-      );
-    } else {
-      // 🏙️ CASE B: NO GPS / DUMMY CITY -> STRICT HOLD AT ZOOM 10.5
-      _hasInitialCentered = true;
-      debugPrint("⏳ [Startup] Dummy or low-precision coordinate detected. Holding strictly at regional Zoom 10.5.");
-      
-      final fallbackLat = pos?.latitude ?? 28.6139;
-      final fallbackLng = pos?.longitude ?? 77.2090;
-
-      await _safeAnimateCamera(
-        LatLng(fallbackLat, fallbackLng),
-        10.5, // Strictly hold at 5km+ overview!
-        duration: const Duration(milliseconds: 800),
-      );
+          await _safeAnimateCamera(
+            LatLng(location.latitude, location.longitude),
+            15.5,
+            duration: const Duration(milliseconds: 1200),
+          );
+        } else {
+          // 🚀 STAGE 2: UNPERMISSIONED OR LOW-PRECISION IP -> Strictly hold at 5km+ altitude
+          debugPrint(
+              "⏳ [Startup] Low precision or unpermissioned. Anchoring at regional zoom 10.5.");
+          // Keep shield locked!
+          try {
+            await _tempController!
+                .updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+          } catch (_) {}
+          await _safeAnimateCamera(
+            LatLng(location.latitude, location.longitude),
+            10.5,
+            duration: const Duration(milliseconds: 800),
+          );
+        }
+      } catch (e) {
+        debugPrint("❌ Initial camera snap intercepted: $e");
+      }
     }
   }
 
@@ -318,26 +402,38 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     // 3. Check kar ki kya chabi sach mein aayi?
     if (AppConfig.olaMapsKey.isNotEmpty && AppConfig.olaMapsKey != "2") {
       if (mounted) {
-        setState(() {
-          _isMapReadyToLoad = true; // Chabi mil gayi, ab map dikha
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _isMapReadyToLoad = true; // Chabi mil gayi, ab map dikha
+            });
+          }
         });
       }
       await _initMapStyle();
     } else {
       debugPrint("CRITICAL ERROR: Key fetch fail ho gayi ya null hai!");
       if (mounted) {
-        setState(() {
-          _hasMapError = true;
-          _isMapReadyToLoad =
-              true; // Show the map error UI instead of loader loop
-          _isMapReady = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _hasMapError = true;
+              _isMapReadyToLoad =
+                  true; // Show the map error UI instead of loader loop
+              _isMapReady = true;
+            });
+          }
         });
       }
     }
 
     if (mounted) {
-      setState(() {
-        _isMapReady = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _isMapReady = true;
+          });
+        }
       });
     }
   }
@@ -362,15 +458,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   void dispose() {
     debugPrint(
         "🛠️ MAP LIFECYCLE: dispose called. WebGL context tearing down.");
-        
-    try {
-      final mapProvider = Provider.of<MapProvider>(context, listen: false);
-      mapProvider.removeListener(_onMapProviderUpdated);
-      final locService = Provider.of<GlobalLocationService>(context, listen: false);
-      locService.removeListener(_onLocServiceUpdated);
-      locService.currentCityName.removeListener(_onLocServiceCityNameUpdated);
-    } catch (_) {}
-
     _tempController?.dispose();
     _showScaleBarNotifier.dispose();
     _scaleTextNotifier.dispose();
@@ -410,17 +497,24 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       final isDark = _currentTheme != null
           ? (_currentTheme == MapThemeType.dark)
           : isSystemDark;
-      final style = await MapStyleHelper.getOlaStyle(isSystemDark,
+      final styleUrl = await MapStyleHelper.getOlaStyle(isSystemDark,
           themeType: _currentTheme);
+      
+      // 🚀 THE CURE: Intercept and sterilize the style JSON over the network
+      final curedJson = await MapStyleInterceptor.getCuredStyle(styleUrl);
 
       if (mounted) {
-        setState(() {
-          _loadedMapStyle = style;
-        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _loadedMapStyle = curedJson;
+            });
 
-        final themeToSet =
-            _currentTheme ?? (isDark ? MapThemeType.dark : MapThemeType.light);
-        Provider.of<MapProvider>(context, listen: false).setTheme(themeToSet);
+            final themeToSet =
+                _currentTheme ?? (isDark ? MapThemeType.dark : MapThemeType.light);
+            Provider.of<MapProvider>(context, listen: false).setTheme(themeToSet);
+          }
+        });
       }
     } catch (e) {
       debugPrint("❌ Error fixing Ola Style: $e");
@@ -439,8 +533,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     final double topMargin =
         isDesktop ? 32.0 : MediaQuery.of(context).padding.top + 24.0;
     final double sideMargin = isDesktop ? 32.0 : 28.0;
-
-
 
     if (!_isMapReadyToLoad) {
       return const SizedBox
@@ -470,27 +562,18 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         );
                       }
 
-                      final locService = Provider.of<GlobalLocationService>(
-                          context,
-                          listen: false);
-                      final hasLocationPermission =
-                          context.select<GlobalLocationService, bool>(
-                              (s) => s.hasLocationPermission);
-                      final currentPos = locService.currentPosition;
-                      final bool isRealGps = _isVerifiedPhysicalGps(
-                          currentPos, hasLocationPermission);
+                      // Calculate safe initial position BEFORE passing it to MapLibre
+                      final mapProvider =
+                          Provider.of<MapProvider>(context, listen: false);
+                      final userCurrentLocation = mapProvider.currentLocation;
 
-
-                      // The puck MUST show whenever real GPS is verified and we aren't actively navigating a drawn route
-
-                      // 🚀 1. ABSOLUTE INITIAL CAMERA GATEKEEPER:
-                      // If physical GPS is not actively verified, strictly hardcode initial zoom to 10.5!
-                      final double safeInitialZoom = isRealGps ? 15.5 : 10.5;
-                      final double safeLat = currentPos?.latitude ?? 28.6139;
-                      final double safeLng = currentPos?.longitude ?? 77.2090;
+                      final double safeLat =
+                          userCurrentLocation?.latitude ?? 21.1458;
+                      final double safeLng =
+                          userCurrentLocation?.longitude ?? 79.0882;
 
                       debugPrint(
-                          "🛠️ DEBUG INITIAL CAMERA: Lat:$safeLat, Lng:$safeLng, Zoom:$safeInitialZoom");
+                          "🛠️ DEBUG INITIAL CAMERA: Lat:$safeLat, Lng:$safeLng");
 
                       return RepaintBoundary(
                         child: Listener(
@@ -540,15 +623,17 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           onPointerMove: (_) => _webLongPressTimer?.cancel(),
                           child: MapLibreMap(
                             key: _mapKey,
-                            initialCameraPosition: CameraPosition(
-                              target: LatLng(safeLat, safeLng),
-                              zoom: safeInitialZoom, // 🚀 NEVER let this default or evaluate to > 11.0 without physical GPS!
+                            initialCameraPosition: const CameraPosition(
+                              target: LatLng(28.6139,
+                                  77.2090), // Default Regional Overview
+                              zoom:
+                                  10.5, // 🚀 Hard lock initial frame to >5km altitude
                             ),
                             styleString: _loadedMapStyle!,
                             // 🚀 CRITICAL FIX: Synchronize RenderMode with Enabled state
-                            myLocationEnabled: true, // 🚀 Re-enabled for Native Idle Browsing Mode
+                            myLocationEnabled: true, // 🚀 Restores the Blue Dot and fixes internal state crashes!
                             myLocationRenderMode: MyLocationRenderMode.normal,
-                            myLocationTrackingMode: MyLocationTrackingMode.tracking, 
+                            myLocationTrackingMode: MyLocationTrackingMode.none,
                             minMaxZoomPreference:
                                 const MinMaxZoomPreference(3.0, 18.5),
                             cameraTargetBounds: CameraTargetBounds(
@@ -586,40 +671,56 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 themeType: mapProvider.currentTheme,
                                 showLabels: mapProvider.showLabels,
                                 showPOIs: mapProvider.showPOIs,
-                              ).then((styleString) {
-                                controller.setStyle(styleString);
+                              ).then((rawStyleUrl) async {
+                                final curedJson = await MapStyleInterceptor.getCuredStyle(rawStyleUrl);
+                                await controller.setStyle(curedJson);
                               }).catchError((e) {
                                 debugPrint("❌ Failed to set initial style: $e");
                               });
 
                               // Removed premature camera animation to prevent WebGL style race condition
                             },
+
                             onStyleLoadedCallback: () async {
-                              final mapProvider = Provider.of<MapProvider>(context, listen: false);
-                              // 🚀 LOCK THE BARRIER: Style is swapping, wipe state!
-                              mapProvider.isStyleFullyLoaded = false;
-                              mapProvider.resetPuckInitialization();
-                              
                               final controller = _tempController;
                               if (controller == null) return;
 
-                              // 🚀 CRITICAL FIX: Clear the image registry on every style reload!
-                              // WebGL loses all textures when the style is swapped, so we must
-                              // re-register every sprite from scratch.
-                              _addedImages.clear();
+                              // 🚀 1. Reset cache because the WebGL context is fresh
+                              _verifiedTextures.clear(); 
 
-                              Future<void> safeAddImage(
-                                  String? id, Uint8List bytes) async {
-                                if (id == null || id.trim().isEmpty) return;
-                                if (_addedImages.contains(id)) {
-                                  return; // Use boolean flag check to prevent JS interop calls
-                                }
+                              // 🚀 PRE-EMPTIVE TRANSPARENT PIXEL SHIELD
+                              // Prevents fatal _loadFromAssets crashes since onStyleImageMissing is unsupported.
+                              final Uint8List preEmptivePixel = Uint8List.fromList([
+                                137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+                              ]);
+                              
+                              final List<String> knownCrashIds = ['national_highway', 'metro_station'];
+                              
+                              for (String id in knownCrashIds) {
+                                // 🚀 ADDED STRICT GUARD: Never pass an empty ID to the MapLibre engine
+                                if (id.trim().isEmpty) continue; 
+                                
                                 try {
-                                  await controller.addImage(id, bytes);
-                                  _addedImages.add(id);
+                                  await controller.addImage(id, preEmptivePixel);
+                                } catch (_) {} // Ignore if already added
+                              }
+
+                              // 2. The secure loader
+                              Future<void> safeAddTexture(String? imageId, Uint8List bytes) async {
+                                if (imageId == null || imageId.trim().isEmpty) return;
+                                if (_verifiedTextures.contains(imageId)) return; // Skip if synced
+                                
+                                try {
+                                  await controller.addImage(imageId, bytes);
+                                  _verifiedTextures.add(imageId);
+                                  // 🚀 VITAL: 50ms WebWorker synchronization barrier
+                                  await Future.delayed(const Duration(milliseconds: 50)); 
                                 } catch (e) {
-                                  // Ignore if it already exists or fails
-                                  debugPrint("Image add warning: $e");
+                                  if (e.toString().contains('already exists')) {
+                                    _verifiedTextures.add(imageId); // Resync our cache silently
+                                  } else {
+                                    debugPrint("⚠️ Texture load failed for $imageId: $e");
+                                  }
                                 }
                               }
 
@@ -627,96 +728,172 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 final Uint8List bytes =
                                     await MapProvider.loadAndResizeImage(
                                         'assets/images/custom_pin.png', 36);
-                                await safeAddImage('custom_pin', bytes);
+                                await safeAddTexture('custom_pin', bytes);
                               } catch (_) {}
-
-                              try {
-                                final Uint8List puckBytes =
-                                    await MapProvider.loadAndResizeImage(
-                                        'assets/images/nav_puck.png', 40);
-                                await safeAddImage('nav_puck', puckBytes);
-                                debugPrint("✅ Authentic PNG Sprites ('nav_puck') locked into WebGL memory.");
-                              } catch (e) {
-                                debugPrint("⚠️ Sprite load notice: $e");
-                              }
 
                               try {
                                 final Uint8List yellowPinBytes =
                                     await MapProvider.loadAndResizeImage(
                                         'assets/images/add_places.png', 32);
-                                await safeAddImage(
+                                await safeAddTexture(
                                     'intermediate_pin', yellowPinBytes);
                               } catch (_) {}
 
                               try {
-                                final List<String> mandatorySprites = [
-                                  'custom_pin', 'intermediate_pin', 'nav_puck', 'Arrow', 'arrow', 
-                                  'custom-marker', 'metro_station', 'transit_station', 'bus', 'rail',
-                                  'highway-shield', 'road-shield', 'default_marker', 'marker', 'poi', ''
-                                ];
+                                // 🚀 CRITICAL FIX: Resize nav_puck to 40 pixels to prevent WebGL crash and giant icon bug!
+                                final Uint8List puckBytes =
+                                    await MapProvider.loadAndResizeImage(
+                                        'assets/images/nav_puck.png', 40);
+                                await safeAddTexture('nav_puck', puckBytes);
+                                debugPrint(
+                                    "✅ Nav Puck Image successfully injected and resized");
+                              } catch (e) {
+                                debugPrint(
+                                    "Safe Web Sprite Notice (nav_puck): $e");
+                              }
 
-                                final Uint8List transparentPixel = Uint8List.fromList([
+                              try {
+                                final Uint8List transparentPixel =
+                                    Uint8List.fromList([
                                   137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
                                 ]);
+                                await safeAddTexture('Arrow', transparentPixel);
+                              } catch (_) {}
 
-                                for (final id in mandatorySprites) {
-                                  if (!_addedImages.contains(id) && id.isNotEmpty) {
+                              try {
+                                final Uint8List transparentPixel =
+                                    Uint8List.fromList([
+                                  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+                                ]);
+                                await safeAddTexture('arrow', transparentPixel);
+                              } catch (_) {}
+
+                              try {
+                                final Uint8List transparentPixel =
+                                    Uint8List.fromList([
+                                  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+                                ]);
+                                await safeAddTexture(
+                                    'custom-marker', transparentPixel);
+                              } catch (e) {
+                                debugPrint("Sprite pre-load handled: $e");
+                              }
+
+                              try {
+                                // Ensure ALL required images are added to WebGL texture memory BEFORE any layer uses them
+                                final List<String> requiredSpriteIds = [
+                                  'custom_pin',
+                                  'intermediate_pin',
+                                  'nav_puck',
+                                  'Arrow',
+                                  'arrow',
+                                  'custom-marker'
+                                ];
+                                for (final id in requiredSpriteIds) {
+                                  if (!_verifiedTextures.contains(id)) {
                                     try {
-                                      await controller.addImage(id, transparentPixel);
-                                      _addedImages.add(id);
-                                    } catch (_) {}
+                                      // Register transparent pixel as fallback to prevent WebGL crash
+                                      final Uint8List transparentPixel =
+                                          Uint8List.fromList([
+                                        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+                                      ]);
+                                      await safeAddTexture(id, transparentPixel);
+                                    } catch (e) {
+                                      debugPrint(
+                                          "Sprite registration barrier: $e");
+                                    }
                                   }
                                 }
-                                debugPrint("🛡️ [WebGL Shield] Pre-loaded mandatory fallback sprites.");
+                                debugPrint(
+                                    "✅ WebGL Sprite Registry fully verified. Safe to render layers.");
                               } catch (e) {
-                                debugPrint("⚠️ Sprite registration barrier notice: $e");
+                                debugPrint(
+                                    "⚠️ Sprite registration barrier notice: $e");
+                              }
+
+                              // 🚀 3. Surgically amputate defective Ola Maps layers to stop yellow warnings
+                              final defectiveLayers = [
+                                'tunnel_transit_rail_glow_casing',
+                                'bridge_transit_rail_hatching',
+                                'tunnel_transit_rail_hatching',
+                                'bridge_transit_rail_glow_casing',
+                                'bridge_transit_rail_hatching-glow-casing',
+                                'tunnel_transit_rail_hatching-glow-casing',
+                                'road_transit_rail_hatching',
+                                'road_transit_rail_glow_casing',
+                                'road_transit_rail_hatching-glow-casing'
+                              ];
+                              for (var layer in defectiveLayers) {
+                                try { await controller.removeLayer(layer); } catch (_) {}
                               }
 
                               if (!context.mounted) return;
-                              await mapProvider.engine.onMapCreated(
-                                  controller,
-                                  isDark,
-                                  Provider.of<GlobalLocationService>(context,
-                                      listen: false),
-                                  this);
-
-                              // 2. 🚀 STYLE LOADED: Now it is safe to turn on the Puck!
-                              try {
-                                debugPrint("🎨 [Style Loaded] Registering Navigation Arrow Layer...");
-                                await mapProvider.initializeNavigationPuckLayer(controller);
-                                
-                                // Trigger immediate Dual-Mode check
-                                if (!context.mounted) return;
-                                final locSvc = Provider.of<GlobalLocationService>(context, listen: false);
-                                if (locSvc.currentPosition != null && locSvc.hasLocationPermission) {
-                                  mapProvider.updateLocationRenderingMode(
-                                    LatLng(locSvc.currentPosition!.latitude, locSvc.currentPosition!.longitude), 
-                                    locSvc.currentPosition!.heading
-                                  );
-                                }
-                              } catch (e) {
-                                debugPrint("❌ Puck mount failed: $e");
-                              }
-
-                              // 🚀 UNLOCK THE BARRIER: Sprites and Vector Layers are loaded, safe to draw!
-                              mapProvider.isStyleFullyLoaded = true;
-
-                              // 🚀 Task 2: Auto-center on startup
-                              if (!context.mounted) return;
-                              final locSvc = Provider.of<GlobalLocationService>(
+                              final mapProvider = Provider.of<MapProvider>(
                                   context,
                                   listen: false);
-                              final currentPos = locSvc.currentPosition;
+                              mapProvider.clearVerifiedTextures();
+                              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                                if (!context.mounted) return;
+                                await mapProvider.engine.onMapCreated(
+                                    controller,
+                                    isDark,
+                                    Provider.of<GlobalLocationService>(context,
+                                        listen: false),
+                                    this);
 
-                              if (currentPos != null &&
-                                  _isVerifiedPhysicalGps(currentPos,
-                                      locSvc.hasLocationPermission)) {
-                                await _attemptInitialCameraCenter();
-                              } else {
-                                // Keep map firmly locked at initialCameraPosition (Zoom 10.5)
-                                debugPrint(
-                                    "⏳ [Startup] Holding at regional zoom 10.5 until exact GPS is verified.");
-                              }
+                                // 🚀 Task 1: Re-inject location tracking cleanly after style loads
+                                try {
+                                  if (!context.mounted) return;
+                                  final locSvc =
+                                      Provider.of<GlobalLocationService>(context,
+                                          listen: false);
+                                  final pos = locSvc.currentPosition;
+                                  final bool isRealGps = pos != null &&
+                                      !pos.isMocked &&
+                                      mapProvider.hasLocationPermission;
+
+                                  if (isRealGps) {
+                                    final isRouteActive =
+                                        mapProvider.isRouteCalculated ||
+                                            mapProvider.isActiveNavigation;
+                                    if (!isRouteActive) {
+                                      try {
+                                        await controller
+                                            .updateMyLocationTrackingMode(kIsWeb
+                                                ? MyLocationTrackingMode.tracking
+                                                : MyLocationTrackingMode
+                                                    .trackingCompass);
+                                      } catch (_) {}
+                                    }
+                                  } else {
+                                    try {
+                                      await controller
+                                          .updateMyLocationTrackingMode(
+                                              MyLocationTrackingMode.none);
+                                    } catch (_) {}
+                                  }
+                                } catch (e) {
+                                  debugPrint(
+                                      "❌ Puck restoration intercepted: $e");
+                                }
+
+                                // 🚀 Task 2: Auto-center on startup
+                                if (!context.mounted) return;
+                                final locSvc = Provider.of<GlobalLocationService>(
+                                    context,
+                                    listen: false);
+                                final currentPos = locSvc.currentPosition;
+
+                                if (currentPos != null &&
+                                    _isVerifiedPhysicalGps(currentPos,
+                                        locSvc.hasLocationPermission)) {
+                                  await _attemptInitialCameraCenter();
+                                } else {
+                                  // Keep map firmly locked at initialCameraPosition (Zoom 10.5)
+                                  debugPrint(
+                                      "⏳ [Startup] Holding at regional zoom 10.5 until exact GPS is verified.");
+                                }
+                              });
                             },
                             onMapClick: (point, latLng) async {
                               _lastTapTime =
@@ -736,8 +913,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               }
 
                               // 1. Break tracking immediately to avoid snap-back on pin drop
-                              mapProvider.setAutoTracking(false);
-                              mapProvider.setUserPanning(true);
+                              if (mapProvider.controller != null) {
+                                await mapProvider.controller!
+                                    .updateMyLocationTrackingMode(
+                                        MyLocationTrackingMode.none);
+                              }
 
                               // PIN DROP LOGIC MOVED EXCLUSIVELY TO onMapLongClick
 
@@ -790,28 +970,20 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 return;
                               }
 
-                              // 🚀 2. Set Pin Destination State
+                              // 🚀 Free the camera from blue dot
+                              mapProvider.setAutoTracking(false);
+                              mapProvider.setUserPanning(true);
+
+                              // 🚀 EXCLUSIVE PIN DROP DELEGATION
                               if (mapProvider.mapSelectionPlaceType != null) {
                                 mapProvider.setTargetDestination(coordinates);
-                                mapProvider.addNativeDestinationPin(coordinates);
-                                
-                                // 🚀 FLY CAMERA IMMEDIATELY AFTER DROPPING PIN
-                                mapProvider.focusOnDestination(coordinates, zoom: 16.0);
-                                return; // Strict early return to bypass routing
-                              } else {
-                                // Wrap long press handling in try-catch to prevent 404 reverse-geocode crashes!
-                                try {
-                                  mapProvider.handleMapLongPress(coordinates);
-                                } catch (e) {
-                                  debugPrint("⚠️ Reverse geocode notice (suppressed crash): $e");
-                                }
-                                
-                                // 🚀 FLY CAMERA IMMEDIATELY AFTER DROPPING PIN
-                                mapProvider.focusOnDestination(coordinates, zoom: 16.0);
+                                mapProvider
+                                    .addNativeDestinationPin(coordinates);
+                                return;
                               }
 
-                              // 🚀 STRICT ASYNC GAP GUARD: Prevents build context errors!
-                              if (!context.mounted) return;
+                              // 1. Always allow placing the visual destination pin and UI sheet!
+                              mapProvider.handleMapLongPress(coordinates);
 
                               // 2. Only attempt auto-routing if physical GPS is actively verified
                               final locService =
@@ -846,11 +1018,15 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             logoViewMargins: const Point(-5000, -5000),
                             attributionButtonMargins: const Point(-5000, -5000),
                             onCameraTrackingDismissed: () {
+                              _unlockCamera(); // 🚀 Unlock on manual gesture
                               final mapProvider = Provider.of<MapProvider>(
                                   context,
                                   listen: false);
-                              mapProvider.setAutoTracking(false);
-                              mapProvider.setUserPanning(true);
+                              if (mapProvider.isActiveNavigation) {
+                                mapProvider.setAutoTracking(false);
+                                mapProvider.setUserPanning(true);
+                              }
+                              mapProvider.engine.onUserPannedMap();
                             },
                             onUserLocationUpdated: (location) {
                               if (!mounted) return;
@@ -869,7 +1045,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               });
                             },
                             onCameraIdle: _onCameraIdle,
-                            onCameraMove: _onCameraMove,
+                            onCameraMove: (position) {
+                              debugPrint("🎥 [RIDEL-TRACE] Camera is MOVING...");
+                              _onCameraMove(position);
+                            },
                           ),
                         ),
                       );
@@ -1210,52 +1389,17 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         MediaQuery.sizeOf(context).height;
                     const double buttonGap = 16.0;
 
-                    // 🚀 EXACT VISUAL SYNC: Reconstruct the sheet's internal height logic
-                    final double extentHeight = screenHeight * progress;
-                    final double safeMinS = (70.0 + 44.0) / screenHeight; 
-                    final bool isClosedMode = progress <= (safeMinS + 0.05);
-                    final bool isFullyOpen = progress >= (0.90 - 0.02);
-
-                    final provider = Provider.of<MapProvider>(context, listen: false);
-                    final bool isNav = provider.isActiveNavigation;
-                    // Infer Directions View: Route calculated/calculating but NOT navigating
-                    final bool isDirectionsView = (provider.isRouteCalculated || provider.isCalculatingRoute || provider.currentRouteResult != null) && !isNav;
-
-                    double visualSheetHeight;
-
-                    if (isNav) {
-                        visualSheetHeight = extentHeight; // Navigation overlay takes full extent
-                    } else {
-                        // Replicate exact margins from map_search_sheet
-                        final double bottomMargin = isFullyOpen 
-                            ? 0.0 
-                            : (isClosedMode ? 44.0 : 16.0 + MediaQuery.paddingOf(context).bottom);
-                            
-                        double shellHeight;
-                        if (isDirectionsView) {
-                            shellHeight = 190.0; // Locked height for directions header
-                        } else if (isClosedMode) {
-                            shellHeight = 70.0;
-                        } else if (isFullyOpen) {
-                            shellHeight = extentHeight;
-                        } else {
-                            shellHeight = extentHeight - 44.0; // The internal shell shrink factor
-                        }
-                        
-                        visualSheetHeight = shellHeight + bottomMargin;
-                    }
-
-                    // Buttons will now perfectly track the visual glass edge at 60fps
-                    final double dynamicBottomPosition = visualSheetHeight + buttonGap;
+                    // This formula guarantees the buttons ALWAYS stay exactly 'buttonGap'
+                    // distance above the top edge of the sheet.
+                    final double dynamicBottomPosition =
+                        (screenHeight * progress) + buttonGap;
 
                     final opacity = (progress <= 0.45)
                         ? 1.0
                         : (1.0 - ((progress - 0.45) / (0.90 - 0.45)))
                             .clamp(0.0, 1.0);
 
-                    return AnimatedPositioned(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeOutCubic,
+                    return Positioned(
                       bottom: dynamicBottomPosition,
                       right: 16.0,
                       child: Opacity(
@@ -1310,9 +1454,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                     ),
                                   );
                                 },
-                                child: Builder(builder: (context) {
-                                  return MapControlsPill(
-                                    onThemeTap: () {
+                                child: Selector<GlobalLocationService, bool>(
+                                  selector: (context, locService) => locService.hasLocationPermission,
+                                  builder: (context, hasPermission, _) {
+                                    return MapControlsPill(
+                                      hasLocationPermission: hasPermission,
+                                      onThemeTap: () {
                                       AppHaptics.heavyImpact();
                                       MapThemeSelector.show(context,
                                           currentTheme: _currentTheme ??
@@ -1387,30 +1534,30 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     );
   }
 
+  // 🚀 HELPER: Evaluates true physical GPS using accuracy precision (< 100 meters) and regional bounds
   bool _isVerifiedPhysicalGps(Position? pos, bool hasPermission) {
     if (pos == null || !hasPermission || pos.isMocked) return false;
-    if (pos.latitude == 0.0 && pos.longitude == 0.0) return false;
 
-    // 🚀 CRITICAL FIX: Bypass Dummy Shield for Web/Localhost testing!
-    // Without this, the Blue Dot will never mount on a desktop browser.
-    if (kIsWeb) return true;
-
-    // 🚀 THE DUMMY TRAP SHIELD: Rejects Delhi/Nagpur IP fallback centers!
-    final latStr = pos.latitude.toStringAsFixed(3);
-    final lngStr = pos.longitude.toStringAsFixed(3);
-    
-    // Delhi Connaught Place / Railway station fallback centers
-    final isDelhiDummy = (latStr == "28.633" && lngStr == "77.220") || 
-                         (latStr == "28.614" && lngStr == "77.209");
-    final isNagpurDummy = (latStr == "21.146" && lngStr == "79.088");
-
-    if (isDelhiDummy || isNagpurDummy) {
-      debugPrint("🛑 [Dummy Shield] Blocked IP fallback coordinate ($latStr, $lngStr). Treating as City Overview.");
+    // 1. Accuracy Check: IP/Cell-tower fallback accuracy is typically > 500m. True GPS is < 50m.
+    // If accuracy is worse than 150 meters, DO NOT treat as street-level GPS!
+    if (pos.accuracy > 150.0 || pos.accuracy == 0.0) {
+      debugPrint(
+          "🛑 [Accuracy Shield] Rejected location due to low precision (${pos.accuracy}m). Holding altitude.");
       return false;
     }
 
-    // Require basic Wi-Fi/GPS accuracy (< 500m)
-    return pos.accuracy > 0.0 && pos.accuracy <= 500.0;
+    // 2. Default City Bounding Box Shield (Delhi NCR & Nagpur fallback zones)
+    final lat = pos.latitude;
+    final lng = pos.longitude;
+    final isDelhiFallback = (lat >= 28.40 && lat <= 28.88) &&
+        (lng >= 76.85 && lng <= 77.40) &&
+        (pos.accuracy > 100.0);
+    final isNagpurFallback = (lat >= 21.00 && lat <= 21.30) &&
+        (lng >= 78.90 && lng <= 79.20) &&
+        (pos.accuracy > 100.0);
+    final isZero = lat == 0.0 && lng == 0.0;
+
+    return !isDelhiFallback && !isNagpurFallback && !isZero;
   }
 
   // 🚀 THE ABSOLUTE GATEKEEPER: Rewrites illegal street zooms!
@@ -1448,20 +1595,18 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   }
 
   Future<void> _igniteBlueDotAndSnipe(Position realPos) async {
-    final mapProvider = Provider.of<MapProvider>(context, listen: false);
-    final mapController = mapProvider.controller ?? _tempController;
+    final mapController =
+        Provider.of<MapProvider>(context, listen: false).controller ??
+            _tempController;
     if (!mounted || mapController == null) return;
 
-    // 🚀 LOWER THE SHIELD: User explicitly wants to go back to their live GPS!
-    mapProvider.isDestinationLocked = false;
-    mapProvider.setUserPanning(false);
-    mapProvider.setAutoTracking(true);
-    mapProvider.setCameraFocusMode(CameraFocusMode.userTracking);
-
     // 1. Enable native location layer ONLY when we have a real, non-mocked coordinate and no route is active
+    final mapProvider = Provider.of<MapProvider>(context, listen: false);
     if (!mapProvider.isRouteCalculated && !mapProvider.isActiveNavigation) {
-      // 🚀 Ignite Custom Blue Dot
-      mapProvider.updateLocationRenderingMode(LatLng(realPos.latitude, realPos.longitude), realPos.heading);
+      try {
+        await mapController
+            .updateMyLocationTrackingMode(MyLocationTrackingMode.tracking);
+      } catch (_) {}
     }
 
     // 2. Wait 200ms for MapLibre to mount the Blue Dot on the WebGL canvas
@@ -1470,14 +1615,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
     // 🚀 CINEMATIC DIVE: Lock to 15.5 zoom and explicitly reset tilt to 0.0 (Flat 2D)
     await mapController.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: LatLng(realPos.latitude, realPos.longitude),
-          zoom: 15.5,
-          tilt: 0.0, // Force flat orientation on snipe
-          bearing: mapController.cameraPosition?.bearing ?? 0.0,
-        )
-      ),
+      CameraUpdate.newCameraPosition(CameraPosition(
+        target: LatLng(realPos.latitude, realPos.longitude),
+        zoom: 15.5,
+        tilt: 0.0, // Force flat orientation on snipe
+        bearing: mapController.cameraPosition?.bearing ?? 0.0,
+      )),
       duration: const Duration(milliseconds: 1400),
     );
   }
@@ -1522,10 +1665,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     // ✅ CASE 2: Permission Granted -> FETCH GPS & SNIPE
     final pos = locService.currentPosition;
     if (pos != null && !pos.isMocked && pos.accuracy <= 150.0) {
+      // 🚀 UNLOCK SHIELD ON MANUAL USER ACTION
+      _unlockCamera();
+
       final mapController = provider.controller ?? _tempController;
       if (mapController != null && mapController.cameraPosition != null) {
         final camPos = mapController.cameraPosition!;
-        
+
         // Calculate distance between current map center and actual user GPS
         final double distanceInMeters = Geolocator.distanceBetween(
           camPos.target.latitude,
@@ -1536,21 +1682,18 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
         // 🚀 UX MAGIC: If already centered (< 50 meters), toggle the 3D Tilt!
         if (distanceInMeters < 50.0) {
-          // 🚀 LOWER THE SHIELD: User explicitly wants to go back to their live GPS!
-          provider.isDestinationLocked = false;
-          provider.setUserPanning(false);
-          provider.setAutoTracking(true);
-          provider.setCameraFocusMode(CameraFocusMode.userTracking);
-
           final double currentTilt = camPos.tilt;
-          final double targetTilt = currentTilt > 30.0 ? 0.0 : 60.0; // Toggle Flat vs 3D
-          
-          debugPrint("🔄 [Locate Button] Already centered. Toggling tilt from $currentTilt to $targetTilt.");
-          
+          final double targetTilt =
+              currentTilt > 30.0 ? 0.0 : 60.0; // Toggle Flat vs 3D
+
+          debugPrint(
+              "🔄 [Locate Button] Already centered. Toggling tilt from $currentTilt to $targetTilt.");
+
           await mapController.animateCamera(
             CameraUpdate.newCameraPosition(
               CameraPosition(
-                target: LatLng(pos.latitude, pos.longitude), // Lock exact center
+                target:
+                    LatLng(pos.latitude, pos.longitude), // Lock exact center
                 zoom: camPos.zoom, // Preserve current user zoom
                 bearing: camPos.bearing, // Preserve current rotation
                 tilt: targetTilt, // 🚀 APPLY SMOOTH TILT
@@ -1558,8 +1701,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             ),
             duration: const Duration(milliseconds: 1200),
           );
-          // 🚀 Ensure custom dot is present even if we are just toggling tilt
-          provider.updateLocationRenderingMode(LatLng(pos.latitude, pos.longitude), pos.heading);
           return; // Exit early so we don't trigger the standard snipe
         }
       }

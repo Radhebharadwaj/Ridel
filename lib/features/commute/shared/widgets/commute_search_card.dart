@@ -637,9 +637,70 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
     required String label,
     required IconData icon,
     required bool isReady,
-    Color?
-        customTint, // 🌟 Safe fallback: Only uses Color, perfectly compatible!
+    Color? customTint, 
   }) {
+    final isLightMode = !widget.isDark;
+
+    if (isLightMode && customTint == null) {
+      return GestureDetector(
+        onTapDown: (_) => AppHaptics.lightImpact(),
+        onTapUp: (_) {
+          AppHaptics.buttonClick();
+          onPressed();
+        },
+        child: Container(
+          width: double.infinity,
+          height: 56,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1D3C8A), // Premium Blue
+            borderRadius: BorderRadius.circular(100),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1D3C8A).withValues(alpha: 0.25),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: LayoutBuilder(builder: (context, constraints) {
+            return FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.center,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: constraints.maxWidth < 160 ? 160 : constraints.maxWidth,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        label,
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                          color: Colors.white,
+                          letterSpacing: -0.3,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      icon,
+                      size: 20,
+                      color: Colors.white,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ),
+      );
+    }
+
     final defaultTint = isReady
         ? CupertinoColors.systemBlue.withValues(alpha: 0.15)
         : Colors.white.withValues(alpha: 0.08); // Premium translucent dark grey
@@ -995,7 +1056,7 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
     final bool isLightMode = !widget.isDark;
 
     final Color glassColor = isLightMode
-        ? Colors.white.withValues(alpha: 0.90)
+        ? Colors.white
         : const Color(0xFF161A25).withValues(alpha: 0.75);
 
     final Color inputBg = isLightMode
@@ -1038,20 +1099,22 @@ class _CommuteSearchCardState extends State<CommuteSearchCard> {
                     Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(35),
-                        boxShadow: isLightMode
+                        boxShadow: widget.isDark
                             ? [
-                                BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.08),
-                                    blurRadius: 24,
-                                    offset: const Offset(0, 8))
-                              ]
-                            : [
                                 ...AppShadows.cardFloating,
                                 BoxShadow(
                                   color: Colors.black.withValues(alpha: 0.8),
                                   blurRadius: 40,
                                   spreadRadius: 8,
                                   offset: const Offset(0, 15),
+                                ),
+                              ]
+                            : [
+                                BoxShadow(
+                                  color: const Color(0xFFE5E0D8).withValues(alpha: 0.8),
+                                  blurRadius: 32,
+                                  spreadRadius: -4,
+                                  offset: const Offset(0, 8),
                                 ),
                               ],
                       ),

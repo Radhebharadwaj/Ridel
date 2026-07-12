@@ -660,7 +660,7 @@ class _LoginScreenState extends State<LoginScreen> {
         height: 56,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(100),
           border: Border.all(color: Colors.grey.shade300),
           boxShadow: [
             BoxShadow(
@@ -754,7 +754,7 @@ class _LoginScreenState extends State<LoginScreen> {
             height: 56,
             decoration: BoxDecoration(
               color: Colors.black87,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(100),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.1),
@@ -910,7 +910,7 @@ class _LoginScreenState extends State<LoginScreen> {
           height: 56,
           decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(100),
               border: Border.all(color: Colors.grey.shade300, width: 1),
               boxShadow: [
                 BoxShadow(

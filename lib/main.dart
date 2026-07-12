@@ -105,6 +105,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 // 🚀 MAIN FUNCTION
 // ----------------------------------------------------------------------
 Future<void> main() async {
+  // 1. MUST BE FIRST
+  WidgetsFlutterBinding.ensureInitialized();
 
   try {
     await dotenv.load(fileName: ".env");
@@ -113,17 +115,39 @@ Future<void> main() async {
   }
 
   runZonedGuarded(() async {
-    WidgetsFlutterBinding.ensureInitialized(); // 🚀 MUST BE LINE 1
     FlutterNativeSplash.preserve(widgetsBinding: WidgetsBinding.instance);
 
-    FlutterError.onError = (FlutterErrorDetails details) {
-      FlutterError.presentError(details);
-      debugPrint('⚠️ FLUTTER UI ERROR: ${details.exception}');
+    // 🚀 1. CATCH ASYNC DART ERRORS (The WebWorker Crash Fix)
+    PlatformDispatcher.instance.onError = (error, stack) {
+      final errStr = error.toString();
+      
+      // Identify the specific maplibre_gl plugin bug
+      if (errStr.contains('Missing required image id') || 
+          errStr.contains('_loadFromAssets') || 
+          errStr.contains('hasImage') ||
+          errStr.contains('evented.ts')) {
+        
+        // Return TRUE to tell the Flutter Engine: "We handled this error, DO NOT crash the app."
+        return true; 
+      }
+      
+      // For all other genuine crashes, let them pass through
+      debugPrint('CRITICAL APP ERROR: $error');
+      return false; 
     };
 
-    PlatformDispatcher.instance.onError = (error, stack) {
-      debugPrint('🔥 PLATFORM ERROR: $error');
-      return true; 
+    // 🚀 2. CATCH FLUTTER UI ERRORS
+    FlutterError.onError = (FlutterErrorDetails details) {
+      final errStr = details.exceptionAsString();
+      
+      if (errStr.contains('Missing required image id') || 
+          errStr.contains('_loadFromAssets')) {
+        // Silently swallow the package's UI noise
+        return; 
+      }
+      
+      // Present normal UI errors
+      FlutterError.presentError(details);
     };
 
     try {

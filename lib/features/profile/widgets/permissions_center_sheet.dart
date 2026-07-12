@@ -106,7 +106,7 @@ class _PermissionsCenterSheetState extends State<PermissionsCenterSheet>
     const activeColor = CupertinoColors.systemBlue; // Premium System Blue
 
     return Material(
-      color: isLightMode ? Colors.white : const Color(0xFF16181D),
+      color: isLightMode ? const Color(0xFFF8F6F0) : const Color(0xFF16181D),
       borderRadius: BorderRadius.circular(24),
       child: Padding(
         padding: const EdgeInsets.all(0),
@@ -145,7 +145,7 @@ class _PermissionsCenterSheetState extends State<PermissionsCenterSheet>
             // 🔹 Ultra-Sleek Glassmorphic List Container
             Container(
               decoration: BoxDecoration(
-                color: isLightMode ? Colors.black.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.05),
+                color: isLightMode ? Colors.white : Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(20),
                 // 🔥 Hairline border for that crisp glass edge
                 border: Border.all(
@@ -154,6 +154,15 @@ class _PermissionsCenterSheetState extends State<PermissionsCenterSheet>
                       : Colors.white.withValues(alpha: 0.08),
                   width: 0.5,
                 ),
+                boxShadow: isLightMode
+                    ? [
+                        BoxShadow(
+                          color: const Color(0xFFE5E0D8).withValues(alpha: 0.6),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
+                        ),
+                      ]
+                    : [],
               ),
               child: Column(
                 children: _permissionsList.asMap().entries.map((entry) {
@@ -264,13 +273,16 @@ class _PermissionsCenterSheetState extends State<PermissionsCenterSheet>
             const SizedBox(height: 15),
 
             // 🔹 Footer Info (Web vs Mobile dynamic text)
-            Text(
-              kIsWeb
-                  ? "Use your browser's address bar (🔒) to manage site permissions."
-                  : "For security, some permissions must be managed in your device settings.",
-              style:
-                  GoogleFonts.inter(color: subColor, fontSize: 11, height: 1.4),
-              textAlign: TextAlign.center,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Text(
+                kIsWeb
+                    ? "Use your browser's address bar (🔒) to manage site permissions."
+                    : "For security, some permissions must be managed in your device settings.",
+                style:
+                    GoogleFonts.inter(color: subColor, fontSize: 12, height: 1.4),
+                textAlign: TextAlign.center,
+              ),
             ),
           ],
         ),

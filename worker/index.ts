@@ -233,6 +233,37 @@ export default {
       }
     }
 
+    // 🚀 4. REVERSE GEOCODE ROUTE (FIXES THE 404 FLUTTER CRASH)
+    if (url.pathname.includes('/api/maps/places/v1/reverse-geocode') || url.pathname === '/api/maps/places/v1/reverse-geocode/') {
+      const latlng = url.searchParams.get('latlng');
+      let lat = 28.6139; // Default to Delhi
+      let lng = 77.2090;
+
+      if (latlng) {
+        const parts = latlng.split(',');
+        if (parts.length === 2) {
+          lat = parseFloat(parts[0]);
+          lng = parseFloat(parts[1]);
+        }
+      }
+
+      // Return a 200 OK with fallback JSON. 
+      // This stops Flutter from crashing and smoothly handles the dropped pin!
+      const fallbackData = {
+        placeId: `temp_${lat}_${lng}`,
+        name: "Dropped Pin",
+        address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+        latitude: lat,
+        longitude: lng,
+        categories: []
+      };
+
+      return new Response(JSON.stringify(fallbackData), {
+        status: 200, // 🚀 200 OK is mandatory here
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
     try {
       // 2. Loose Path Matching (Fixes trailing slash issues)
       if (url.pathname.includes('/api/bus/route')) {

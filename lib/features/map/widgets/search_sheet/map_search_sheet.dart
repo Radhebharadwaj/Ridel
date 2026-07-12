@@ -84,8 +84,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   String? _activeRoutingField;
 
   final FocusNode _searchFocus = FocusNode();
-  DraggableScrollableController get _sheetController =>
-      Provider.of<MapProvider>(context, listen: false).sheetController;
+  late final DraggableScrollableController _sheetController;
 
   // ignore: deprecated_member_use
 
@@ -185,6 +184,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   @override
   void initState() {
     super.initState();
+    _sheetController = DraggableScrollableController();
     _isSearchMode = widget.isMapTabActive;
 
     // 🏠 Init Saved Places Location Picker
@@ -1183,6 +1183,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   @override
   void dispose() {
+    _sheetController.dispose();
     _hideDashTimer?.cancel();
     _debounce?.cancel();
     _searchCtrl.dispose();
@@ -1447,6 +1448,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                             bottom: false,
                             top: false, // Don't restrict the top
                             child: DraggableScrollableSheet(
+                              key: ValueKey(_currentMode), // 🚀 Forces clean unmount when switching states
                               controller: _sheetController,
                               initialChildSize:
                                   (isKeyboardOpen && !isNav) ? 1.0 : minS,

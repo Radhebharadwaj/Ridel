@@ -278,15 +278,16 @@ class _ServiceCardItemState extends State<_ServiceCardItem> {
                 // 🌟 FIXED PREMIUM ASPECT RATIO & SHADOW: Floating effect
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(22), // More compacted
-                  boxShadow: isLightMode
-                      ? [
+                  boxShadow: !isLightMode
+                      ? ServiceCardShadows.floating // 🚀 NEW PREMIUM SHADOW
+                      : [
                           BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.04),
-                              blurRadius: 16,
-                              spreadRadius: 0,
-                              offset: const Offset(0, 6))
-                        ]
-                      : ServiceCardShadows.floating, // 🚀 NEW PREMIUM SHADOW
+                            color: const Color(0xFFD6D0C4).withValues(alpha: 0.4),
+                            blurRadius: 32,
+                            spreadRadius: -6,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(22),

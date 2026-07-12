@@ -46,6 +46,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
 
   // --- GETTERS ---
   bool get hasLocationPermission => _permission == LocationPermission.whileInUse || _permission == LocationPermission.always;
+  bool get isLocationServiceEnabled => _isLocationServiceEnabled;
   Position? get currentPosition => currentPositionNotifier.value;
   bool get hasValidLocation => currentPositionNotifier.value != null;
   bool get isLiveTracking => _isLiveTrackingActive;

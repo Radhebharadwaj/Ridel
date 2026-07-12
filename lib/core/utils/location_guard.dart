@@ -29,7 +29,14 @@ class LocationGuard {
 
     if (permission == LocationPermission.deniedForever) {
       if (context.mounted) {
-        ToastService.showError(context, "Location permission is required for this feature. Please enable it in settings.");
+        ToastService.showActionToast(
+          context,
+          message: "Location permission is required for this feature.",
+          actionLabel: "SETTINGS",
+          onActionTap: () async {
+            await Geolocator.openAppSettings();
+          },
+        );
       }
       return false;
     }

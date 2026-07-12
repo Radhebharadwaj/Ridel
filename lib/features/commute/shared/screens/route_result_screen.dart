@@ -274,8 +274,8 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
 
     const double desktopMargin = 24.0;
     final bgColor = isDesktop
-        ? (isDark ? const Color(0xFF1F1F1E) : const Color(0xFFF5F5F7))
-        : (isDark ? const Color(0xFF0B0E17) : Colors.white);
+        ? (isDark ? const Color(0xFF1F1F1E) : const Color(0xFFF8F6F0))
+        : (isDark ? const Color(0xFF0B0E17) : const Color(0xFFF8F6F0));
 
     // ==================== DESKTOP CONTENT ====================
     Widget contentList = Column(
@@ -345,6 +345,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
                   AppHeader(
                     showProfile: true,
                     isRouteMode: true,
+                    backgroundColor: bgColor,
                     onBack: () => Navigator.pop(context),
                     actionWidget: RidelBounceButton(
                       scaleFactor: 0.88,
@@ -465,7 +466,16 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
                                     color: isDark
                                         ? Colors.white.withValues(alpha: 0.05)
                                         : Colors.black.withValues(alpha: 0.05)),
-                                boxShadow: AppShadows.cardFloating,
+                                boxShadow: isDark
+                                    ? AppShadows.cardFloating
+                                    : [
+                                        BoxShadow(
+                                          color: const Color(0xFFE5E0D8).withValues(alpha: 0.8),
+                                          blurRadius: 24,
+                                          spreadRadius: -4,
+                                          offset: const Offset(0, 8),
+                                        ),
+                                      ],
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(24),
@@ -559,7 +569,16 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
         color: isDark ? const Color(0xFF1E2129) : Colors.white,
         borderRadius: BorderRadius.circular(32),
         border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
-        boxShadow: AppShadows.cardFloating,
+        boxShadow: isDark
+            ? AppShadows.cardFloating
+            : [
+                BoxShadow(
+                  color: const Color(0xFFE5E0D8).withValues(alpha: 0.8),
+                  blurRadius: 24,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 8),
+                ),
+              ],
       ),
       child: const Center(
         child: PremiumDotLoader(),
@@ -575,7 +594,16 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
         color: isDark ? const Color(0xFF1E2129) : Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.redAccent.withValues(alpha: 0.15)),
-        boxShadow: AppShadows.cardFloating,
+        boxShadow: isDark
+            ? AppShadows.cardFloating
+            : [
+                BoxShadow(
+                  color: const Color(0xFFE5E0D8).withValues(alpha: 0.8),
+                  blurRadius: 24,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 8),
+                ),
+              ],
       ),
       child: Row(
         children: [
@@ -631,7 +659,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
                         decoration: BoxDecoration(
                           color: isDark
                               ? const Color(0xFF161A25).withValues(alpha: 0.75)
-                              : Colors.white.withValues(alpha: 0.90),
+                              : Colors.white,
                           borderRadius: BorderRadius.circular(35),
                           border: Border.all(
                             color: isDark
@@ -651,9 +679,11 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
                                 ]
                               : [
                                   BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.08),
-                                      blurRadius: 24,
-                                      offset: const Offset(0, 8))
+                                    color: const Color(0xFFE5E0D8).withValues(alpha: 0.8),
+                                    blurRadius: 24,
+                                    spreadRadius: -4,
+                                    offset: const Offset(0, 8),
+                                  ),
                                 ],
                         ),
                         child: Row(
@@ -718,7 +748,7 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: isLightMode
-            ? Colors.white.withValues(alpha: 0.90)
+            ? Colors.white
             : const Color(0xFF161A25).withValues(alpha: 0.75),
         borderRadius: BorderRadius.circular(35),
         border: Border.all(
@@ -730,9 +760,11 @@ class _RouteResultScreenState extends State<RouteResultScreen> {
         boxShadow: isLightMode
             ? [
                 BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8))
+                  color: const Color(0xFFE5E0D8).withValues(alpha: 0.8),
+                  blurRadius: 24,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 8),
+                ),
               ]
             : [
                 ...AppShadows.cardFloating,

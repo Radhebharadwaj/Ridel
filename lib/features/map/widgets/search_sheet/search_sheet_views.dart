@@ -709,10 +709,11 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(
-                  0xFF2C2C2E), // Solid dark grey to GUARANTEE visibility (no transparency bugs)
+              color: isDark ? const Color(0xFF1E2129) : Colors.white.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white24, width: 1),
+              border: Border.all(
+                color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -738,13 +739,13 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text("Current Location",
+                                Text("Current Location",
                                     style: TextStyle(
-                                        color: Colors.grey, fontSize: 12)),
+                                        color: isDark ? Colors.white54 : Colors.black54, fontSize: 12)),
                                 Text(
                                   originAddress,
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 14),
+                                  style: TextStyle(
+                                      color: isDark ? Colors.white : Colors.black87, fontSize: 14),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -766,21 +767,21 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                             child: Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                  color: Colors.white12,
+                                  color: isDark ? Colors.white12 : Colors.black12,
                                   borderRadius: BorderRadius.circular(8)),
-                              child: const Icon(Icons.copy_rounded,
-                                  color: Colors.white, size: 18),
+                              child: Icon(Icons.copy_rounded,
+                                  color: isDark ? Colors.white54 : Colors.black54, size: 18),
                             ),
                           ),
                         ],
                       ),
 
-                      const Padding(
-                        padding: EdgeInsets.only(left: 9.0, top: 4, bottom: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 9.0, top: 4, bottom: 4),
                         child: SizedBox(
                             height: 12,
                             child: VerticalDivider(
-                                color: Colors.grey, thickness: 1)),
+                                color: isDark ? Colors.white24 : Colors.black26, thickness: 1)),
                       ),
 
                       // 🟡 INTERMEDIATE STOPS
@@ -823,13 +824,13 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text("Stop ${index + 1}",
-                                                style: const TextStyle(
-                                                    color: Colors.grey,
+                                                style: TextStyle(
+                                                    color: isDark ? Colors.white54 : Colors.black54,
                                                     fontSize: 12)),
                                             Text(
                                               stop.name,
-                                              style: const TextStyle(
-                                                  color: Colors.white,
+                                              style: TextStyle(
+                                                  color: isDark ? Colors.white : Colors.black87,
                                                   fontSize: 14),
                                               maxLines: 2,
                                               overflow: TextOverflow.ellipsis,
@@ -841,21 +842,21 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                                     Padding(
                                       padding: const EdgeInsets.only(top: 4.0),
                                       child: IconButton(
-                                        icon: const Icon(Icons.close,
-                                            color: Colors.white54, size: 20),
+                                        icon: Icon(Icons.close,
+                                            color: isDark ? Colors.white54 : Colors.black54, size: 20),
                                         onPressed: () => provider
                                             .removeIntermediateStop(index),
                                       ),
                                     ),
                                   ],
                                 ),
-                                const Padding(
-                                  padding: EdgeInsets.only(
+                                Padding(
+                                  padding: const EdgeInsets.only(
                                       left: 37.0, top: 4, bottom: 4),
                                   child: SizedBox(
                                       height: 12,
                                       child: VerticalDivider(
-                                          color: Colors.grey, thickness: 1)),
+                                          color: isDark ? Colors.white24 : Colors.black26, thickness: 1)),
                                 ),
                               ],
                             ),
@@ -874,15 +875,15 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text("Destination",
+                                Text("Destination",
                                     style: TextStyle(
-                                        color: Colors.grey, fontSize: 12)),
+                                        color: isDark ? Colors.white54 : Colors.black54, fontSize: 12)),
                                 Text(
                                   placeSubtitle.isNotEmpty
                                       ? placeSubtitle
                                       : placeTitle,
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 14),
+                                  style: TextStyle(
+                                      color: isDark ? Colors.white : Colors.black87, fontSize: 14),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -901,10 +902,10 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                             child: Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                  color: Colors.white12,
+                                  color: isDark ? Colors.white12 : Colors.black12,
                                   borderRadius: BorderRadius.circular(8)),
-                              child: const Icon(Icons.copy_rounded,
-                                  color: Colors.white, size: 18),
+                              child: Icon(Icons.copy_rounded,
+                                  color: isDark ? Colors.white54 : Colors.black54, size: 18),
                             ),
                           ),
                         ],
@@ -958,9 +959,9 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
 
                 // 2. Combined ETA & Distance Badge
                 if (provider.currentRouteResult != null) ...[
-                  const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Divider(color: Colors.white24, height: 1)),
+                  Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Divider(color: isDark ? Colors.white24 : Colors.black12, height: 1)),
                   Builder(builder: (context) {
                     int totalMinutes =
                         provider.currentRouteResult!.durationMins;

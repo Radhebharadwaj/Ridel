@@ -29,6 +29,7 @@ class AppHeader extends StatefulWidget {
   final bool isScrolled;
   final bool isRouteMode;
   final VoidCallback? onBack;
+  final Color? backgroundColor;
 
   const AppHeader({
     super.key,
@@ -38,6 +39,7 @@ class AppHeader extends StatefulWidget {
     this.isScrolled = false,
     this.isRouteMode = false,
     this.onBack,
+    this.backgroundColor,
   });
 
   @override
@@ -160,7 +162,7 @@ class _AppHeaderState extends State<AppHeader> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black;
-    final bgColor = Theme.of(context).scaffoldBackgroundColor;
+    final bgColor = widget.backgroundColor ?? Theme.of(context).scaffoldBackgroundColor;
 
     final double topInset = MediaQuery.of(context).padding.top;
     final double headerPadding = widget.isScrolled ? 10 : 20;
@@ -197,15 +199,15 @@ class _AppHeaderState extends State<AppHeader> with WidgetsBindingObserver {
           ],
           stops: const [0.0, 0.6, 1.0],
         ),
-        boxShadow: widget.isScrolled
-            ? [
+        boxShadow: isDark 
+            ? [] 
+            : [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.05),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                )
-              ]
-            : null,
+                  color: const Color(0xFFE5E0D8).withValues(alpha: 0.5),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,

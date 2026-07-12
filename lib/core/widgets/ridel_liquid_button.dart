@@ -77,10 +77,6 @@ class _RidelLiquidButtonState extends State<RidelLiquidButton> {
         ? Colors.black.withValues(alpha: _isPressed ? 0.01 : 0.03) // Extremely faint shadow
         : Colors.black.withValues(alpha: _isPressed ? 0.15 : 0.35); // Original deep shadow
 
-    final shadowColorSoft = isLightMode
-        ? Colors.transparent // Secondary, diffused contact shadow (effectively hidden in light mode)
-        : Colors.transparent; // Not used in dark mode originally
-
     final simpleBorderColor = isLightMode
         ? Colors.black.withValues(alpha: 0.06) // Clean, uniform edge
         : Colors.white.withValues(alpha: 0.18);
@@ -115,78 +111,85 @@ class _RidelLiquidButtonState extends State<RidelLiquidButton> {
           child: SizedBox(
             width: widget.width,
             height: widget.height,
-            child: Stack(
-              children: [
-                // 🌟 LAYER 1: OUTER SHADOWS CONTAINER (UPDATED WITH DOUBLE SHADOW)
-                Container(
-                  width: widget.width,
-                  height: widget.height,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(borderRadius),
-                    boxShadow: widget.onTap != null
-                        ? (isLightMode ? [
-                            BoxShadow(
-                              color: shadowColorDepth,
-                              blurRadius: isLightMode ? 24 : (_isPressed ? 10 : 20), // Increased main blur
-                              spreadRadius: _isPressed ? 0 : -2,
-                              offset: Offset(0, _isPressed ? 6 : 14), // Main offset for lift
-                            ),
-                            BoxShadow(
-                              color: shadowColorSoft,
-                              blurRadius: isLightMode ? 10 : 10, // Contact shadow blur
-                              spreadRadius: isLightMode ? 0 : -2, // Diffused spread
-                              offset: Offset(0, isLightMode ? 4 : 8), // Soft offset for contact
-                            ),
-                          ] : [
-                            BoxShadow(
-                              color: shadowColorDepth, // Original dark mode shadow
-                              blurRadius: _isPressed ? 10 : 20,
-                              spreadRadius: _isPressed ? 0 : -2,
-                              offset: Offset(0, _isPressed ? 6 : 14),
-                            ),
-                          ])
-                        : null,
-                  ),
-                ),
-
-                // 🌟 LAYER 2: GLASS BODY (CLIP + BLUR + OPTICAL GRADIENT)
-                Positioned.fill(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(borderRadius),
-                    clipBehavior: Clip.antiAlias,
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                      child: Container(
+            child: isLightMode
+                ? Container(
+                    width: widget.width,
+                    height: widget.height,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(borderRadius),
+                      gradient: activeGradient,
+                      boxShadow: widget.onTap != null
+                          ? [
+                              BoxShadow(
+                                color: shadowColorDepth,
+                                blurRadius: _isPressed ? 10 : 24,
+                                spreadRadius: _isPressed ? 0 : -2,
+                                offset: Offset(0, _isPressed ? 6 : 14),
+                              ),
+                            ]
+                          : null,
+                      border: widget.hasBorder ? Border.all(color: simpleBorderColor, width: 1.0) : null,
+                    ),
+                    child: Center(child: widget.child),
+                  )
+                : Stack(
+                    children: [
+                      // 🌟 LAYER 1: OUTER SHADOWS CONTAINER (DARK MODE)
+                      Container(
+                        width: widget.width,
+                        height: widget.height,
                         decoration: BoxDecoration(
+                          color: Colors.transparent,
                           borderRadius: BorderRadius.circular(borderRadius),
-                          gradient: activeGradient, // Apply the new optical gradient
+                          boxShadow: widget.onTap != null
+                              ? [
+                                  BoxShadow(
+                                    color: shadowColorDepth,
+                                    blurRadius: _isPressed ? 10 : 20,
+                                    spreadRadius: _isPressed ? 0 : -2,
+                                    offset: Offset(0, _isPressed ? 6 : 14),
+                                  ),
+                                ]
+                              : null,
                         ),
-                        child: Center(child: widget.child),
                       ),
-                    ),
-                  ),
-                ),
 
-                // 🌟 LAYER 3: ANTI-ALIASING BORDER SHIELD (UPDATED PAINTERS)
-                if (widget.hasBorder)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: isLightMode
-                            ? _UniformPillPainter(radius: borderRadius, color: simpleBorderColor) // Force uniform border in light mode for all shapes
-                            : (isCircle
-                                ? _DiagonalBorderPainter( // Original dark mode painter
-                                    radius: borderRadius,
-                                  )
-                                : _UniformPillPainter(
-                                    radius: borderRadius,
-                                    color: simpleBorderColor,
-                                  )),
+                      // 🌟 LAYER 2: GLASS BODY (CLIP + BLUR + OPTICAL GRADIENT)
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(borderRadius),
+                          clipBehavior: Clip.antiAlias,
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(borderRadius),
+                                gradient: activeGradient,
+                              ),
+                              child: Center(child: widget.child),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+
+                      // 🌟 LAYER 3: ANTI-ALIASING BORDER SHIELD
+                      if (widget.hasBorder)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: CustomPaint(
+                              painter: isCircle
+                                  ? _DiagonalBorderPainter(
+                                      radius: borderRadius,
+                                    )
+                                  : _UniformPillPainter(
+                                      radius: borderRadius,
+                                      color: simpleBorderColor,
+                                    ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-              ],
-            ),
           ),
         ),
       ),

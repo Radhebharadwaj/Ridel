@@ -10,6 +10,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
     double size = 44.0,
     double iconSize = 20.0,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return RidelBounceButton(
       onTap: () {
         AppHaptics.lightImpact();
@@ -19,26 +21,39 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
         width: size,
         height: size,
         decoration: BoxDecoration(
+          color: bgColor ?? (isDark ? null : Colors.white),
           shape: BoxShape.circle,
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withValues(alpha: 0.20),
-              Colors.white.withValues(alpha: 0.10),
-              Colors.white.withValues(alpha: 0.06),
-            ],
-          ),
-          border:
-              Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 20,
-              spreadRadius: -2,
-              offset: const Offset(0, 14),
-            ),
-          ],
+          gradient: isDark 
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withValues(alpha: 0.20),
+                    Colors.white.withValues(alpha: 0.10),
+                    Colors.white.withValues(alpha: 0.06),
+                  ],
+                )
+              : null,
+          border: isDark 
+              ? Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1)
+              : Border.all(color: Colors.black.withValues(alpha: 0.04), width: 1),
+          boxShadow: isDark
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 20,
+                    spreadRadius: -2,
+                    offset: const Offset(0, 14),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06), // Very soft, low-opacity shadow
+                    blurRadius: 16,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
         ),
         child: Center(
           child: Icon(icon, color: iconColor, size: iconSize),

@@ -24,6 +24,12 @@ class _RidelFloatingPanelState extends State<RidelFloatingPanel> {
       DraggableScrollableController();
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
       controller: _controller,

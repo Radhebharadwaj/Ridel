@@ -30,7 +30,8 @@ class _CommuteScreenState extends State<CommuteScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      // 👇 Yahan background color update kiya gaya hai redesign ke according
+      backgroundColor: isDark ? Colors.transparent : const Color(0xFFF8F6F0),
       resizeToAvoidBottomInset: false,
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -119,7 +120,6 @@ class _CommuteScreenState extends State<CommuteScreen> {
         builder: (context, isRailExpanded, child) {
           return Stack(
             children: [
-
               ValueListenableBuilder<bool>(
                   valueListenable: _isSearchSheetOpen,
                   builder: (context, isSheetOpen, child) {
@@ -409,5 +409,3 @@ class MapSearchSheetContent extends StatelessWidget {
     );
   }
 }
-
-

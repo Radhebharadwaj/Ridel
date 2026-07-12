@@ -627,11 +627,13 @@ class _ContinuousZoomButtonState extends State<_ContinuousZoomButton> {
 class MapControlsPill extends StatelessWidget {
   final VoidCallback onThemeTap;
   final VoidCallback onLocateTap;
+  final bool hasLocationPermission;
 
   const MapControlsPill({
     super.key,
     required this.onThemeTap,
     required this.onLocateTap,
+    required this.hasLocationPermission,
   });
 
   @override
@@ -729,6 +731,16 @@ class MapControlsPill extends StatelessWidget {
       BuildContext context, MapProvider provider, bool isDark) {
     final Color iconColor = isDark ? Colors.white70 : Colors.black87;
     const double defaultSize = 20.0;
+
+    // 🚀 PREMIUM GPS STATUS: Show crossed-out icon if GPS is denied or service is off
+    if (!hasLocationPermission) {
+      return Icon(Icons.location_disabled,
+          key: const ValueKey('icon_gps_off'),
+          color: isDark
+              ? Colors.white38
+              : Colors.black38,
+          size: defaultSize);
+    }
 
     if (provider.isActiveNavigation && !provider.isAutoTracking) {
       return Icon(Icons.navigation_rounded,
