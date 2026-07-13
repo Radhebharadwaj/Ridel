@@ -93,6 +93,17 @@
       visibility: hidden !important;
     }
   </style>
+  <style>
+    /* 🚀 Kills native browser tap-delays and forces GPU compositing for MapLibre */
+    flt-glass-pane, flt-scene-host {
+      touch-action: none !important;
+    }
+    canvas.maplibregl-canvas {
+      touch-action: none !important;
+      will-change: transform, opacity !important;
+      transform: translateZ(0); /* Force Hardware Acceleration */
+    }
+  </style>
 
 
 

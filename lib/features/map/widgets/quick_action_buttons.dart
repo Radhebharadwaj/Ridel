@@ -184,9 +184,9 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
     provider.startActiveNavigation(context);
   }
 
-  void _onStopNavTap(MapProvider provider) {
+  void _onStopNavTap(MapProvider provider) async {
     AppHaptics.heavyImpact();
-    provider.cancelAndClearRoute();
+    await provider.endActiveNavigation();
   }
 
   @override

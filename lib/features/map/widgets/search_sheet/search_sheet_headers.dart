@@ -431,25 +431,9 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                                 onPressed: () {
                                   debugPrint('End Route: Start');
                                   AppHaptics.heavyImpact();
-                                  
-                                  // 1. Force the Bottom Sheet UI back to the default Search mode
-                                  rebuildState(() {
-                                    _isNavSheetExpanded = false;
-                                    _currentMode = SheetMode.search;
-                                    _showDirections = false;
-                                    _selectedPlace = null;
-                                    _destPlace = null;
-                                    _originPlace = null;
-                                    _currentRoute = null;
-                                    _searchCtrl.clear();
-                                  });
 
-                                  // 2. Tell the Provider to clean the map (Fire and forget safely)
-                                  Future.microtask(() async {
-                                    if (!mounted) return;
-                                    final p = Provider.of<MapProvider>(context, listen: false);
-                                    await p.cancelAndClearRoute();
-                                  });
+                                  final provider = Provider.of<MapProvider>(context, listen: false);
+                                  provider.cancelAndClearRoute();
                                 },
                                 child: Container(
                                   width: double.infinity,

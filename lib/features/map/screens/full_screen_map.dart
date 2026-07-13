@@ -57,8 +57,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   MapLibreMapController? _tempController;
   MapThemeType? _currentTheme;
   CameraPosition? _currentCameraPosition;
-  bool _hasInitialCentered =
-      false; // 🚀 Task 2: Guard flag for initial auto-center
+  bool _hasInitialCentered = false;
+  final ValueNotifier<double> _sheetPixelHeightNotifier = ValueNotifier<double>(0.0); // 🚀 Task 2: Guard flag for initial auto-center
   bool _isCameraLocked = true; // NEW: Global Lock for camera
 
   void _unlockCamera() {
@@ -579,45 +579,38 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         child: Listener(
                           behavior: HitTestBehavior.translucent,
                           onPointerDown: (PointerDownEvent event) {
-                            // 🚀 INSTANT KILL-SWITCH
-                            final mapProvider = Provider.of<MapProvider>(
-                                context,
-                                listen: false);
-                            if (mapProvider.isAutoTracking) {
-                              mapProvider.setAutoTracking(false);
-                            }
-
-                            // 🚀 TASK 2: SYNTHETIC WEB LONG-PRESS
-                            if (kIsWeb) {
-                              _webLongPressTimer?.cancel();
-                              _webLongPressTimer = Timer(
-                                  const Duration(milliseconds: 500), () async {
-                                if (!mounted ||
-                                    mapProvider.controller == null) {
-                                  return;
-                                }
-
-                                if (mapProvider.isActiveNavigation ||
-                                    mapProvider.engine.mapUIState.value ==
-                                        MapUIState.navigating) {
-                                  debugPrint(
-                                      "Web simulated long-click ignored: Active navigation shield is ON.");
-                                  return;
-                                }
-
-                                LatLng point = await mapProvider.controller!
-                                    .toLatLng(Point(event.localPosition.dx,
-                                        event.localPosition.dy));
+                            // 🚀 FAST PATH: Return control to the UI thread immediately
+                            Future.microtask(() {
+                              if (!context.mounted) return;
+                              final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                              if (mapProvider.isAutoTracking) {
                                 mapProvider.setAutoTracking(false);
-                                mapProvider.setUserPanning(true);
-                                if (mapProvider.mapSelectionPlaceType != null) {
-                                  mapProvider.setTargetDestination(point);
-                                  mapProvider.addNativeDestinationPin(point);
-                                } else {
-                                  mapProvider.handleMapLongPress(point);
-                                }
-                              });
-                            }
+                              }
+
+                              if (kIsWeb) {
+                                _webLongPressTimer?.cancel();
+                                _webLongPressTimer = Timer(const Duration(milliseconds: 500), () async {
+                                  if (!mounted || mapProvider.controller == null) return;
+
+                                  if (mapProvider.isActiveNavigation ||
+                                      mapProvider.engine.mapUIState.value == MapUIState.navigating) {
+                                    debugPrint("Web simulated long-click ignored: Active navigation shield is ON.");
+                                    return;
+                                  }
+
+                                  LatLng point = await mapProvider.controller!
+                                      .toLatLng(Point(event.localPosition.dx, event.localPosition.dy));
+                                  mapProvider.setAutoTracking(false);
+                                  mapProvider.setUserPanning(true);
+                                  if (mapProvider.mapSelectionPlaceType != null) {
+                                    mapProvider.setTargetDestination(point);
+                                    mapProvider.addNativeDestinationPin(point);
+                                  } else {
+                                    mapProvider.handleMapLongPress(point);
+                                  }
+                                });
+                              }
+                            });
                           },
                           onPointerUp: (_) => _webLongPressTimer?.cancel(),
                           onPointerMove: (_) => _webLongPressTimer?.cancel(),
@@ -859,10 +852,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                     if (!isRouteActive) {
                                       try {
                                         await controller
-                                            .updateMyLocationTrackingMode(kIsWeb
-                                                ? MyLocationTrackingMode.tracking
-                                                : MyLocationTrackingMode
-                                                    .trackingCompass);
+                                            .updateMyLocationTrackingMode(
+                                                MyLocationTrackingMode.tracking);
                                       } catch (_) {}
                                     }
                                   } else {
@@ -895,55 +886,41 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 }
                               });
                             },
-                            onMapClick: (point, latLng) async {
-                              _lastTapTime =
-                                  DateTime.now(); // 🚀 TASK 1: UPDATE DEBOUNCER
-                              FocusScope.of(context).unfocus();
-                              final mapProvider = Provider.of<MapProvider>(
-                                  context,
-                                  listen: false);
+                            onMapClick: (point, latLng) {
+                              _lastTapTime = DateTime.now(); 
+                              
+                              // 🚀 DEFER EXECUTION: Allow the map engine to paint the click first
+                              Future.microtask(() async {
+                                if (!context.mounted) return;
+                                FocusScope.of(context).unfocus();
+                                final mapProvider = Provider.of<MapProvider>(context, listen: false);
 
-                              // 🚀 STRICT GUARD CLAUSE: Prevent accidental pin drops during active routing
-                              if (mapProvider.isActiveNavigation ||
-                                  mapProvider.engine.mapUIState.value ==
-                                      MapUIState.navigating) {
-                                debugPrint(
-                                    "Map click ignored: Active navigation shield is ON.");
-                                return;
-                              }
+                                if (mapProvider.isActiveNavigation || mapProvider.engine.mapUIState.value == MapUIState.navigating) {
+                                  return;
+                                }
 
-                              // 1. Break tracking immediately to avoid snap-back on pin drop
-                              if (mapProvider.controller != null) {
-                                await mapProvider.controller!
-                                    .updateMyLocationTrackingMode(
-                                        MyLocationTrackingMode.none);
-                              }
+                                if (mapProvider.controller != null) {
+                                  // Do not await this instantly blocking the thread
+                                  mapProvider.controller!.updateMyLocationTrackingMode(MyLocationTrackingMode.none);
+                                }
 
-                              // PIN DROP LOGIC MOVED EXCLUSIVELY TO onMapLongClick
+                                if (mapProvider.isFlying) {
+                                  mapProvider.stopCameraFlight();
+                                  return;
+                                }
 
-                              if (mapProvider.isFlying) {
-                                mapProvider.stopCameraFlight();
-                                return;
-                              }
+                                final currentUIState = mapProvider.engine.mapUIState.value;
+                                if (currentUIState == MapUIState.placeSelected ||
+                                    currentUIState == MapUIState.routeDrawn ||
+                                    mapProvider.isDestinationSelected) {
+                                  return;
+                                }
 
-                              // 🚀 FIX: Guard against clearing destination state when a place/route is active.
-                              // On web, onMapClick fires AFTER the synthetic long-press timer,
-                              // which would nuke the targetDestination just set by the pin-drop flow.
-                              final currentUIState =
-                                  mapProvider.engine.mapUIState.value;
-                              if (currentUIState == MapUIState.placeSelected ||
-                                  currentUIState == MapUIState.routeDrawn ||
-                                  mapProvider.isDestinationSelected) {
-                                debugPrint(
-                                    "Map click ignored: Destination is already selected (UIState: $currentUIState).");
-                                return;
-                              }
-
-                              bool handled = await mapProvider.handleRouteClick(
-                                  point, latLng);
-                              if (!handled) {
-                                mapProvider.clearTargetLocation();
-                              }
+                                bool handled = await mapProvider.handleRouteClick(point, latLng);
+                                if (!handled) {
+                                  mapProvider.clearTargetLocation();
+                                }
+                              });
                             },
                             onMapLongClick: (Point<double> point,
                                 LatLng coordinates) async {
@@ -1018,15 +995,18 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             logoViewMargins: const Point(-5000, -5000),
                             attributionButtonMargins: const Point(-5000, -5000),
                             onCameraTrackingDismissed: () {
-                              _unlockCamera(); // 🚀 Unlock on manual gesture
-                              final mapProvider = Provider.of<MapProvider>(
-                                  context,
-                                  listen: false);
-                              if (mapProvider.isActiveNavigation) {
-                                mapProvider.setAutoTracking(false);
-                                mapProvider.setUserPanning(true);
-                              }
-                              mapProvider.engine.onUserPannedMap();
+                              _unlockCamera();
+                              
+                              // 🚀 THE FIX: Defer state changes to prevent 'setState during build' fatal crashes!
+                              Future.microtask(() {
+                                if (!context.mounted) return;
+                                final mapProvider = Provider.of<MapProvider>(context, listen: false);
+                                if (mapProvider.isActiveNavigation) {
+                                  mapProvider.setAutoTracking(false);
+                                  mapProvider.setUserPanning(true);
+                                }
+                                mapProvider.engine.onUserPannedMap();
+                              });
                             },
                             onUserLocationUpdated: (location) {
                               if (!mounted) return;
@@ -1133,22 +1113,31 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                     child: RepaintBoundary(
                       child: Builder(
                         builder: (context) {
-                          final sheet = MapSearchSheet(
-                            key: const ValueKey('map_search_sheet'),
-                            isMapTabActive: widget.isMapTabActive,
-                            onSearchModeChanged: (isActive) {},
-                            onSearchSubmitted: (query) {},
-                            onProgressChanged: (progress) {
+                          final sheet = NotificationListener<DraggableScrollableNotification>(
+                            onNotification: (notification) {
                               if (mounted) {
-                                widget.searchSheetProgressNotifier.value =
-                                    progress;
+                                final parentHeight = notification.context?.size?.height ?? MediaQuery.sizeOf(context).height;
+                                _sheetPixelHeightNotifier.value = notification.extent * parentHeight;
                               }
+                              return false;
                             },
-                            onBackToPreviousTab: () {
-                              Provider.of<AppNavigationProvider>(context,
-                                      listen: false)
-                                  .goBack();
-                            },
+                            child: MapSearchSheet(
+                              key: const ValueKey('map_search_sheet'),
+                              isMapTabActive: widget.isMapTabActive,
+                              onSearchModeChanged: (isActive) {},
+                              onSearchSubmitted: (query) {},
+                              onProgressChanged: (progress) {
+                                if (mounted) {
+                                  widget.searchSheetProgressNotifier.value =
+                                      progress;
+                                }
+                              },
+                              onBackToPreviousTab: () {
+                                Provider.of<AppNavigationProvider>(context,
+                                        listen: false)
+                                    .goBack();
+                              },
+                            ),
                           );
                           return sheet;
                         },
@@ -1378,34 +1367,38 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                 ValueListenableBuilder<double>(
                   valueListenable: widget.searchSheetProgressNotifier,
                   builder: (context, progress, pillChild) {
-                    if (isDesktop) {
-                      return Positioned(
-                        bottom: 32.0,
-                        right: sideMargin,
-                        child: pillChild!,
-                      );
-                    }
-                    final double screenHeight =
-                        MediaQuery.sizeOf(context).height;
-                    const double buttonGap = 16.0;
+                    return ValueListenableBuilder<double>(
+                      valueListenable: _sheetPixelHeightNotifier,
+                      builder: (context, pixelHeight, _) {
+                        if (isDesktop) {
+                          return Positioned(
+                            bottom: 32.0,
+                            right: sideMargin,
+                            child: pillChild!,
+                          );
+                        }
+                        const double buttonGap = 16.0;
 
-                    // This formula guarantees the buttons ALWAYS stay exactly 'buttonGap'
-                    // distance above the top edge of the sheet.
-                    final double dynamicBottomPosition =
-                        (screenHeight * progress) + buttonGap;
+                        // Use the exact pixel height from the notification if available,
+                        // fallback to the fractional calculation during initialization.
+                        final double dynamicBottomPosition = (pixelHeight > 0.0) 
+                            ? (pixelHeight + buttonGap) 
+                            : ((MediaQuery.sizeOf(context).height * progress) + buttonGap);
 
-                    final opacity = (progress <= 0.45)
-                        ? 1.0
-                        : (1.0 - ((progress - 0.45) / (0.90 - 0.45)))
-                            .clamp(0.0, 1.0);
+                        final opacity = (progress <= 0.45)
+                            ? 1.0
+                            : (1.0 - ((progress - 0.45) / (0.90 - 0.45)))
+                                .clamp(0.0, 1.0);
 
-                    return Positioned(
-                      bottom: dynamicBottomPosition,
-                      right: 16.0,
-                      child: Opacity(
-                        opacity: opacity,
-                        child: pillChild!,
-                      ),
+                        return Positioned(
+                          bottom: dynamicBottomPosition,
+                          right: 16.0,
+                          child: Opacity(
+                            opacity: opacity,
+                            child: pillChild!,
+                          ),
+                        );
+                      }
                     );
                   },
                   child: Builder(
@@ -1441,8 +1434,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               // 🍏 THE APPLE "PILL" (Map Settings + Locate Me)
                               Selector<MapProvider, bool>(
                                 selector: (context, provider) =>
-                                    !provider.isActiveNavigation ||
-                                    !provider.isAutoTracking,
+                                    !provider.isActiveNavigation, // 🚀 Strictly hide during navigation
                                 builder: (context, isVisible, child) {
                                   return IgnorePointer(
                                     ignoring: !isVisible,
@@ -1626,88 +1618,87 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   }
 
   Future<void> _handleLocateMeTapped(MapProvider provider) async {
-    final locService =
-        Provider.of<GlobalLocationService>(context, listen: false);
-    final permission = await Geolocator.checkPermission();
+    final locService = Provider.of<GlobalLocationService>(context, listen: false);
+    LocationPermission permission = await Geolocator.checkPermission();
     final bool isServiceOn = await Geolocator.isLocationServiceEnabled();
 
-    // 🚫 CASE 1: Permission Denied or GPS Off -> INTERCEPT & SHOW TOAST
     if (!mounted) return;
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever ||
-        !isServiceOn) {
-      // Trigger interactive toast immediately. DO NOT move the map!
+
+    // 🚫 CASE 1: HARDWARE GPS IS OFF
+    if (!isServiceOn) {
       ToastService.showActionToast(
         context,
-        message: "Location permission needed to show your exact position.",
+        message: "GPS is turned off. Please enable it to locate yourself.",
         actionLabel: "ENABLE",
         onActionTap: () async {
-          if (kIsWeb) {
-            await Geolocator.requestPermission();
-          } else {
-            if (permission == LocationPermission.deniedForever) {
-              await Geolocator.openAppSettings();
-            } else if (!isServiceOn) {
-              await Geolocator.openLocationSettings();
-            } else {
-              await Geolocator.requestPermission();
-            }
-          }
-          if (mounted) {
-            Provider.of<GlobalLocationService>(context, listen: false)
-                .initializeEcoLocation(isManualTrigger: true);
-          }
+          await Geolocator.openLocationSettings();
+          if (mounted) locService.initializeEcoLocation(isManualTrigger: true);
         },
       );
       return;
     }
 
-    // ✅ CASE 2: Permission Granted -> FETCH GPS & SNIPE
-    final pos = locService.currentPosition;
-    if (pos != null && !pos.isMocked && pos.accuracy <= 150.0) {
-      // 🚀 UNLOCK SHIELD ON MANUAL USER ACTION
-      _unlockCamera();
-
-      final mapController = provider.controller ?? _tempController;
-      if (mapController != null && mapController.cameraPosition != null) {
-        final camPos = mapController.cameraPosition!;
-
-        // Calculate distance between current map center and actual user GPS
-        final double distanceInMeters = Geolocator.distanceBetween(
-          camPos.target.latitude,
-          camPos.target.longitude,
-          pos.latitude,
-          pos.longitude,
-        );
-
-        // 🚀 UX MAGIC: If already centered (< 50 meters), toggle the 3D Tilt!
-        if (distanceInMeters < 50.0) {
-          final double currentTilt = camPos.tilt;
-          final double targetTilt =
-              currentTilt > 30.0 ? 0.0 : 60.0; // Toggle Flat vs 3D
-
-          debugPrint(
-              "🔄 [Locate Button] Already centered. Toggling tilt from $currentTilt to $targetTilt.");
-
-          await mapController.animateCamera(
-            CameraUpdate.newCameraPosition(
-              CameraPosition(
-                target:
-                    LatLng(pos.latitude, pos.longitude), // Lock exact center
-                zoom: camPos.zoom, // Preserve current user zoom
-                bearing: camPos.bearing, // Preserve current rotation
-                tilt: targetTilt, // 🚀 APPLY SMOOTH TILT
-              ),
-            ),
-            duration: const Duration(milliseconds: 1200),
-          );
-          return; // Exit early so we don't trigger the standard snipe
-        }
+    // 🚀 CASE 2: PERMISSION IS DENIED -> DIRECT OS POPUP
+    if (permission == LocationPermission.denied) {
+      // Do NOT show a toast here. Fire the OS dialogue instantly!
+      permission = await Geolocator.requestPermission();
+      
+      // If the user rejects the popup, silently abort.
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        return; 
       }
+    }
 
-      await _igniteBlueDotAndSnipe(pos);
-    } else {
+    // 🚫 CASE 3: PERMISSION PERMANENTLY BLOCKED
+    if (permission == LocationPermission.deniedForever) {
+      if (!context.mounted) return;
+      ToastService.showActionToast(
+        context,
+        message: "Location blocked. Please allow access in App Settings.",
+        actionLabel: "SETTINGS",
+        onActionTap: () async {
+          await Geolocator.openAppSettings();
+        },
+      );
+      return;
+    }
+
+    // ✅ CASE 4: PERMISSION GRANTED -> PROCEED WITH SNIPE
+    if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+      // Initialize tracking if it wasn't running
       await locService.initializeEcoLocation(isManualTrigger: true);
+      
+      final pos = locService.currentPosition;
+      if (pos != null && !pos.isMocked && pos.accuracy <= 150.0) {
+        _unlockCamera();
+
+        final mapController = provider.controller ?? _tempController;
+        if (mapController != null && mapController.cameraPosition != null) {
+          final camPos = mapController.cameraPosition!;
+          final double distanceInMeters = Geolocator.distanceBetween(
+            camPos.target.latitude, camPos.target.longitude,
+            pos.latitude, pos.longitude,
+          );
+
+          if (distanceInMeters < 50.0) {
+            final double currentTilt = camPos.tilt;
+            final double targetTilt = currentTilt > 30.0 ? 0.0 : 60.0; 
+            await mapController.animateCamera(
+              CameraUpdate.newCameraPosition(
+                CameraPosition(
+                  target: LatLng(pos.latitude, pos.longitude), 
+                  zoom: camPos.zoom, 
+                  bearing: camPos.bearing, 
+                  tilt: targetTilt, 
+                ),
+              ),
+              duration: const Duration(milliseconds: 1200),
+            );
+            return; 
+          }
+        }
+        await _igniteBlueDotAndSnipe(pos);
+      }
     }
   }
 }

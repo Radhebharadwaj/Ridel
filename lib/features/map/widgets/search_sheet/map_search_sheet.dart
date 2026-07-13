@@ -432,22 +432,23 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
   void _handleCancelRoute(BuildContext context, MapProvider provider) {
     FocusScope.of(context).unfocus();
-    // 1. Cache the ENTIRE necessary state BEFORE clearing it
+    
+    // Cache state for UNDO
     final cachedPlace = _selectedPlace;
     final cachedCoords = provider.targetDestination;
     final cachedNavMode = provider.currentNavMode;
     final wasRouteCalculated = provider.isRouteCalculated;
 
-    // 2. Clear the UI and Map
-    provider.cancelAndClearRoute();
+    // Clear provider session
+    provider.clearSearchSession(context);
+
+    // Update local UI state
     setState(() {
       _selectedPlace = null;
       _currentMode = SheetMode.search;
       _isSearchExpanded = false;
       _searchCtrl.clear();
     });
-    provider.setDropPinMode(false); // 🚨 CRITICAL FIX
-    provider.setAddingStopMode(false); // 🚨 CRITICAL FIX
 
     if (_sheetController.isAttached) {
       _safeAnimateSheet(_safeMidSize);
@@ -1167,18 +1168,15 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   }
 
   void _safeAnimateSheet(double targetSize) {
-    // 1. Defers execution until the current layout frame is completely finished
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_sheetController.isAttached) {
-        // 2. Strict bounds check to prevent Flutter Engine crashes
-        double safeSize = targetSize.clamp(_safeMinSize, 1.0);
-        _sheetController.animateTo(
-          safeSize,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-        );
-      }
-    });
+    if (_sheetController.isAttached) {
+      // Strict bounds check to prevent Flutter Engine crashes
+      double safeSize = targetSize.clamp(_safeMinSize, 1.0);
+      _sheetController.animateTo(
+        safeSize,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   @override

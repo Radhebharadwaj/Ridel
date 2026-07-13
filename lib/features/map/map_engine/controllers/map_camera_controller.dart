@@ -351,7 +351,7 @@ class MapCameraController {
         state = MapCameraState.heading;
 
         if (!kIsWeb) {
-          await _safeSetTrackingMode(MyLocationTrackingMode.trackingCompass);
+          await _safeSetTrackingMode(MyLocationTrackingMode.tracking);
         }
 
         try {
@@ -377,7 +377,7 @@ class MapCameraController {
         state = MapCameraState.heading;
 
         if (!kIsWeb) {
-          await _safeSetTrackingMode(MyLocationTrackingMode.trackingCompass);
+          await _safeSetTrackingMode(MyLocationTrackingMode.tracking);
         }
 
         try {
@@ -520,7 +520,7 @@ class MapCameraController {
       await animateCameraCinematic(center: userPos, zoom: defaultZoom2, pitch: 50.0);
       state = MapCameraState.heading;
       if (isRealGps) {
-        await _safeSetTrackingMode(MyLocationTrackingMode.trackingCompass);
+        await _safeSetTrackingMode(MyLocationTrackingMode.tracking);
       } else {
         await _safeSetTrackingMode(MyLocationTrackingMode.none);
       }
