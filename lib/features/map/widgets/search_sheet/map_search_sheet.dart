@@ -59,12 +59,14 @@ class MapSearchSheet extends StatefulWidget {
     required this.onBackToPreviousTab,
     super.key,
     this.onProgressChanged,
+    this.onPixelHeightChanged,
   });
   final bool isMapTabActive;
   final Function(bool) onSearchModeChanged;
   final Function(String) onSearchSubmitted;
   final VoidCallback onBackToPreviousTab;
   final Function(double)? onProgressChanged;
+  final Function(double)? onPixelHeightChanged;
 
   @override
   State<MapSearchSheet> createState() => _MapSearchSheetState();
@@ -185,6 +187,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   void initState() {
     super.initState();
     _sheetController = DraggableScrollableController();
+    _sheetController.addListener(() {
+      if (!mounted || !_sheetController.isAttached) return;
+      if (widget.onPixelHeightChanged != null) {
+        try {
+          widget.onPixelHeightChanged!(_sheetController.pixels);
+        } catch (_) {}
+      }
+    });
     _isSearchMode = widget.isMapTabActive;
 
     // 🏠 Init Saved Places Location Picker
@@ -468,7 +478,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         if (wasRouteCalculated) {
           provider.currentNavMode = cachedNavMode;
           if (!context.mounted) return;
-          await provider.calculateAndDrawNativeRoute(context, cachedNavMode);
+          await provider.calculateAndDrawNativeRoute(context, mode: cachedNavMode);
         }
       } else if (cachedCoords != null) {
         // Fallback manual restore
@@ -1442,11 +1452,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                             }
                             return false;
                           },
-                          child: SafeArea(
-                            bottom: false,
-                            top: false, // Don't restrict the top
-                            child: DraggableScrollableSheet(
-                              key: ValueKey(_currentMode), // 🚀 Forces clean unmount when switching states
+                          child: DraggableScrollableSheet(
+                            key: ValueKey(_currentMode), // 🚀 Forces clean unmount when switching states
                               controller: _sheetController,
                               initialChildSize:
                                   (isKeyboardOpen && !isNav) ? 1.0 : minS,
@@ -1698,7 +1705,6 @@ snapAnimationDuration:
                                 );
                               },
                             ),
-                          ),
                         ),
                 ))),
         // 🗺️ FLOATING MAP PIN OVERLAY (visible only when picking a location)

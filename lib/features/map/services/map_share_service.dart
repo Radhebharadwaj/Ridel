@@ -74,9 +74,11 @@ class MapShareService {
       }
       shareText += "View on Maps: $mapUrl";
 
-      final result = await Share.share(
-        shareText,
-        subject: "Shared via Ridel Maps",
+      final result = await SharePlus.instance.share(
+        ShareParams(
+          text: shareText,
+          subject: "Shared via Ridel Maps",
+        ),
       );
 
       // Silent analytics hook could be added here checking result.status

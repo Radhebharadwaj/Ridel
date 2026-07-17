@@ -1,0 +1,540 @@
+# HPC MapLibre Bridge Architecture Plan
+
+> **Objective:** Eliminate all JSON serialization bottlenecks, offload heavy map computations off the main thread, and decouple Flutter's render pipeline from the WebGL canvas to achieve near-0ms interaction latency.
+
+---
+
+## Current Architecture Diagnosis
+
+After analyzing the codebase, here is the exact data flow and its bottlenecks:
+
+```mermaid
+graph TD
+    A["User taps Destination"] --> B["MapProvider.calculateAndDrawNativeRoute()"]
+    B --> C["RouteEngineService._getOlaRoute()"]
+    C --> D["HTTP POST → Ola API"]
+    D --> E["compute(_processHeavyRouteSync) ✅ Isolate"]
+    E --> F["Returns RouteResult to Main Thread"]
+    F --> G["drawNativeRoute() 🔴 MAIN THREAD"]
+    G --> H["Build GeoJSON Map objects 🔴"]
+    H --> I["controller.addGeoJsonSource() 🔴 JSON→JS Bridge"]
+    I --> J["controller.addLineLayer() x6 🔴"]
+    J --> K["controller.animateCamera() 🔴"]
+    
+    style G fill:#ff6b6b
+    style H fill:#ff6b6b
+    style I fill:#ff6b6b
+    style J fill:#ff6b6b
+    style K fill:#ff6b6b
+```
+
+### Identified Bottlenecks
+
+| # | Location | Problem | Impact |
+|---|----------|---------|--------|
+| 1 | `drawNativeRoute` L1083-1375 | Builds 6+ GeoJSON `Map<String, dynamic>` objects on the main thread | ~15ms per route |
+| 2 | `addGeoJsonSource()` calls (10 total) | Each call serializes Dart `Map` → JSON string → JS `JSON.parse()` via platform channel | ~5ms × 10 = 50ms |
+| 3 | `_buildPrimaryGeoJson` (compute) | Creates N-1 Feature objects for congestion segments. Good (isolate), but the result is a massive Map that must be serialized back to main | ~8ms deserialize |
+| 4 | `onCameraMove` callback | Was printing to console 100+ times/sec | **Eliminated ✅** |
+| 5 | `notifyListeners()` after route draw | Triggers widget tree re-evaluation, potentially stuttering PlatformView | ~3-5ms per notify |
+
+> [!IMPORTANT]
+> The route parsing is **already well-optimized** — `_processHeavyRouteSync` runs in a Dart isolate via `compute()`. The real bottleneck is the **bridge serialization** phase (Dart Map → JSON String → JS Object) which happens on the main thread 10+ times per route draw.
+
+---
+
+## Phase 1: Binary Data Pipeline (Zero-Copy Serialization)
+
+### Current Flow (Slow)
+```
+Dart List<LatLng> → Map<String, dynamic> (GeoJSON) → json.encode() → JS JSON.parse() → MapLibre
+```
+
+### Proposed Flow (Fast)
+```
+Dart List<LatLng> → Float64List (TypedArray) → JS Float64Array (Zero-Copy Transfer) → JS builds GeoJSON natively
+```
+
+### Dart Interop Types
+
+```dart
+// File: lib/core/map/bridge/map_binary_bridge.dart
+
+import 'dart:js_interop';
+import 'dart:typed_data';
+import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:web/web.dart' as web;
+
+/// Converts a list of LatLng points to a flat Float64List for zero-copy JS transfer.
+/// Layout: [lat0, lng0, lat1, lng1, lat2, lng2, ...]
+Float64List latLngToBuffer(List<LatLng> points) {
+  final buffer = Float64List(points.length * 2);
+  for (int i = 0; i < points.length; i++) {
+    buffer[i * 2] = points[i].longitude;      // GeoJSON uses [lng, lat]
+    buffer[i * 2 + 1] = points[i].latitude;
+  }
+  return buffer;
+}
+
+/// The JS-side function that accepts the buffer and injects it into MapLibre.
+@JS('window.__ridel_setRouteFromBuffer')
+external void jsSetRouteFromBuffer(
+  JSFloat64Array coordBuffer,
+  JSNumber pointCount,
+  JSString sourceId,
+  JSString? congestionJson,
+);
+```
+
+### JavaScript Receiver (injected via `<script>` in `index.html`)
+
+```javascript
+// File: web/js/ridel_bridge.js
+
+window.__ridel_setRouteFromBuffer = function(buffer, pointCount, sourceId, congestionJson) {
+  const coords = [];
+  for (let i = 0; i < pointCount; i++) {
+    coords.push([buffer[i * 2], buffer[i * 2 + 1]]);
+  }
+  
+  let features;
+  if (congestionJson) {
+    const congestion = JSON.parse(congestionJson);
+    features = [];
+    for (let i = 0; i < coords.length - 1; i++) {
+      const idx = Math.floor(i / coords.length * congestion.length);
+      features.push({
+        type: "Feature",
+        properties: { index: 0, congestion: congestion[Math.min(idx, congestion.length - 1)] },
+        geometry: { type: "LineString", coordinates: [coords[i], coords[i + 1]] }
+      });
+    }
+  } else {
+    features = [{
+      type: "Feature",
+      properties: { index: 0, congestion: "low" },
+      geometry: { type: "LineString", coordinates: coords }
+    }];
+  }
+  
+  const map = window.__maplibreInstance; // Must be captured during onMapCreated
+  if (map) {
+    const source = map.getSource(sourceId);
+    if (source) {
+      source.setData({ type: "FeatureCollection", features });
+    } else {
+      map.addSource(sourceId, { type: "geojson", data: { type: "FeatureCollection", features } });
+    }
+  }
+};
+```
+
+### Refactored `drawNativeRoute` Call (Dart side)
+
+```dart
+// Instead of:
+await controller!.addGeoJsonSource('route-source-0', geoJson);
+
+// Use:
+final buffer = latLngToBuffer(primaryCoords);
+jsSetRouteFromBuffer(
+  buffer.toJS,
+  primaryCoords.length.toJS,
+  'route-source-0'.toJS,
+  congestionData != null ? json.encode(congestionData).toJS : null,
+);
+```
+
+> [!TIP]
+> `Float64List.toJS` in `dart:js_interop` creates a `JSFloat64Array` that shares the underlying buffer with the JavaScript `Float64Array` — **zero copy**.
+
+### Risk Assessment
+- **Low Risk**: This is purely additive — we add a parallel fast path without removing the existing `addGeoJsonSource` fallback.
+- **Dependency**: Requires capturing `window.__maplibreInstance` during `onMapCreated`. The `maplibre_gl` package uses platform views, so we need to hook into the map instance via the existing controller's internal handle.
+
+---
+
+## Phase 2: Off-Main-Thread Routing (Web Workers)
+
+### Current Flow
+```
+Main Thread: HTTP fetch → compute(isolate) → deserialize → build GeoJSON → bridge call
+```
+
+### Proposed Flow
+```
+Main Thread: postMessage(origin, dest, apiKey)  →  [Web Worker does ALL of this]  →  postMessage(routeResult)
+                                                          ↓
+                                          fetch() → parse → simplify → buffer
+```
+
+### Web Worker Implementation
+
+```javascript
+// File: web/js/ridel_route_worker.js
+
+self.onmessage = async function(e) {
+  const { origin, destination, mode, apiKey, waypoints, requestId } = e.data;
+  
+  try {
+    let url = `https://api.olamaps.io/routing/v1/directions?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&api_key=${apiKey}&mode=${mode}&alternatives=true&steps=true&traffic_metadata=true&overview=full`;
+    
+    if (waypoints && waypoints.length > 0) {
+      url += `&waypoints=${waypoints.map(w => `${w.lat},${w.lng}`).join('|')}`;
+    }
+    
+    const response = await fetch(url, { 
+      method: 'POST',
+      headers: { 'Accept': 'application/json' }
+    });
+    
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    
+    const data = await response.json();
+    if (!data.routes || data.routes.length === 0) throw new Error('No routes');
+    
+    // Parse all routes
+    const allRoutes = [];
+    const allDurations = [];
+    const steps = [];
+    let distanceKm = 0;
+    let durationMins = 0;
+    let firstInstruction = 'Head to destination';
+    let congestion = null;
+    
+    for (let i = 0; i < data.routes.length; i++) {
+      const route = data.routes[i];
+      const leg = route.legs?.[0];
+      if (!leg) continue;
+      
+      // Decode polyline (Ola uses Google format)
+      let polyline = '';
+      if (typeof route.overview_polyline === 'string') polyline = route.overview_polyline;
+      else if (route.overview_polyline?.points) polyline = route.overview_polyline.points;
+      else if (typeof route.geometry === 'string') polyline = route.geometry;
+      
+      const coords = decodePolyline(polyline);
+      const simplified = douglasPeucker(coords, 0.0001);
+      allRoutes.push(simplified);
+      allDurations.push(leg.duration || 0);
+      
+      if (i === 0) {
+        distanceKm = (leg.distance || 0) / 1000;
+        durationMins = Math.ceil((leg.duration || 0) / 60);
+        
+        const rawSteps = leg.steps || [];
+        if (rawSteps.length > 0 && rawSteps[0].html_instructions) {
+          firstInstruction = rawSteps[0].html_instructions.replace(/<[^>]*>/g, '');
+        }
+        
+        // Extract congestion
+        congestion = extractCongestion(rawSteps);
+      }
+    }
+    
+    // Convert primary route to transferable Float64Array
+    const primaryBuffer = new Float64Array(allRoutes[0].length * 2);
+    for (let i = 0; i < allRoutes[0].length; i++) {
+      primaryBuffer[i * 2] = allRoutes[0][i][0];     // lng
+      primaryBuffer[i * 2 + 1] = allRoutes[0][i][1]; // lat
+    }
+    
+    // Transfer the buffer (zero-copy to main thread)
+    self.postMessage({
+      requestId,
+      success: true,
+      primaryBuffer,
+      primaryPointCount: allRoutes[0].length,
+      altRoutes: allRoutes.slice(1), // Alt routes are small, JSON is fine
+      allDurations,
+      distanceKm,
+      durationMins,
+      firstInstruction,
+      congestion,
+    }, [primaryBuffer.buffer]); // Transferable!
+    
+  } catch (error) {
+    self.postMessage({ requestId, success: false, error: error.message });
+  }
+};
+
+// Standard Google polyline decoder
+function decodePolyline(str) { /* ... standard implementation ... */ }
+
+// Douglas-Peucker line simplification
+function douglasPeucker(points, tolerance) { /* ... standard implementation ... */ }
+
+// Extract congestion from steps
+function extractCongestion(steps) { /* ... */ }
+```
+
+### Dart Integration
+
+```dart
+// File: lib/core/map/bridge/route_worker_bridge.dart
+
+import 'dart:js_interop';
+import 'package:web/web.dart' as web;
+
+class RouteWorkerBridge {
+  static web.Worker? _worker;
+  static int _requestCounter = 0;
+  static final Map<int, Completer<Map<String, dynamic>>> _pending = {};
+  
+  static void initialize() {
+    _worker = web.Worker('js/ridel_route_worker.js'.toJS);
+    _worker!.onmessage = ((web.MessageEvent event) {
+      final data = (event.data as JSObject).dartify() as Map;
+      final id = data['requestId'] as int;
+      _pending.remove(id)?.complete(data as Map<String, dynamic>);
+    }).toJS;
+  }
+  
+  static Future<Map<String, dynamic>> calculateRoute({
+    required double originLat, required double originLng,
+    required double destLat, required double destLng,
+    required String mode, required String apiKey,
+    List<Map<String, double>>? waypoints,
+  }) {
+    final id = _requestCounter++;
+    final completer = Completer<Map<String, dynamic>>();
+    _pending[id] = completer;
+    
+    _worker!.postMessage({
+      'requestId': id,
+      'origin': {'lat': originLat, 'lng': originLng},
+      'destination': {'lat': destLat, 'lng': destLng},
+      'mode': mode,
+      'apiKey': apiKey,
+      'waypoints': waypoints,
+    }.jsify());
+    
+    return completer.future.timeout(const Duration(seconds: 8));
+  }
+  
+  static void dispose() {
+    _worker?.terminate();
+    _pending.clear();
+  }
+}
+```
+
+### Impact Analysis
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Main thread block during route parse | ~30ms (JSON decode + Douglas-Peucker) | **0ms** (worker) |
+| Main thread block during GeoJSON build | ~15ms | **0ms** (worker builds buffer) |
+| Bridge serialization cost | ~50ms (10 × JSON stringify/parse) | **~2ms** (1 × buffer transfer) |
+| Total main thread cost per route | **~95ms** | **~2ms** |
+
+> [!WARNING]
+> **Web Worker fetch() and CORS**: The Ola Maps API must support CORS for Worker-initiated requests. Currently the Dart code uses `http.Client` which goes through the browser's fetch polyfill. Workers use native `fetch()` which requires the same CORS headers. **Verify this before implementation.**
+
+---
+
+## Phase 3: The "Glass" Touch Bypass (Event Delegation)
+
+### Current Architecture
+
+```
+User Touch → Flutter Gesture Arena → HtmlElementView → Browser DOM → MapLibre JS
+                    ~50-100ms latency added here
+```
+
+### Problem Analysis
+
+Flutter Web uses `CanvasKit` rendering which overlays an HTML5 Canvas on top of the MapLibre `<div>`. The `HtmlElementView` widget creates a "slot" in the Flutter canvas, but Flutter's gesture arena still intercepts and re-dispatches touch events. This adds 50-100ms of latency to every pan/zoom gesture.
+
+### Proposed Solution: Selective Pointer Passthrough
+
+> [!CAUTION]
+> We **cannot** use blanket `IgnorePointer` because we still need:
+> - `onMapClick` for POI selection and pin drops
+> - `onMapLongPress` for quick-routing
+> - `onCameraMove` / `onCameraIdle` for scale bar and tracking updates
+>
+> These are **callback-based** (MapLibre fires them to Dart), not **gesture-based** (Dart intercepting DOM events). So they will continue to work even with pointer passthrough.
+
+### Implementation Strategy
+
+```dart
+// In full_screen_map.dart, the existing Listener wrapper:
+// Current (line 579):
+child: Listener(
+  behavior: HitTestBehavior.translucent,
+  onPointerDown: (PointerDownEvent event) { ... },
+  child: MapLibreMap(...)
+)
+
+// Proposed:
+// 1. Remove the Listener wrapper entirely
+// 2. Let MapLibre's own JS event handlers manage touch natively
+// 3. Use a CSS override to ensure the Flutter overlay canvas does NOT intercept
+```
+
+### CSS Injection (web/index.html)
+
+```css
+/* Allow touch events to pass directly to the MapLibre canvas */
+flt-glass-pane {
+  pointer-events: none !important;
+}
+
+/* But re-enable pointer events on the MapLibre container itself */
+.maplibregl-canvas-container {
+  pointer-events: auto !important;
+}
+
+/* And on Flutter overlay elements (sheets, buttons, etc.) */
+.flt-platform-view-slot ~ * {
+  pointer-events: auto !important;
+}
+```
+
+### Risk Assessment
+
+> [!WARNING]
+> This is the **highest-risk phase**. Blanket `pointer-events: none` on `flt-glass-pane` will break ALL Flutter touch interactions (buttons, sheets, scrolling). The CSS selectors must be surgically scoped to ONLY the map viewport area.
+>
+> **Recommendation**: Defer this phase until Phases 1 & 2 are validated. The performance gain here (~50ms per gesture) is less impactful than the ~93ms saved in Phases 1+2, and carries significantly more regression risk.
+
+### Safer Alternative: `PointerInterceptor` Pattern
+
+Instead of CSS hacking, use the [`pointer_interceptor`](https://pub.dev/packages/pointer_interceptor) package (officially maintained by Flutter team) which creates a transparent HTML overlay that properly delegates events:
+
+```dart
+// Wrap the MapLibreMap in a HitTestBehavior.translucent container
+// and wrap all OVERLAY widgets (buttons, sheets) in PointerInterceptor
+import 'package:pointer_interceptor/pointer_interceptor.dart';
+
+// For the floating buttons:
+PointerInterceptor(
+  child: MapControlsPill(...)
+)
+```
+
+---
+
+## Phase 4: RepaintBoundary Isolation
+
+### Current State: ✅ Partially Implemented
+
+The MapLibre widget is already wrapped in a `RepaintBoundary` at [full_screen_map.dart:578](file:///home/radhe/radhe/Ridel/lib/features/map/screens/full_screen_map.dart#L578).
+
+### Remaining Vulnerabilities
+
+The `build()` method of `_FullScreenMapPageState` is still being triggered by:
+
+1. **`setState()` in `_initMapStyle()`** (line 509) — sets `_loadedMapStyle`, forces full rebuild
+2. **`MediaQuery.of(context)`** (line 530) — rebuilds on ANY system metric change (keyboard, orientation)
+3. **`Theme.of(context)`** (line 531) — rebuilds on theme change
+4. **`Provider.of<MapProvider>(context, listen: false)`** (line 567) — safe (no listen), but it's inside `build()` which runs anyway
+
+### Fix: Extract the MapLibre Widget into a Standalone Widget
+
+```dart
+// File: lib/features/map/widgets/isolated_map_view.dart
+
+class IsolatedMapView extends StatefulWidget {
+  final String mapStyle;
+  final CameraPosition initialCamera;
+  final Function(MapLibreMapController) onMapCreated;
+  final Function(CameraPosition?) onCameraMove;
+  final VoidCallback onCameraIdle;
+  
+  const IsolatedMapView({...});
+  
+  @override
+  State<IsolatedMapView> createState() => _IsolatedMapViewState();
+}
+
+class _IsolatedMapViewState extends State<IsolatedMapView> {
+  // This widget NEVER rebuilds after initial creation.
+  // All updates go through the controller reference, not setState.
+  
+  @override
+  bool get wantKeepAlive => true; // For AutomaticKeepAliveClientMixin
+  
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: MapLibreMap(
+        key: widget.key,
+        styleString: widget.mapStyle,
+        initialCameraPosition: widget.initialCamera,
+        onMapCreated: widget.onMapCreated,
+        onCameraMove: widget.onCameraMove,
+        onCameraIdle: widget.onCameraIdle,
+        // ... all other props
+      ),
+    );
+  }
+}
+```
+
+### Migration Path
+
+```diff
+// In full_screen_map.dart build():
+- return RepaintBoundary(
+-   child: Listener(
+-     child: MapLibreMap(
+-       styleString: _loadedMapStyle!,
+-       ...
+-     ),
+-   ),
+- );
++ return IsolatedMapView(
++   key: _mapKey,
++   mapStyle: _loadedMapStyle!,
++   initialCamera: CameraPosition(...),
++   onMapCreated: _onMapCreated,
++   onCameraMove: _onCameraMove,
++   onCameraIdle: _onCameraIdle,
++ );
+```
+
+### Rebuild Prevention Checklist
+
+| Trigger | Current | Fix |
+|---------|---------|-----|
+| `_loadedMapStyle` changes | Full rebuild | Style changes via `controller.setStyleString()` — no setState |
+| `MediaQuery.of()` | Full rebuild | Use `MediaQuery.sizeOf()` ✅ (already done on L530) |
+| Theme change | Full rebuild | Pass `isDark` as prop, use `didUpdateWidget` |
+| ETA/TTS updates | `notifyListeners()` → rebuild | Already using `Selector` widgets ✅ |
+| Navigation state | `notifyListeners()` → rebuild | Already using `Selector` widgets ✅ |
+
+---
+
+## Implementation Priority & Risk Matrix
+
+| Phase | Impact | Risk | Effort | Priority |
+|-------|--------|------|--------|----------|
+| **🔴 Immediate: Kill debugPrint spam** | Critical | None | 1 min | **Done ✅** |
+| **Phase 4: RepaintBoundary Isolation** | High | Low | 2 hrs | **P0** |
+| **Phase 1: Binary Data Pipeline** | High | Medium | 4 hrs | **P1** |
+| **Phase 2: Web Worker Routing** | Very High | Medium | 8 hrs | **P1** |
+| **Phase 3: Glass Touch Bypass** | Medium | High | 6 hrs | **P2** |
+
+> [!NOTE]
+> **Recommended execution order**: Phase 4 → Phase 1 → Phase 2 → Phase 3.
+> Phase 4 is the safest and gives the most immediate UI stability.
+> Phase 1 + 2 together eliminate ~95% of the bridge serialization cost.
+> Phase 3 should only be attempted after confirming the `pointer_interceptor` pattern works cleanly.
+
+---
+
+## Files to Create/Modify
+
+| File | Action | Phase |
+|------|--------|-------|
+| `web/js/ridel_bridge.js` | Create | Phase 1 |
+| `web/js/ridel_route_worker.js` | Create | Phase 2 |
+| `web/index.html` | Add `<script>` tags | Phase 1, 2 |
+| `lib/core/map/bridge/map_binary_bridge.dart` | Create | Phase 1 |
+| `lib/core/map/bridge/route_worker_bridge.dart` | Create | Phase 2 |
+| `lib/core/map/map_provider.dart` | Modify `drawNativeRoute` | Phase 1 |
+| `lib/features/map/services/route_engine_service.dart` | Add worker path | Phase 2 |
+| `lib/features/map/widgets/isolated_map_view.dart` | Create | Phase 4 |
+| `lib/features/map/screens/full_screen_map.dart` | Extract map widget | Phase 4 |

@@ -24,9 +24,10 @@ class _SplashScreenState extends State<SplashScreen> {
         const Duration(milliseconds: 1000)); // Slightly increased for animation
 
     try {
-      // Use a Future with timeout in case of hanging async auth states, 
+      // Use a Future with timeout in case of hanging async auth states,
       // and catch synchronous exceptions if Supabase isn't initialized.
-      final session = await Future.microtask(() => Supabase.instance.client.auth.currentSession)
+      final session = await Future.microtask(
+              () => Supabase.instance.client.auth.currentSession)
           .timeout(const Duration(seconds: 3));
 
       if (!mounted) return;
@@ -62,8 +63,7 @@ class _SplashScreenState extends State<SplashScreen> {
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) =>
               const LoginScreen(),
-          transitionsBuilder:
-              (context, animation, secondaryAnimation, child) {
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
           transitionDuration: const Duration(milliseconds: 500),
@@ -72,21 +72,21 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Screen ki width ka 35% size logo ke liye perfect hota hai
+    final double iconSize = MediaQuery.of(context).size.width * 0.35;
+
     return Scaffold(
-      // 🚀 PREVENT FLICKER: Set base color
       backgroundColor: const Color(0xFF0B0E17),
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        // 🚀 PREMIUM WEB GLOW BACKGROUND
         decoration: BoxDecoration(
           gradient: RadialGradient(
             center: Alignment.center,
             radius: 0.8,
             colors: [
-              const Color(0xFF00E5FF)
-                  .withValues(alpha: 0.15), // Subtle Cyan center glow
-              const Color(0xFF0B0E17), // Deep Dark Navy edges
+              const Color(0xFF00E5FF).withValues(alpha: 0.15),
+              const Color(0xFF0B0E17),
             ],
             stops: const [0.0, 1.0],
           ),
@@ -100,8 +100,8 @@ class _SplashScreenState extends State<SplashScreen> {
               return Transform.scale(
                 scale: value,
                 child: SizedBox(
-                  width: 120,
-                  height: 120,
+                  width: iconSize, // 👈 Ab ye responsive hai
+                  height: iconSize, // 👈 Ab ye responsive hai
                   child: CustomPaint(
                     painter: RidelLogoPainter(),
                   ),
@@ -120,7 +120,7 @@ class RidelLogoPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    
+
     canvas.save();
     // Add a strict 15% padding on all sides to prevent stroke bleeding
     canvas.translate(w * 0.15, h * 0.15);
@@ -133,23 +133,23 @@ class RidelLogoPainter extends CustomPainter {
 
     path.addOval(Rect.fromCircle(center: backWheel, radius: radius));
     path.addOval(Rect.fromCircle(center: frontWheel, radius: radius));
-    
-    final bracket = Offset(w * 0.45, h * 0.7); 
-    final seatNode = Offset(w * 0.35, h * 0.45); 
-    final handleNode = Offset(w * 0.65, h * 0.45); 
+
+    final bracket = Offset(w * 0.45, h * 0.7);
+    final seatNode = Offset(w * 0.35, h * 0.45);
+    final handleNode = Offset(w * 0.65, h * 0.45);
 
     path.moveTo(backWheel.dx, backWheel.dy);
     path.lineTo(seatNode.dx, seatNode.dy);
     path.lineTo(bracket.dx, bracket.dy);
     path.lineTo(handleNode.dx, handleNode.dy);
-    path.lineTo(seatNode.dx, seatNode.dy); 
-    
+    path.lineTo(seatNode.dx, seatNode.dy);
+
     path.moveTo(bracket.dx, bracket.dy);
-    path.lineTo(backWheel.dx, backWheel.dy); 
-    
+    path.lineTo(backWheel.dx, backWheel.dy);
+
     path.moveTo(handleNode.dx, handleNode.dy);
     path.lineTo(frontWheel.dx, frontWheel.dy);
-    
+
     path.moveTo(handleNode.dx, handleNode.dy);
     path.lineTo(w * 0.68, h * 0.35);
     path.lineTo(w * 0.78, h * 0.35);
@@ -160,20 +160,20 @@ class RidelLogoPainter extends CustomPainter {
     final headCenter = Offset(w * 0.45, h * 0.22);
     final headRadius = w * 0.08;
 
-    path.moveTo(headCenter.dx, headCenter.dy + headRadius); 
-    path.lineTo(w * 0.35, h * 0.45); 
-    
-    path.moveTo(w * 0.4, h * 0.35); 
-    path.lineTo(w * 0.55, h * 0.35); 
-    path.lineTo(w * 0.68, h * 0.35); 
-    
-    path.moveTo(w * 0.35, h * 0.45); 
-    path.lineTo(w * 0.5, h * 0.55); 
-    path.lineTo(bracket.dx, bracket.dy); 
+    path.moveTo(headCenter.dx, headCenter.dy + headRadius);
+    path.lineTo(w * 0.35, h * 0.45);
+
+    path.moveTo(w * 0.4, h * 0.35);
+    path.lineTo(w * 0.55, h * 0.35);
+    path.lineTo(w * 0.68, h * 0.35);
+
+    path.moveTo(w * 0.35, h * 0.45);
+    path.lineTo(w * 0.5, h * 0.55);
+    path.lineTo(bracket.dx, bracket.dy);
 
     final paint = Paint()
       ..color = Colors.white
-      ..strokeWidth = w * 0.08 
+      ..strokeWidth = w * 0.08
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke;

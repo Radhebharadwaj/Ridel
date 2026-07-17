@@ -9,6 +9,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:ridel/core/config/app_config.dart';
+import 'package:ridel/core/map/bridge/route_worker_bridge.dart';
 
 class RouteResult {
   final List<List<LatLng>> allRoutesCoordinates;
@@ -126,7 +127,11 @@ class RouteEngineService {
 
   final Map<String, Future<RouteResult?>> _inFlightRequests = {};
 
-  RouteEngineService();
+  RouteEngineService() {
+    if (kIsWeb) {
+      RouteWorkerBridge.initialize();
+    }
+  }
 
   Future<RouteResult?> getRoute(LatLng origin, LatLng destination,
       {String mode = "driving", List<LatLng>? waypoints}) async {
@@ -247,6 +252,34 @@ class RouteEngineService {
 
     // 🚀 FIX: Directly appending the API Key from AppConfig
     final apiKey = AppConfig.olaMapsKey;
+
+    // 🚀 HPC Phase 2: Web Worker Fast Path (Zero main-thread blocking)
+    if (kIsWeb) {
+      try {
+        final workerData = await RouteWorkerBridge.calculateRoute(
+          origin: origin,
+          destination: destination,
+          mode: apiMode,
+          apiKey: apiKey,
+          waypoints: waypoints,
+        );
+        
+        return RouteResult(
+          allRoutesCoordinates: workerData['allRoutesCoordinates'],
+          distanceKm: workerData['distanceKm'],
+          durationMins: workerData['durationMins'],
+          allDurationSeconds: List<double>.from(workerData['allDurationSeconds']),
+          steps: List<Map<String, dynamic>>.from(workerData['steps'] ?? []),
+          firstInstruction: workerData['firstInstruction'],
+          fetchedAt: DateTime.now(),
+          congestion: workerData['congestion'],
+        );
+      } catch (e) {
+        debugPrint("Web Worker routing failed: $e, falling back to HTTP...");
+        // If worker fails (e.g. CORS, init), gracefully fall through to standard HTTP
+      }
+    }
+
     String waypointsParam = "";
     if (waypoints != null && waypoints.isNotEmpty) {
       waypointsParam = "&waypoints=${waypoints.map((wp) => "${wp.latitude},${wp.longitude}").join('|')}";

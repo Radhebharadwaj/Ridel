@@ -789,7 +789,7 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: provider.intermediateStops.length,
-                        onReorder: (oldIndex, newIndex) {
+                        onReorderItem: (oldIndex, newIndex) {
                           AppHaptics.lightImpact(); // Premium tactile feedback
                           provider.reorderIntermediateStops(oldIndex, newIndex);
                         },
@@ -1546,9 +1546,11 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
       {bool isExpanded = false}) {
     final provider = context.read<MapProvider>();
     final isAddingStopMode = provider.isAddingStopMode;
+    final uiState = provider.engine.mapUIState.value;
+    final isRoutingState = uiState == MapUIState.routeLoading || uiState == MapUIState.routeDrawn || uiState == MapUIState.routePreview;
     
     Widget contentView;
-    if (_currentMode == SheetMode.routing || _showDirections) {
+    if (isRoutingState || _currentMode == SheetMode.routing || _showDirections) {
       contentView = _buildRoutingDetailCard(isDark);
     } else if (_selectedPlace != null) {
       // PIN DROPPED: Force the Explore View (which renders Transport Modes)

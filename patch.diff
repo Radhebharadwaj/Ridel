@@ -1,0 +1,19 @@
+--- lib/core/map/map_provider.dart
++++ lib/core/map/map_provider.dart
+@@ -1633,10 +1633,12 @@
+     // ══════════════════════════════════════════════════════════════
+     // STEP 1: THE STATE & STREAM KILL (Stop all data pumps first)
+     // ══════════════════════════════════════════════════════════════
+-    engine.navigation.stopNavigation();
+-    isActiveNavigation = false;
+-    isRouteCalculated = false;
+-    engine.setUIState(MapUIState.idle);
++    Future.microtask(() {
++      engine.navigation.stopNavigation();
++      isActiveNavigation = false;
++      isRouteCalculated = false;
++      engine.setUIState(MapUIState.idle);
++    });
+ 
+     _liveLocationSub?.cancel();
+     _liveLocationSub = null;

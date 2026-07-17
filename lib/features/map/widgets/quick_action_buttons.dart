@@ -314,14 +314,8 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
             if (!context.mounted) return;
             final provider = Provider.of<MapProvider>(context, listen: false);
             await provider.calculateAndDrawNativeRoute(
-                context, provider.currentNavMode);
+                context, mode: provider.currentNavMode);
           },
-        ),
-      MapUIState.routeDrawn => _ActionButtonConfig(
-          icon: CupertinoIcons.play_fill,
-          label: 'Start',
-          gradient: const [Color(0xFF007AFF), Color(0xFF0055FF)],
-          onTap: () => _onStartNavTap(context.read<MapProvider>()),
         ),
       MapUIState.navigating => _ActionButtonConfig(
           icon: CupertinoIcons.xmark,
@@ -334,6 +328,12 @@ class QuickActionButtonsState extends State<QuickActionButtons> {
           label: 'Explore',
           gradient: const [Color(0xFF8E8E93), Color(0xFFC7C7CC)],
           onTap: () {},
+        ),
+      _ => _ActionButtonConfig(
+          icon: CupertinoIcons.play_fill,
+          label: 'Start',
+          gradient: const [Color(0xFF007AFF), Color(0xFF0055FF)],
+          onTap: () => _onStartNavTap(context.read<MapProvider>()),
         ),
     };
 

@@ -26,6 +26,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 
 import 'package:ridel/core/config/app_config.dart';
+import 'package:ridel/core/map/bridge/map_binary_bridge.dart';
 import 'package:ridel/main.dart';
 
 class FullScreenMapPage extends StatefulWidget {
@@ -45,7 +46,6 @@ class FullScreenMapPage extends StatefulWidget {
 class _FullScreenMapPageState extends State<FullScreenMapPage>
     with TickerProviderStateMixin {
   bool _hasSnappedToRealGps = false; // 🚀 Reactive GPS snap guard
-  static int mapBuildCount = 0;
   // 1. Instance-level cache, NOT static!
   final Set<String> _verifiedTextures = {};
   late AnimationController _fadeScaleController;
@@ -524,14 +524,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   @override
   Widget build(BuildContext context) {
-    mapBuildCount++;
-    debugPrint(
-        "🛠️ MAP LIFECYCLE: build called (Count: $mapBuildCount). If this prints rapidly, we have a setState loop!");
-    final bool isDesktop = MediaQuery.of(context).size.width >= 600;
+    final screenSize = MediaQuery.sizeOf(context);
+    final bool isDesktop = screenSize.width >= 600;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final edgePadding = MediaQuery.paddingOf(context);
     final double topMargin =
-        isDesktop ? 32.0 : MediaQuery.of(context).padding.top + 24.0;
+        isDesktop ? 32.0 : edgePadding.top + 24.0;
     final double sideMargin = isDesktop ? 32.0 : 28.0;
 
     if (!_isMapReadyToLoad) {
@@ -544,9 +543,11 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       resizeToAvoidBottomInset: false,
       body: (!_isMapReady || _loadedMapStyle == null)
           ? const Center(child: PremiumMapSkeleton())
-          : Stack(
-              children: [
-                Positioned.fill(
+          : LayoutBuilder(
+              builder: (context, rootConstraints) {
+                return Stack(
+                  children: [
+                    Positioned.fill(
                   child: Builder(
                     builder: (context) {
                       if (_hasMapError) {
@@ -562,18 +563,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         );
                       }
 
-                      // Calculate safe initial position BEFORE passing it to MapLibre
-                      final mapProvider =
-                          Provider.of<MapProvider>(context, listen: false);
-                      final userCurrentLocation = mapProvider.currentLocation;
 
-                      final double safeLat =
-                          userCurrentLocation?.latitude ?? 21.1458;
-                      final double safeLng =
-                          userCurrentLocation?.longitude ?? 79.0882;
-
-                      debugPrint(
-                          "🛠️ DEBUG INITIAL CAMERA: Lat:$safeLat, Lng:$safeLng");
 
                       return RepaintBoundary(
                         child: Listener(
@@ -653,6 +643,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 mapProvider.engine.mapController = controller;
                                 // Call proactive permission request and snap
                                 mapProvider.initializeMapAndPermissions();
+
+                                // 🚀 HPC Phase 1: Capture MapLibre JS instance for binary bridge
+                                if (kIsWeb) {
+                                  // Delay slightly to ensure the MapLibre canvas is fully mounted
+                                  Future.delayed(const Duration(milliseconds: 200), () {
+                                    MapBinaryBridge.captureMapInstance();
+                                  });
+                                }
                               });
 
                               // 🚀 TASK 3: Explicitly sync initial theme on map startup
@@ -974,7 +972,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
                               if (isPhysicalGps) {
                                 mapProvider.calculateAndDrawNativeRoute(
-                                    context, 'driving',
+                                    context,
+                                    mode: 'driving',
                                     isAutoTriggered: true);
                               } else {
                                 debugPrint(
@@ -1025,10 +1024,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                               });
                             },
                             onCameraIdle: _onCameraIdle,
-                            onCameraMove: (position) {
-                              debugPrint("🎥 [RIDEL-TRACE] Camera is MOVING...");
-                              _onCameraMove(position);
-                            },
+                            onCameraMove: _onCameraMove,
                           ),
                         ),
                       );
@@ -1111,36 +1107,28 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                 if (MediaQuery.sizeOf(context).width < 800)
                   Positioned.fill(
                     child: RepaintBoundary(
-                      child: Builder(
-                        builder: (context) {
-                          final sheet = NotificationListener<DraggableScrollableNotification>(
-                            onNotification: (notification) {
-                              if (mounted) {
-                                final parentHeight = notification.context?.size?.height ?? MediaQuery.sizeOf(context).height;
-                                _sheetPixelHeightNotifier.value = notification.extent * parentHeight;
-                              }
-                              return false;
-                            },
-                            child: MapSearchSheet(
-                              key: const ValueKey('map_search_sheet'),
-                              isMapTabActive: widget.isMapTabActive,
-                              onSearchModeChanged: (isActive) {},
-                              onSearchSubmitted: (query) {},
-                              onProgressChanged: (progress) {
-                                if (mounted) {
-                                  widget.searchSheetProgressNotifier.value =
-                                      progress;
-                                }
-                              },
-                              onBackToPreviousTab: () {
-                                Provider.of<AppNavigationProvider>(context,
-                                        listen: false)
-                                    .goBack();
-                              },
-                            ),
-                          );
-                          return sheet;
+                      child: NotificationListener<DraggableScrollableNotification>(
+                        onNotification: (notification) {
+                          if (mounted) {
+                            final currentHeight = notification.extent * rootConstraints.maxHeight;
+                            _sheetPixelHeightNotifier.value = currentHeight;
+                          }
+                          return false;
                         },
+                        child: MapSearchSheet(
+                          key: const ValueKey('map_search_sheet'),
+                          isMapTabActive: widget.isMapTabActive,
+                          onSearchModeChanged: (isActive) {},
+                          onSearchSubmitted: (query) {},
+                          onProgressChanged: (progress) {
+                            if (mounted) {
+                              widget.searchSheetProgressNotifier.value = progress;
+                            }
+                          },
+                          onBackToPreviousTab: () {
+                            Provider.of<AppNavigationProvider>(context, listen: false).goBack();
+                          },
+                        ),
                       ),
                     ),
                   ),
@@ -1380,10 +1368,12 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         const double buttonGap = 16.0;
 
                         // Use the exact pixel height from the notification if available,
-                        // fallback to the fractional calculation during initialization.
-                        final double dynamicBottomPosition = (pixelHeight > 0.0) 
-                            ? (pixelHeight + buttonGap) 
-                            : ((MediaQuery.sizeOf(context).height * progress) + buttonGap);
+                        // fallback to the fractional calculation against root constraints.
+                        final double currentSheetHeightInPixels = (pixelHeight > 0.0) 
+                            ? pixelHeight 
+                            : (rootConstraints.maxHeight * progress);
+
+                        final double dynamicBottomPosition = currentSheetHeightInPixels + buttonGap;
 
                         final opacity = (progress <= 0.45)
                             ? 1.0
@@ -1499,7 +1489,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                           if (!context.mounted) return;
                                           await mapProvider
                                               .calculateAndDrawNativeRoute(
-                                                  context, 'driving');
+                                                  context, mode: 'driving');
                                         } else {
                                           await _handleLocateMeTapped(
                                               mapProvider);
@@ -1522,7 +1512,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   ),
                 ),
               ],
-            ),
+            );
+          }),
     );
   }
 
@@ -1651,7 +1642,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
     // 🚫 CASE 3: PERMISSION PERMANENTLY BLOCKED
     if (permission == LocationPermission.deniedForever) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       ToastService.showActionToast(
         context,
         message: "Location blocked. Please allow access in App Settings.",

@@ -25,6 +25,7 @@ import 'package:flutter/foundation.dart';
 import 'package:ridel/features/map/services/route_engine_service.dart';
 
 import 'package:ridel/core/utils/toast_service.dart';
+import 'package:ridel/core/map/bridge/map_binary_bridge.dart';
 
 enum CameraFocusMode {
   userTracking,      // Priority 1
@@ -91,9 +92,7 @@ class MapProvider extends ChangeNotifier {
   }
 
   void reorderIntermediateStops(int oldIndex, int newIndex) {
-    if (oldIndex < newIndex) {
-      newIndex -= 1; // Standard Flutter reorder adjustment
-    }
+    // 🚀 FIX: onReorderItem already adjusts the index, no adjustment needed here.
     final PlaceModel item = intermediateStops.removeAt(oldIndex);
     intermediateStops.insert(newIndex, item);
     notifyListeners();
@@ -102,7 +101,7 @@ class MapProvider extends ChangeNotifier {
     if (targetDestination != null) {
       final context = ToastService.navigatorKey.currentContext;
       if (context != null) {
-        calculateAndDrawNativeRoute(context, currentNavMode);
+        calculateAndDrawNativeRoute(context, mode: currentNavMode);
       }
     }
   }
@@ -359,8 +358,22 @@ class MapProvider extends ChangeNotifier {
           debugPrint("Safe Guard: Puck draw failed: $e");
         }
       } else {
+        if (!isActiveNavigation || !_isNavPuckInitialized) return;
+        // 🚀 HPC: Fast binary puck update (bypasses JSON on every 33ms tick)
+        if (kIsWeb && MapBinaryBridge.isReady) {
+          MapBinaryBridge.updatePuck(location.longitude, location.latitude, bearing);
+        } else {
+          try {
+            await controller!.setGeoJsonSource("nav_puck_source", puckGeoJson);
+          } catch (e) {
+            final errorStr = e.toString();
+            if (!errorStr.contains('Cannot style non-existing layer') && !errorStr.contains('Source') && !errorStr.contains('does not exist')) {
+              debugPrint("⚠️ Puck rendering warning: $errorStr");
+            }
+            return;
+          }
+        }
         try {
-          await controller!.setGeoJsonSource("nav_puck_source", puckGeoJson);
           await controller!.setLayerProperties(
             'nav_puck_layer',
             SymbolLayerProperties(iconOpacity: opacity),
@@ -370,8 +383,7 @@ class MapProvider extends ChangeNotifier {
           if (!errorStr.contains('Cannot style non-existing layer') && !errorStr.contains('Source') && !errorStr.contains('does not exist')) {
             debugPrint("⚠️ Puck rendering warning: $errorStr");
           }
-          // Silently abort this 33ms tick; the layer isn't mounted yet.
-          return; 
+          return;
         }
       }
 
@@ -392,6 +404,9 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<void> updateNavigationPuck(LatLng location, double newBearing) async {
+    if (!isActiveNavigation) return;
+    if (!_isNavPuckInitialized) return;
+
     // Only update if in a state where the puck should be visible
     if (customPuckOpacity == 0.0) {
       await updatePuckVisibility(); // Ensure it hides gracefully
@@ -580,7 +595,7 @@ class MapProvider extends ChangeNotifier {
 
       // 2. Automatically retry calculating and drawing the driving route
       if (!context.mounted) return;
-      await calculateAndDrawNativeRoute(context, 'driving',
+      await calculateAndDrawNativeRoute(context, mode: 'driving',
           isAutoTriggered: true);
     } else {
       debugPrint(
@@ -589,8 +604,8 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<void> calculateAndDrawNativeRoute(
-    BuildContext context,
-    String mode, {
+    BuildContext context, {
+    String mode = 'driving',
     bool isAutoTriggered = false,
   }) async {
     // 🛡️ THE ROUTING GATEKEEPER: Abort routing if real physical GPS is missing!
@@ -605,17 +620,34 @@ class MapProvider extends ChangeNotifier {
       return; // 🚀 INSTANT ABORT: Do not draw polyline!
     }
 
-    isCalculatingRoute = true;
-    notifyListeners();
+    try {
+      // 🚀 Step 1: Absolute Synchronous Hydration for Dropped Pin
+      if (activeDestination == null && targetLocation != null) {
+        _activeDestination = PlaceModel(
+          placeId: 'dropped_pin',
+          name: 'Dropped Pin',
+          address: '${targetLocation!.latitude.toStringAsFixed(4)}, ${targetLocation!.longitude.toStringAsFixed(4)}',
+          latitude: targetLocation!.latitude,
+          longitude: targetLocation!.longitude,
+          categories: const [],
+        );
+      }
+
+      if (targetDestination == null && activeDestination != null) {
+        targetDestination = LatLng(
+          activeDestination!.latitude,
+          activeDestination!.longitude,
+        );
+      } else if (targetDestination == null && targetLocation != null) {
+        targetDestination = targetLocation;
+      }
+
+      Future.microtask(() {
+        isCalculatingRoute = true;
+        notifyListeners();
+      });
 
     debugPrint("🚀 [ROUTE ENGINE] Triggered for mode: $mode");
-
-    if (targetDestination == null) {
-      debugPrint("❌ [ROUTE ENGINE] Failed: targetDestination is null.");
-      isCalculatingRoute = false;
-      notifyListeners();
-      return;
-    }
 
     // 🚨 CRITICAL FIX: We must use the user's actual live location, NOT the camera position.
     final locService = Provider.of<GlobalLocationService>(
@@ -647,30 +679,51 @@ class MapProvider extends ChangeNotifier {
     // 🚀 FETCH EXACT ORIGIN ADDRESS LAZILY
     unawaited(locService.fetchCurrentAddressIfNeeded());
 
+    // 🚨 SAFE ORIGIN & DESTINATION RESOLUTION (Before state clear)
+    final destLat = targetDestination?.latitude ?? targetLocation?.latitude ?? activeDestination?.latitude;
+    final destLng = targetDestination?.longitude ?? targetLocation?.longitude ?? activeDestination?.longitude;
+    final originLat = origin.latitude;
+    final originLng = origin.longitude;
+
+    if (destLat == null || destLng == null) {
+      debugPrint("🛑 [ROUTE ENGINE] Aborted: Destination or Origin coordinates are null.");
+      Future.microtask(() {
+        isCalculatingRoute = false;
+        notifyListeners();
+      });
+      return; 
+    }
+
+    final safeOrigin = LatLng(originLat, originLng);
+    final safeDest = LatLng(destLat, destLng);
+
     // 🚨 CRITICAL: Clear old routes and UI state before fetching new ones
     await clearNativeRoute(preserveState: true);
     if (controller == null) {
-      isCalculatingRoute = false;
-      notifyListeners();
+      Future.microtask(() {
+        isCalculatingRoute = false;
+        notifyListeners();
+      });
       return;
     }
 
-    _currentRouteResult = null;
-    notifyListeners();
+    Future.microtask(() {
+      _currentRouteResult = null;
+      notifyListeners();
+    });
 
     debugPrint(
-      "📍 [ROUTE ENGINE] Origin: ${origin.latitude}, ${origin.longitude}",
+      "📍 [ROUTE ENGINE] Origin: ${safeOrigin.latitude}, ${safeOrigin.longitude}",
     );
     debugPrint(
-      "📍 [ROUTE ENGINE] Destination: ${targetDestination!.latitude}, ${targetDestination!.longitude}",
+      "📍 [ROUTE ENGINE] Destination: ${safeDest.latitude}, ${safeDest.longitude}",
     );
 
     _routingSessionCounter++;
     final int currentSessionId = _routingSessionCounter;
 
-    try {
-      // Fetch route from Route Engine.
-      debugPrint("⏳ [ROUTE ENGINE] Waiting for Route Engine API...");
+    // Fetch route from Route Engine.
+    debugPrint("⏳ [ROUTE ENGINE] Waiting for Route Engine API...");
 
       final safeContext = ToastService.navigatorKey.currentContext;
       if (safeContext != null && safeContext.mounted) {
@@ -687,14 +740,14 @@ class MapProvider extends ChangeNotifier {
 
       if (mode == 'walking' || mode == 'walk') {
         routeResult = await _routingService
-            .getWaterfallWalkRoute(origin, targetDestination!,
+            .getWaterfallWalkRoute(safeOrigin, safeDest,
                 waypoints: waypointsList)
             .timeout(const Duration(seconds: 10));
       } else {
         routeResult = await _routingService
             .getRoute(
-              origin,
-              targetDestination!,
+              safeOrigin,
+              safeDest,
               mode: 'driving',
               waypoints: waypointsList,
             )
@@ -725,14 +778,46 @@ class MapProvider extends ChangeNotifier {
         await drawNativeRoute(routeResult.allRoutesCoordinates);
         debugPrint("✅ [ROUTE ENGINE] Native MapLibre Draw Success!");
 
+        if (targetDestination != null && controller != null) {
+          try {
+            await controller!.removeLayer('ultimate-pin-layer');
+            await controller!.removeSource('ultimate-pin-source');
+          } catch (_) {}
+          try {
+            await controller!.addGeoJsonSource('ultimate-pin-source', {
+              "type": "Feature",
+              "geometry": {
+                "type": "Point",
+                "coordinates": [targetDestination!.longitude, targetDestination!.latitude],
+              },
+            });
+            await Future.delayed(const Duration(milliseconds: 32));
+            await controller!.addSymbolLayer(
+              'ultimate-pin-source',
+              'ultimate-pin-layer',
+              SymbolLayerProperties(
+                iconImage: 'custom_pin',
+                iconSize: 1.0 * mapItemScale,
+                iconAnchor: 'bottom',
+                iconAllowOverlap: true,
+                iconIgnorePlacement: true,
+              ),
+            );
+          } catch (e) {
+            debugPrint("🗺️ PIN REDRAW ERROR: $e");
+          }
+        }
+
         if (currentLocation != null) {
           final heading = engine.locService?.currentPosition?.heading ?? 0.0;
           await _updatePuckGeoJson(currentLocation!, heading, 1.0);
         }
 
-        isRouteCalculated = true;
-        engine.setUIState(MapUIState.routeDrawn);
-        notifyListeners();
+        Future.microtask(() {
+          isRouteCalculated = true;
+          engine.setUIState(MapUIState.routeDrawn);
+          notifyListeners();
+        });
 
 
       } else {
@@ -741,7 +826,16 @@ class MapProvider extends ChangeNotifier {
         );
       }
     } catch (e) {
-      debugPrint("💥 [ROUTE ENGINE] CRASH: $e");
+      final errorStr = e.toString();
+      if (errorStr.contains('Cannot style non-existing layer') || errorStr.contains('nav_puck_layer')) {
+        debugPrint("⚠️ Ignoring Puck Layer Error during Route calculation: $e");
+        return;
+      }
+
+      debugPrint("⚠️ Route Calculation Error: $e");
+      engine.setUIState(MapUIState.idle);
+      notifyListeners();
+      
       _setLoading(false);
       final context = ToastService.navigatorKey.currentContext;
       if (context != null && context.mounted) {
@@ -795,9 +889,13 @@ class MapProvider extends ChangeNotifier {
     isActiveNavigation = true;
     isAutoTracking = true;
 
-    if (_currentRouteResult != null && targetDestination != null) {
+    final destLat = targetDestination?.latitude ?? targetLocation?.latitude ?? activeDestination?.latitude;
+    final destLng = targetDestination?.longitude ?? targetLocation?.longitude ?? activeDestination?.longitude;
+    final safeDest = destLat != null && destLng != null ? LatLng(destLat, destLng) : null;
+    
+    if (_currentRouteResult != null && safeDest != null) {
       await engine.startActiveNavigation(
-          _currentRouteResult!, targetDestination!, currentNavMode);
+          _currentRouteResult!, safeDest, currentNavMode);
     } else {
       engine.setUIState(MapUIState.navigating);
     }
@@ -1157,9 +1255,16 @@ class MapProvider extends ChangeNotifier {
       try {
         final bool isWalking = currentNavMode == 'walking';
         if (isWalking) {
-          try {
-            await controller!.addGeoJsonSource('alt-source-$i', geoJson);
-          } catch (_) {}
+          // 🚀 HPC: Try binary bridge first, fall back to JSON
+          final bool hpcOk = kIsWeb && MapBinaryBridge.isReady
+              ? MapBinaryBridge.setSimpleRouteFromBuffer(
+                  points: routePoints, sourceId: 'alt-source-$i', routeIndex: i)
+              : false;
+          if (!hpcOk) {
+            try {
+              await controller!.addGeoJsonSource('alt-source-$i', geoJson);
+            } catch (_) {}
+          }
           await safeAddLineLayer(
             'alt-source-$i',
             'alt-walk-layer-$i',
@@ -1172,9 +1277,16 @@ class MapProvider extends ChangeNotifier {
             ),
           );
         } else {
-          try {
-            await controller!.addGeoJsonSource('route-source-$i', geoJson);
-          } catch (_) {}
+          // 🚀 HPC: Try binary bridge first, fall back to JSON
+          final bool hpcOk = kIsWeb && MapBinaryBridge.isReady
+              ? MapBinaryBridge.setSimpleRouteFromBuffer(
+                  points: routePoints, sourceId: 'route-source-$i', routeIndex: i)
+              : false;
+          if (!hpcOk) {
+            try {
+              await controller!.addGeoJsonSource('route-source-$i', geoJson);
+            } catch (_) {}
+          }
           await safeAddLineLayer(
             'route-source-$i',
             'route-layer-$i',
@@ -1211,9 +1323,16 @@ class MapProvider extends ChangeNotifier {
         final bool isWalking = currentNavMode == 'walking';
 
         if (isWalking) {
-          try {
-            await controller!.addGeoJsonSource('primary-source', geoJson);
-          } catch (_) {}
+          // 🚀 HPC: Try binary bridge for walking primary
+          final bool hpcOk = kIsWeb && MapBinaryBridge.isReady
+              ? MapBinaryBridge.setSimpleRouteFromBuffer(
+                  points: primaryCoords, sourceId: 'primary-source', routeIndex: 0)
+              : false;
+          if (!hpcOk) {
+            try {
+              await controller!.addGeoJsonSource('primary-source', geoJson);
+            } catch (_) {}
+          }
           await safeAddLineLayer(
             'primary-source',
             'primary-walk-layer',
@@ -1226,9 +1345,18 @@ class MapProvider extends ChangeNotifier {
             ),
           );
         } else {
-          try {
-            await controller!.addGeoJsonSource('route-source-0', geoJson);
-          } catch (_) {}
+          // 🚀 HPC: Try binary bridge with congestion for primary route
+          final bool hpcOk = kIsWeb && MapBinaryBridge.isReady
+              ? MapBinaryBridge.setRouteFromBuffer(
+                  points: primaryCoords,
+                  sourceId: 'route-source-0',
+                  congestion: congestionData)
+              : false;
+          if (!hpcOk) {
+            try {
+              await controller!.addGeoJsonSource('route-source-0', geoJson);
+            } catch (_) {}
+          }
 
           // 1. BOTTOM: Casing (Deep shadow to give height/3D effect)
           await safeAddLineLayer(
@@ -1573,10 +1701,12 @@ class MapProvider extends ChangeNotifier {
     // ══════════════════════════════════════════════════════════════
     // STEP 1: THE STATE & STREAM KILL (Stop all data pumps first)
     // ══════════════════════════════════════════════════════════════
-    engine.navigation.stopNavigation();
-    isActiveNavigation = false;
-    isRouteCalculated = false;
-    engine.setUIState(MapUIState.idle);
+    Future.microtask(() {
+      engine.navigation.stopNavigation();
+      isActiveNavigation = false;
+      isRouteCalculated = false;
+      engine.setUIState(MapUIState.idle);
+    });
 
     _liveLocationSub?.cancel();
     _liveLocationSub = null;
@@ -2186,6 +2316,7 @@ class MapProvider extends ChangeNotifier {
     // Hydrate global destination coordinates for routing and MapControlsPill
     targetLocation = latLng;
     targetDestination = latLng;
+    setDestinationSelected(true); // 🚀 FIX: Prevent Bottom Sheet from erasing state!
 
     // Transition UI state machine to "placeSelected" (drives QuickActionButtons + MapControlsPill morphing)
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2260,56 +2391,40 @@ class MapProvider extends ChangeNotifier {
     // 🚀 FIX: Robust Debounce to prevent API hemorrhage
     _geocodeDebounceTimer?.cancel();
     _geocodeDebounceTimer = Timer(const Duration(milliseconds: 1500), () async {
+      PlaceModel place = temporaryPlace;
       try {
-        final PlaceModel place = await PlaceEnrichmentService()
+        place = await PlaceEnrichmentService()
             .reverseGeocode(
               latLng.latitude,
               latLng.longitude,
             )
             .timeout(const Duration(seconds: 8));
-        setActiveDestination(place);
-        saveNewSearch(place);
+      } catch (e) {
+        debugPrint("Tap Handler Reverse Geocode Error (Swallowed): $e");
+      }
 
-        final locService = engine.locService;
-        if (locService != null) {
-          final originAddr = locService.currentAddressName;
-          if (originAddr == null ||
-              originAddr.isEmpty ||
-              originAddr == "Locating...") {
-            final pos = locService.currentPosition;
-            if (pos != null) {
-              try {
-                final currentPlace = await PlaceEnrichmentService()
-                    .reverseGeocode(pos.latitude, pos.longitude);
-                locService.setCurrentAddressName(currentPlace.address.isNotEmpty
-                    ? currentPlace.address
-                    : currentPlace.name);
-              } catch (e) {
-                debugPrint("Origin Reverse Geocode Failed: $e");
-              }
+      setActiveDestination(place);
+      saveNewSearch(place);
+
+      final locService = engine.locService;
+      if (locService != null) {
+        final originAddr = locService.currentAddressName;
+        if (originAddr == null ||
+            originAddr.isEmpty ||
+            originAddr == "Locating...") {
+          final pos = locService.currentPosition;
+          if (pos != null) {
+            try {
+              final currentPlace = await PlaceEnrichmentService()
+                  .reverseGeocode(pos.latitude, pos.longitude);
+              locService.setCurrentAddressName(currentPlace.address.isNotEmpty
+                  ? currentPlace.address
+                  : currentPlace.name);
+            } catch (e) {
+              debugPrint("Origin Reverse Geocode Failed: $e");
             }
           }
         }
-      } catch (e) {
-        debugPrint("Tap Handler Reverse Geocode Error: $e");
-
-        final context = ToastService.navigatorKey.currentContext;
-        if (context != null && context.mounted) {
-          ToastService.showError(
-              context, "Poor internet connection. Pin dropped offline.");
-        }
-
-        // Fallback to coordinates on failure
-        final fallback = PlaceModel(
-          placeId: temporaryPlace.placeId,
-          name: "Dropped Pin",
-          address:
-              "${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}",
-          latitude: latLng.latitude,
-          longitude: latLng.longitude,
-          categories: const [],
-        );
-        setActiveDestination(fallback);
       }
     });
   }
@@ -3095,7 +3210,10 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<void> triggerDirectionsFlow(BuildContext context) async {
-    if (targetDestination == null || controller == null) return;
+    final destLat = targetDestination?.latitude ?? targetLocation?.latitude ?? activeDestination?.latitude;
+    final destLng = targetDestination?.longitude ?? targetLocation?.longitude ?? activeDestination?.longitude;
+    if (destLat == null || destLng == null || controller == null) return;
+    final safeDest = LatLng(destLat, destLng);
 
     // 1. Fetch Current Location (Origin)
     final locService = Provider.of<GlobalLocationService>(
@@ -3113,7 +3231,7 @@ class MapProvider extends ChangeNotifier {
     try {
       final route = await _routingService.getRoute(
         originLoc,
-        targetDestination!,
+        safeDest,
         mode: currentNavMode,
       );
 
@@ -3132,19 +3250,19 @@ class MapProvider extends ChangeNotifier {
         // 4. Smoothly animate camera to fit the entire route bounds
         final double minLat = math.min(
           originLoc.latitude,
-          targetDestination!.latitude,
+          safeDest.latitude,
         );
         final double maxLat = math.max(
           originLoc.latitude,
-          targetDestination!.latitude,
+          safeDest.latitude,
         );
         final double minLng = math.min(
           originLoc.longitude,
-          targetDestination!.longitude,
+          safeDest.longitude,
         );
         final double maxLng = math.max(
           originLoc.longitude,
-          targetDestination!.longitude,
+          safeDest.longitude,
         );
 
         try {
@@ -3180,7 +3298,10 @@ class MapProvider extends ChangeNotifier {
   }
 
   Future<void> startActiveNavigation(BuildContext context) async {
-    if (controller == null || targetDestination == null) return;
+    final destLat = targetDestination?.latitude ?? targetLocation?.latitude ?? activeDestination?.latitude;
+    final destLng = targetDestination?.longitude ?? targetLocation?.longitude ?? activeDestination?.longitude;
+    if (controller == null || destLat == null || destLng == null) return;
+    final safeDest = LatLng(destLat, destLng);
 
     final locService = Provider.of<GlobalLocationService>(
       context,
@@ -3219,7 +3340,7 @@ class MapProvider extends ChangeNotifier {
 
     // 🚀 Delegate to MapEngine's active navigation lifecycle
     await engine.startActiveNavigation(
-        _currentRouteResult!, targetDestination!, currentNavMode);
+        _currentRouteResult!, safeDest, currentNavMode);
   }
 
   Future<void> endActiveNavigation() async {

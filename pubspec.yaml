@@ -12,8 +12,8 @@ dependencies:
 
   # --- 9. FIREBASE & NOTIFICATIONS ---
   crypto: ^3.0.7
-  firebase_core: ^3.10.1
-  firebase_messaging: ^15.2.10
+  firebase_core: any
+  firebase_messaging: any
   flutter_image_compress: ^2.3.0 # 🪄 Image Magic (WebP conversion) ke liye
 
   # --- 1. CORE MAP ENGINE ---
@@ -38,9 +38,9 @@ dependencies:
   provider: ^6.1.1
 
   # --- 5. LOCATION & UTILS ---
-  geolocator: ^14.0.2
-  share_plus: ^10.1.0
-  geocoding: ^4.0.0
+  geolocator: any
+  share_plus: any  # 👈 Yahan strict version hata kar 'any' kar do
+  geocoding: any
   permission_handler: ^12.0.1
   intl: ^0.20.2
 
@@ -56,13 +56,13 @@ dependencies:
   supabase_flutter: ^2.12.0
   flutter_secure_storage: ^10.0.0
   local_auth: ^3.0.0
-  device_info_plus: ^12.4.0
+  device_info_plus: ^10.1.0
   package_info_plus: ^8.3.0
-  flutter_native_splash: any
+  flutter_native_splash: ^2.4.0 # 👈 'any' hata kar stable version diya
   shimmer: ^3.0.0
   
   # --- 8. EXTRAS ---
-  speech_to_text: ^7.3.0
+  speech_to_text: any
   collection: ^1.19.1
   sunrise_sunset_calc: any
 
@@ -84,15 +84,16 @@ dependencies:
   sign_in_with_apple: ^7.0.1
   image: ^4.8.0
   flutter_turnstile: ^1.2.0
-  cached_network_image: ^3.4.1
+  cached_network_image: any
   pinput: ^6.0.2
+
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
   flutter_launcher_icons: ^0.14.4
-  analyzer: any
+  analyzer: any  # 👈 Yahan ^6.5.0 ko hata kar wapas 'any' likh do
   dependency_validator: ^5.0.5
 
 # 🛑 YAHAN MAINE OVERRIDES KO COMMENT KAR DIYA HAI TAALI STABLE VERSION USE HO

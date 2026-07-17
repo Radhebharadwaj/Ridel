@@ -26,8 +26,14 @@ enum MapUIState {
   /// A place has been selected (pin dropped) — show "Directions" button.
   placeSelected,
 
+  /// A route is currently being calculated and fetched
+  routeLoading,
+
   /// A route polyline has been drawn on the map — show "Start" button.
   routeDrawn,
+
+  /// A route preview is actively displayed on the UI
+  routePreview,
 
   /// Active turn-by-turn navigation is running — show "Stop" button.
   navigating,
