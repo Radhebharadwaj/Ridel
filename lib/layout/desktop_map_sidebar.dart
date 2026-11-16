@@ -566,7 +566,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.9,
-                color: isDark ? Colors.white45 : const Color(0xFF6B7280),
+                color: isDark ? Colors.white54 : const Color(0xFF6B7280),
               ),
             ),
             if (activeCategories.isNotEmpty)
@@ -674,7 +674,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
             fontSize: 10,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.9,
-            color: isDark ? Colors.white45 : const Color(0xFF6B7280),
+            color: isDark ? Colors.white54 : const Color(0xFF6B7280),
           ),
         ),
         const SizedBox(height: 10),
@@ -778,7 +778,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
                         fontSize: 11,
-                        color: isDark ? Colors.white45 : const Color(0xFF6B7280),
+                        color: isDark ? Colors.white54 : const Color(0xFF6B7280),
                       ),
                     ),
                   ],
@@ -811,7 +811,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
               fontSize: 10,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.9,
-              color: isDark ? Colors.white45 : const Color(0xFF6B7280),
+              color: isDark ? Colors.white54 : const Color(0xFF6B7280),
             ),
           ),
           const SizedBox(height: 8),
@@ -848,7 +848,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                               Icons.history_rounded,
                               size: 16,
                               color: isDark
-                                  ? Colors.white45
+                                  ? Colors.white54
                                   : const Color(0xFF6B7280),
                             ),
                             const SizedBox(width: 10),
@@ -1071,7 +1071,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
             'No matching places found',
             style: GoogleFonts.inter(
               fontSize: 12.5,
-              color: isDark ? Colors.white45 : const Color(0xFF6B7280),
+              color: isDark ? Colors.white54 : const Color(0xFF6B7280),
             ),
           ),
         ),
@@ -1140,7 +1140,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                                 style: GoogleFonts.inter(
                                   fontSize: 11,
                                   color: isDark
-                                      ? Colors.white45
+                                      ? Colors.white54
                                       : const Color(0xFF6B7280),
                                 ),
                               ),
@@ -1217,7 +1217,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                         'Sync saved places & trips',
                         style: GoogleFonts.inter(
                           fontSize: 11,
-                          color: isDark ? Colors.white45 : const Color(0xFF6B7280),
+                          color: isDark ? Colors.white54 : const Color(0xFF6B7280),
                         ),
                       ),
                     ],
@@ -1279,7 +1279,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(
                           fontSize: 11,
-                          color: isDark ? Colors.white45 : const Color(0xFF6B7280),
+                          color: isDark ? Colors.white54 : const Color(0xFF6B7280),
                         ),
                       ),
                     ],

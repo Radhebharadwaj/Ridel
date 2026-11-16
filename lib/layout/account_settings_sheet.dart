@@ -267,7 +267,7 @@ class AccountSettingsSheet extends StatelessWidget {
                       primaryText: primaryText,
                       onChanged: (val) {
                         AppHaptics.setLevel(
-                            val ? HapticLevel.medium : HapticLevel.off);
+                            val ? HapticLevel.full : HapticLevel.off);
                         if (val) AppHaptics.selectionClick();
                       },
                     );
