@@ -355,15 +355,45 @@ class MapLayerController {
   bool layerExists(String id) => availableLayers.contains(id);
 
   Future<void> setLayerVisibleSafe(String layerId, bool visible) async {
-    if (_map == null ||
-        !layerExists(layerId) ||
-        _layerVisibilityCache[layerId] == visible) {
-      return;
-    }
+    if (_map == null) return;
     try {
       await _map!.setLayerVisibility(layerId, visible);
       _layerVisibilityCache[layerId] = visible;
     } catch (_) {}
+  }
+
+  Future<void> setPoiVisibility(bool visible) async {
+    if (_map == null) return;
+    try {
+      if (_poiLayers.isEmpty) {
+        final layers = await _map!.getLayerIds();
+        availableLayers = layers.map((e) => e.toString()).toSet();
+        _poiLayers = availableLayers.where((l) => isPoiLayerId(l)).toList();
+      }
+      for (final layer in _poiLayers) {
+        await _map!.setLayerVisibility(layer, visible);
+        _layerVisibilityCache[layer] = visible;
+      }
+    } catch (e) {
+      debugPrint("⚠️ setPoiVisibility error: $e");
+    }
+  }
+
+  Future<void> setLabelsVisibility(bool visible) async {
+    if (_map == null) return;
+    try {
+      if (_labelLayers.isEmpty) {
+        final layers = await _map!.getLayerIds();
+        availableLayers = layers.map((e) => e.toString()).toSet();
+        _labelLayers = availableLayers.where((l) => isLabelLayerId(l)).toList();
+      }
+      for (final layer in _labelLayers) {
+        await _map!.setLayerVisibility(layer, visible);
+        _layerVisibilityCache[layer] = visible;
+      }
+    } catch (e) {
+      debugPrint("⚠️ setLabelsVisibility error: $e");
+    }
   }
 
   Future<void> resetAllLayers() async {

@@ -2353,10 +2353,8 @@ class MapProvider extends ChangeNotifier {
   Future<void> toggleLabels(bool value) async {
     _showLabels = value;
     notifyListeners();
-    if (engine.layers != null && engine.layers!.labelLayers.isNotEmpty) {
-      for (final layer in engine.layers!.labelLayers) {
-        await engine.layers!.setLayerVisibleSafe(layer, value);
-      }
+    if (engine.layers != null) {
+      await engine.layers!.setLabelsVisibility(value);
     } else if (controller != null) {
       try {
         final allLayers = await controller!.getLayerIds();
@@ -2374,10 +2372,8 @@ class MapProvider extends ChangeNotifier {
     _showPOIs = value;
     engine.mode.showPOIs.value = value;
     notifyListeners();
-    if (engine.layers != null && engine.layers!.poiLayers.isNotEmpty) {
-      for (final layer in engine.layers!.poiLayers) {
-        await engine.layers!.setLayerVisibleSafe(layer, value);
-      }
+    if (engine.layers != null) {
+      await engine.layers!.setPoiVisibility(value);
     } else if (controller != null) {
       try {
         final allLayers = await controller!.getLayerIds();

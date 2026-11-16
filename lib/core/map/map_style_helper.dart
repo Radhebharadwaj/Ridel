@@ -344,30 +344,26 @@ class MapStyleHelper {
                              sourceLayer == 'hyperchargers';
 
           if (isPoi) {
-            // 1. Minzoom: Elevate so minor shops never crowd city-level view (zooms 10-14)
-            final bool isMajorAnchor = id.contains('hospital') || id.contains('airport') || id.contains('station');
-            final double targetMinzoom = isMajorAnchor ? 14.5 : 16.0;
-            final dynamic currentMin = layer['minzoom'];
-            if (currentMin == null || (currentMin is num && currentMin < targetMinzoom)) {
-              layer['minzoom'] = targetMinzoom;
-            }
+            // 1. Minzoom: Allow major POIs, transit, fuel, restaurants, banks to show cleanly from zoom 12.5+
+            final bool isMicroBuilding = id == 'building_name' || sourceLayer == 'building' ||
+                                         id == 'landuse_apartment_name' || sourceLayer == 'landuse';
+            final bool isTransitOrAnchor = id.contains('transit') || id.contains('station') || 
+                                           id.contains('metro') || id.contains('bus') || 
+                                           id.contains('railway') || id.contains('airport') || 
+                                           id.contains('hospital');
+            
+            final double targetMinzoom = isMicroBuilding ? 15.0 : (isTransitOrAnchor ? 12.0 : 12.5);
+            layer['minzoom'] = targetMinzoom;
 
             // 2. Decluttering: Strict Apple Maps collision control (NO overlapping text walls)
             layout['text-allow-overlap'] = false;
             layout['text-ignore-placement'] = false;
             layout['icon-allow-overlap'] = false;
             layout['icon-ignore-placement'] = false;
-            layout['text-padding'] = 10.0;
+            layout['text-padding'] = 6.0;
             layout['text-max-width'] = 8.0;
-            layout['symbol-spacing'] = 250;
-            layout['text-size'] = <String, dynamic>{
-              "base": 1.0,
-              "stops": [
-                [15.5, 10.0],
-                [17.0, 11.5],
-                [19.0, 12.5]
-              ]
-            };
+            layout['symbol-spacing'] = 200;
+            layout['text-size'] = 11.0;
 
             // 3. Apple Maps Typography: Refined Slate text with deep soft halo
             if (!layer.containsKey('paint') || layer['paint'] is! Map) {
@@ -423,7 +419,7 @@ class MapStyleHelper {
 
     final bool useDark = themeType != null ? (themeType == MapThemeType.dark) : isSystemDark;
     final String styleName = useDark ? "default-dark-standard" : "default-light-standard";
-    final String cacheKey = "ola_v503_apple_clean_$styleName";
+    final String cacheKey = "ola_v504_apple_clean_$styleName";
 
     final prefs = await SharedPreferences.getInstance();
     

@@ -4677,7 +4677,7 @@
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "water_name",
-      "minzoom": 16,
+      "minzoom": 12.5,
       "filter": [
         "==",
         "$type",
@@ -4698,7 +4698,7 @@
         "text-ignore-placement": false,
         "icon-allow-overlap": false,
         "icon-ignore-placement": false,
-        "text-padding": 8
+        "text-padding": 6
       },
       "paint": {
         "text-color": "#475569",
@@ -5257,7 +5257,7 @@
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "building",
-      "minzoom": 16,
+      "minzoom": 15.0,
       "maxzoom": 24,
       "filter": [
         "has",
@@ -5269,7 +5269,7 @@
           "property": "name"
         },
         "text-size": 11,
-        "text-padding": 8,
+        "text-padding": 6,
         "text-variable-anchor": [
           "top",
           "bottom",
@@ -5313,7 +5313,7 @@
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "landuse",
-      "minzoom": 16,
+      "minzoom": 15.0,
       "maxzoom": 24,
       "filter": [
         "all",
@@ -5333,7 +5333,7 @@
           "property": "name"
         },
         "text-size": 11,
-        "text-padding": 8,
+        "text-padding": 6,
         "text-variable-anchor": [
           "top",
           "bottom",
@@ -5377,7 +5377,7 @@
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "transit",
-      "minzoom": 16,
+      "minzoom": 12.0,
       "filter": [
         "all",
         [
@@ -5389,7 +5389,7 @@
       "layout": {
         "text-field": "{name}",
         "text-size": 11,
-        "text-padding": 8,
+        "text-padding": 6,
         "text-justify": "auto",
         "text-variable-anchor": [
           "top",
@@ -5446,7 +5446,7 @@
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "transit",
-      "minzoom": 16,
+      "minzoom": 12.0,
       "filter": [
         "all",
         [
@@ -5458,7 +5458,7 @@
       "layout": {
         "text-field": "{name}",
         "text-size": 11,
-        "text-padding": 8,
+        "text-padding": 6,
         "text-justify": "auto",
         "text-variable-anchor": [
           "top",
@@ -5503,7 +5503,7 @@
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "transit",
-      "minzoom": 16,
+      "minzoom": 12.0,
       "filter": [
         "all",
         [
@@ -5533,7 +5533,7 @@
           ]
         ],
         "text-size": 11,
-        "text-padding": 8,
+        "text-padding": 6,
         "text-justify": "auto",
         "text-variable-anchor": [
           "top",
@@ -5579,7 +5579,7 @@
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "transit",
-      "minzoom": 16,
+      "minzoom": 12.5,
       "filter": [
         "all",
         [
@@ -5604,7 +5604,7 @@
           ]
         ],
         "text-size": 11,
-        "text-padding": 8,
+        "text-padding": 6,
         "text-justify": "auto",
         "text-variable-anchor": [
           "top",
@@ -5642,7 +5642,7 @@
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "poi",
-      "minzoom": 16,
+      "minzoom": 12.5,
       "filter": [
         "all",
         [
@@ -5674,7 +5674,7 @@
           ]
         ],
         "text-size": 11,
-        "text-padding": 8,
+        "text-padding": 6,
         "text-justify": "auto",
         "text-variable-anchor": [
           "top",
@@ -5723,7 +5723,7 @@
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "poi",
-      "minzoom": 16,
+      "minzoom": 12.5,
       "filter": [
         "all",
         [
@@ -5813,7 +5813,7 @@
           ]
         ],
         "text-size": 11,
-        "text-padding": 8,
+        "text-padding": 6,
         "text-justify": "auto",
         "text-variable-anchor": [
           "top",
@@ -6053,7 +6053,7 @@
       "type": "symbol",
       "source": "vectordata",
       "source-layer": "hyperchargers",
-      "minzoom": 16,
+      "minzoom": 12.5,
       "maxzoom": 24,
       "filter": [
         "all",
@@ -6068,7 +6068,7 @@
           "property": "name"
         },
         "text-size": 11,
-        "text-padding": 8,
+        "text-padding": 6,
         "text-justify": "auto",
         "text-variable-anchor": [
           "top",
@@ -6442,7 +6442,7 @@
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "aerodrome_label",
-      "minzoom": 16,
+      "minzoom": 12.0,
       "maxzoom": 24,
       "filter": [
         "has",
@@ -6463,7 +6463,7 @@
         ],
         "text-max-width": 8,
         "text-optional": true,
-        "text-padding": 8,
+        "text-padding": 6,
         "text-size": 11,
         "visibility": "visible",
         "text-offset": [
