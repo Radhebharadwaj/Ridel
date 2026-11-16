@@ -495,7 +495,8 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Center(
+              child: Transform.translate(
+                offset: const Offset(0, -3.5),
                 child: TextField(
                   controller: _searchCtrl,
                   focusNode: _searchFocus,
@@ -506,10 +507,9 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                     fontSize: 14.0,
                     fontWeight: FontWeight.w500,
                     color: isDark ? Colors.white : const Color(0xFF111318),
-                    height: 1.0,
                   ),
                   decoration: InputDecoration(
-                    isDense: true,
+                    isCollapsed: true,
                     contentPadding: EdgeInsets.zero,
                     border: InputBorder.none,
                     focusedBorder: InputBorder.none,
@@ -519,7 +519,6 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                       fontSize: 14.0,
                       fontWeight: FontWeight.w400,
                       color: isDark ? Colors.white38 : const Color(0xFF8A94A6),
-                      height: 1.0,
                     ),
                   ),
                 ),

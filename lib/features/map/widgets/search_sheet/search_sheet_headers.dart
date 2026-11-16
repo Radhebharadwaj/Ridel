@@ -1089,7 +1089,8 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Center(
+                      child: Transform.translate(
+                        offset: const Offset(0, -2.5),
                         child: TextField(
                           controller: _searchCtrl,
                           focusNode: _searchFocus,
