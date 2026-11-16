@@ -290,33 +290,33 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
   // -------------------------------------------------------------------------
   Widget _buildHeader(bool isDark) {
     final primaryText = isDark ? Colors.white : const Color(0xFF111318);
-    final accent =
-        isDark ? RidelSurfaceTokens.iosBlueDark : RidelSurfaceTokens.iosBlueLight;
+    const cyanAccent = Color(0xFF00C6FF);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 16, 14, 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // Official Ridel Logo (Vibrant Cyan-Blue Compass Emblem)
           Container(
-            width: 34,
-            height: 34,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: BorderRadius.circular(10),
               boxShadow: [
                 BoxShadow(
-                  color: accent.withValues(alpha: 0.28),
-                  blurRadius: 10,
+                  color: cyanAccent.withValues(alpha: 0.35),
+                  blurRadius: 12,
                   offset: const Offset(0, 3),
                 ),
               ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: BorderRadius.circular(10),
               child: Image.asset(
-                'assets/icon/logo.png',
-                width: 34,
-                height: 34,
+                'assets/icon/icon.png',
+                width: 36,
+                height: 36,
                 fit: BoxFit.cover,
               ),
             ),
@@ -339,18 +339,31 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                       height: 1.1,
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 7),
                   Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF30D158),
-                      shape: BoxShape.circle,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: cyanAccent.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: cyanAccent.withValues(alpha: 0.32),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Text(
+                      'LIVE',
+                      style: GoogleFonts.inter(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF00E5FF),
+                        letterSpacing: 0.5,
+                        height: 1.0,
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 3),
               ValueListenableBuilder<String>(
                 valueListenable:
                     context.read<GlobalLocationService>().currentCityName,
@@ -363,7 +376,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
-                      fontSize: 11,
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w500,
                       color: isDark ? Colors.white54 : const Color(0xFF6B7280),
                       height: 1.1,
@@ -475,35 +488,39 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
           children: [
             Icon(
               Icons.search_rounded,
-              size: 19,
+              size: 20,
               color: _isSearchFocused
                   ? accent
                   : (isDark ? Colors.white60 : const Color(0xFF6B7280)),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: TextField(
-                controller: _searchCtrl,
-                focusNode: _searchFocus,
-                onChanged: _onSearchChanged,
-                cursorColor: accent,
-                textAlignVertical: TextAlignVertical.center,
-                style: GoogleFonts.inter(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w500,
-                  color: isDark ? Colors.white : const Color(0xFF111318),
-                  height: 1.2,
-                ),
-                decoration: InputDecoration(
-                  isCollapsed: true,
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                  hintText: 'Search places, petrol, food...',
-                  hintStyle: GoogleFonts.inter(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w400,
-                    color: isDark ? Colors.white38 : const Color(0xFF8A94A6),
-                    height: 1.2,
+              child: Center(
+                child: TextField(
+                  controller: _searchCtrl,
+                  focusNode: _searchFocus,
+                  onChanged: _onSearchChanged,
+                  cursorColor: accent,
+                  textAlignVertical: TextAlignVertical.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 14.0,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white : const Color(0xFF111318),
+                    height: 1.0,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                    border: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    hintText: 'Search places, petrol, food...',
+                    hintStyle: GoogleFonts.inter(
+                      fontSize: 14.0,
+                      fontWeight: FontWeight.w400,
+                      color: isDark ? Colors.white38 : const Color(0xFF8A94A6),
+                      height: 1.0,
+                    ),
                   ),
                 ),
               ),

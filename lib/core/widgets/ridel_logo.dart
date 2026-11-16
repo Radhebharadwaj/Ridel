@@ -12,13 +12,31 @@ class RidelLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Logic: Agar color diya hai to wo use karo, warna Theme se uthao
-    final defaultColor = Theme.of(context).iconTheme.color;
-    
-    return Icon(
-      Icons.directions_bike_rounded, 
-      size: size,
-      color: color ?? defaultColor, // Uses theme color in Light mode (Black)
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * 0.22),
+      child: Image.asset(
+        'assets/icon/icon.png',
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(size * 0.22),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Icon(
+            Icons.explore_rounded,
+            size: size * 0.6,
+            color: Colors.white,
+          ),
+        ),
+      ),
     );
   }
 }

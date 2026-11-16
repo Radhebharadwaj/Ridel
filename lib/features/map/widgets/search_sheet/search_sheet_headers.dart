@@ -1089,48 +1089,53 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: TextField(
-                        controller: _searchCtrl,
-                        focusNode: _searchFocus,
-                        cursorColor: isDark
-                            ? RidelSurfaceTokens.iosBlueDark
-                            : RidelSurfaceTokens.iosBlueLight,
-                        textAlignVertical: TextAlignVertical.center,
-                        onTap: () {
-                          _isProgrammaticExpand = true;
-                          _expandGuardTimer?.cancel();
-                          _expandGuardTimer =
-                              Timer(const Duration(milliseconds: 500), () {
-                            _isProgrammaticExpand = false;
-                          });
-                          if (!_isSearchExpanded) {
-                            rebuildState(() {
-                              _isSearchExpanded = true;
-                              _showSearchList = true;
+                      child: Center(
+                        child: TextField(
+                          controller: _searchCtrl,
+                          focusNode: _searchFocus,
+                          cursorColor: isDark
+                              ? RidelSurfaceTokens.iosBlueDark
+                              : RidelSurfaceTokens.iosBlueLight,
+                          textAlignVertical: TextAlignVertical.center,
+                          onTap: () {
+                            _isProgrammaticExpand = true;
+                            _expandGuardTimer?.cancel();
+                            _expandGuardTimer =
+                                Timer(const Duration(milliseconds: 500), () {
+                              _isProgrammaticExpand = false;
                             });
-                          }
-                          if (_sheetController.isAttached &&
-                              _sheetController.size < _safeMaxSize - 0.02) {
-                            _safeAnimateSheet(_safeMaxSize);
-                          }
-                        },
-                        style: TextStyle(
-                          color: isDark ? Colors.white : Colors.black,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w400,
-                        ),
-                        textInputAction: TextInputAction.search,
-                        decoration: InputDecoration(
-                          hintText: 'Ridel Maps',
-                          hintStyle: TextStyle(
-                            color: isDark ? Colors.white54 : Colors.black54,
-                            fontSize: 16,
+                            if (!_isSearchExpanded) {
+                              rebuildState(() {
+                                _isSearchExpanded = true;
+                                _showSearchList = true;
+                              });
+                            }
+                            if (_sheetController.isAttached &&
+                                _sheetController.size < _safeMaxSize - 0.02) {
+                              _safeAnimateSheet(_safeMaxSize);
+                            }
+                          },
+                          style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black,
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w400,
+                            height: 1.0,
                           ),
-                          border: InputBorder.none,
-                          isCollapsed: true,
-                          contentPadding: EdgeInsets.zero,
-                          suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-                          suffixIcon: Row(
+                          textInputAction: TextInputAction.search,
+                          decoration: InputDecoration(
+                            hintText: 'Ridel Maps',
+                            hintStyle: TextStyle(
+                              color: isDark ? Colors.white54 : Colors.black54,
+                              fontSize: 15.5,
+                              height: 1.0,
+                            ),
+                            border: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                            suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                            suffixIcon: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               ValueListenableBuilder(
