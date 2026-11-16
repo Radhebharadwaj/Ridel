@@ -12,6 +12,7 @@ import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/core/utils/validators.dart';
 import 'package:ridel/core/widgets/ridel_logo.dart';
 import 'package:ridel/features/auth/services/auth_service.dart';
+import 'package:ridel/core/widgets/adaptive_blur.dart';
 
 Future<void> showRidelAuthDialog(BuildContext context) {
   return showGeneralDialog<void>(
@@ -229,8 +230,7 @@ class _RidelAuthDialogContentState extends State<RidelAuthDialogContent> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(28),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        child: AdaptiveBlur(sigmaX: 30, sigmaY: 30,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 26),
             child: Column(

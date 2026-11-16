@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:ridel/core/widgets/ridel_liquid_button.dart';
+import 'package:ridel/core/widgets/adaptive_blur.dart';
+import 'package:ridel/core/utils/responsive.dart';
 
 class RidelSheet extends StatefulWidget {
   final String title;
@@ -41,7 +43,7 @@ class RidelSheet extends StatefulWidget {
       bool useRootNavigator = false,
       bool isDynamicHeight = false,
       Color? sheetColor}) {
-    final isDesktop = MediaQuery.of(context).size.width >= 800;
+    final isDesktop = ResponsiveLayout.isDesktop(context);
 
     if (isDesktop && kIsWeb) {
       return showGeneralDialog<T>(
@@ -67,7 +69,7 @@ class RidelSheet extends StatefulWidget {
               duration: const Duration(milliseconds: 700),
               curve: Curves.easeInOutCubic,
               width: 400,
-              height: MediaQuery.of(context).size.height - 48,
+              height: MediaQuery.sizeOf(context).height - 48,
               margin: const EdgeInsets.only(right: 24, top: 24, bottom: 24),
               decoration: BoxDecoration(
                 color: bgColor,
@@ -205,7 +207,7 @@ class _RidelSheetState extends State<RidelSheet> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final double screenHeight = MediaQuery.of(context).size.height;
+    final double screenHeight = MediaQuery.sizeOf(context).height;
     final double currentHeight =
         _isFullScreen ? screenHeight : (screenHeight * 0.90);
 
@@ -273,9 +275,7 @@ class _RidelSheetState extends State<RidelSheet> {
                     ).createShader(bounds);
                   },
                   blendMode: BlendMode.dstIn,
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(
-                        sigmaX: 20, sigmaY: 20), // 💎 Heavy Apple glass blur
+                  child: AdaptiveBlur(sigmaX: 20, sigmaY: 20, // 💎 Heavy Apple glass blur
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 850),
                       curve: Curves.easeInOutQuart,
@@ -283,7 +283,7 @@ class _RidelSheetState extends State<RidelSheet> {
                       padding: EdgeInsets.fromLTRB(
                           20,
                           _isFullScreen
-                              ? MediaQuery.of(context).padding.top + 10
+                              ? MediaQuery.paddingOf(context).top + 10
                               : 20,
                           20,
                           0),

@@ -1,2 +1,0 @@
-void hideWebLocationDot() {}
-void showWebLocationDot() {}

@@ -16,6 +16,7 @@ import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/features/map/screens/full_screen_map.dart';
 import 'package:ridel/layout/desktop_map_sidebar.dart';
 import 'package:ridel/main.dart';
+import 'package:ridel/core/utils/responsive.dart';
 
 export 'package:ridel/layout/account_settings_sheet.dart';
 
@@ -82,13 +83,16 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bool isDesktop = MediaQuery.of(context).size.width >= 768;
+    final bool isDesktop = ResponsiveLayout.isDesktop(context);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
+      value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness:
+            isDark ? Brightness.light : Brightness.dark,
       ),
       child: Scaffold(
         backgroundColor: Colors.transparent,

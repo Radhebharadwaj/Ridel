@@ -13,6 +13,9 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:ridel/core/widgets/adaptive_blur.dart';
+import 'package:ridel/core/utils/responsive.dart';
+import 'package:ridel/core/theme/app_theme.dart';
 
 enum WeatherState { compact, expanded, full }
 
@@ -105,10 +108,10 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
   }
 
   double? _dragHeight;
-  final double _compactHeight = 68;
-  final double _compactWidth = 82;
-  final double _expandedHeight = 265;
-  final double _fullHeight = 550;
+  final double _compactHeight = 40;
+  final double _compactWidth = 128;
+  final double _expandedHeight = 260;
+  final double _fullHeight = 460;
 
   @override
   void initState() {
@@ -416,18 +419,22 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     }
 
     final isLightMode = Theme.of(context).brightness == Brightness.light;
+    final bool isDarkMode = !isLightMode;
     final bool isDragging = _dragHeight != null;
-    final glassColor = isLightMode
-        ? Colors.white.withValues(alpha: isDragging ? 0.75 : 0.65)
-        : const Color(0xFF0B0E17).withValues(alpha: isDragging ? 0.80 : 0.65);
+    final glassColor = RidelSurfaceTokens.pillBackground(
+      isDarkMode,
+      elevated: isDragging || _currentState != WeatherState.compact,
+    );
+    final borderColor = RidelSurfaceTokens.border(isDarkMode);
+    final pillShadows = RidelSurfaceTokens.pillShadows(isDarkMode);
 
-    final borderColor = isLightMode
-        ? Colors.white.withValues(alpha: 0.9)
-        : const Color(0xFF7CA1FF).withValues(alpha: 0.15);
-
-    // 🚀 OPTIMIZATION: Dynamic max width instead of hardcoded 340 to fix overflow
-    final bool isDesktop = MediaQuery.sizeOf(context).width >= 600;
-    double maxWidth = isDesktop ? 400 : (MediaQuery.sizeOf(context).width - 32);
+    final bool isDesktop = ResponsiveLayout.isDesktop(context);
+    final screenSize = MediaQuery.sizeOf(context);
+    final double maxWidth = isDesktop
+        ? 380.0
+        : (screenSize.width - 32.0).clamp(280.0, 420.0);
+    final double safeFullHeight =
+        (screenSize.height * 0.54).clamp(320.0, _fullHeight);
 
     // 🚀 CRITICAL FIX: Removed ValueListenableBuilder to prevent double-rendering.
     // Rely exclusively on the synced local `_weather` state.
@@ -457,221 +464,76 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                 width: _compactWidth,
                 height: _compactHeight,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: isLightMode
-                      ? [
-                          BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
-                              blurRadius: 32,
-                              offset: const Offset(0, 12))
-                        ]
-                      : [
-                          BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.04),
-                            blurRadius: 16,
-                            spreadRadius: 1,
-                          ),
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.3),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: pillShadows,
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                  borderRadius: BorderRadius.circular(22),
+                  child: AdaptiveBlur(sigmaX: 14.0, sigmaY: 14.0,
                     child: Container(
-                        decoration: BoxDecoration(
-                          color: glassColor,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: borderColor, width: 1.0),
-                        ),
-                        child: Center(
-                            child: isLocationDisabled
-                                ? Column(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: glassColor,
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(color: borderColor, width: 0.75),
+                      ),
+                      child: Center(
+                        child: _isLoading && !isLocationDisabled
+                            ? RepaintBoundary(
+                                child: Shimmer.fromColors(
+                                  baseColor: isLightMode
+                                      ? Colors.black12
+                                      : Colors.white.withValues(alpha: 0.16),
+                                  highlightColor: isLightMode
+                                      ? Colors.black26
+                                      : Colors.white.withValues(alpha: 0.34),
+                                  child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Container(
-                                            height: 20,
-                                            width: 30,
-                                            decoration: BoxDecoration(
-                                              borderRadius: BorderRadius.circular(8),
-                                              color: isLightMode ? Colors.black12 : Colors.white.withValues(alpha: 0.1),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Container(
-                                            height: 10,
-                                            width: 45,
-                                            decoration: BoxDecoration(
-                                              borderRadius: BorderRadius.circular(4),
-                                              color: isLightMode ? Colors.black12 : Colors.white.withValues(alpha: 0.1),
-                                            ),
-                                          ),
-                                        ],
+                                      Container(
+                                        width: 18,
+                                        height: 18,
+                                        decoration: const BoxDecoration(
+                                          color: Colors.white,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        width: 56,
+                                        height: 11,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
                                       ),
                                     ],
-                                  )
-                                : _isLoading
-                                ? RepaintBoundary(
-                                    child: Shimmer.fromColors(
-                                      baseColor: isLightMode
-                                        ? Colors.black12
-                                        : Colors.white.withValues(alpha: 0.2),
-                                    highlightColor: isLightMode
-                                        ? Colors.black26
-                                        : Colors.white.withValues(alpha: 0.4),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Container(
-                                          width: 24,
-                                          height: 24,
-                                          decoration: const BoxDecoration(
-                                            color: Colors.white,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          width: 40,
-                                          height: 12,
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            borderRadius: BorderRadius.circular(6),
-                                          ),
-                                        ),
-                                      ],
+                                  ),
+                                ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.cloud_outlined,
+                                    color: isLightMode
+                                        ? Colors.black54
+                                        : Colors.white70,
+                                    size: 17,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    isLocationDisabled ? "--°" : "Weather",
+                                    style: GoogleFonts.inter(
+                                      color: isLightMode
+                                          ? Colors.black54
+                                          : Colors.white70,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                )
-                                : Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.cloud_outlined,
-                                          color: isLightMode
-                                              ? Colors.black54
-                                              : Colors.white60,
-                                          size: 20),
-                                      const SizedBox(height: 5),
-                                      Text("Weather",
-                                          style: GoogleFonts.inter(
-                                              color: isLightMode
-                                                  ? Colors.black38
-                                                  : Colors.white38,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w500)),
-                                    ],
-                                  )),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-      );
-    }
-
-    final isNight = DateTime.now().hour > 18 || DateTime.now().hour < 6;
-    double targetWidth =
-        _currentState == WeatherState.compact ? _compactWidth : maxWidth;
-    double targetHeight = _dragHeight ?? _getCurrentTargetHeight();
-    double currentRadius = _currentState == WeatherState.compact ? 24 : 35;
-
-    return PointerInterceptor(
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                debugPrint("🟢 [WEATHER DEBUG] MAIN CARD TAPPED!");
-                _handleTap();
-              },
-              onVerticalDragUpdate: _handleVerticalDragUpdate,
-              onVerticalDragEnd: _handleVerticalDragEnd,
-              child: AnimatedContainer(
-                duration: Duration(milliseconds: _dragHeight != null ? 0 : 650),
-                curve:
-                    _dragHeight != null ? Curves.linear : Curves.fastOutSlowIn,
-                width: targetWidth,
-                height: targetHeight,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(currentRadius),
-                  boxShadow: isLightMode
-                      ? [
-                          BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
-                              blurRadius: 32,
-                              offset: const Offset(0, 12))
-                        ]
-                      : [
-                          BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.04),
-                            blurRadius: 16,
-                            spreadRadius: 1,
-                          ),
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.3),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(currentRadius),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-                    child: Container(
-                        decoration: BoxDecoration(
-                          color: glassColor,
-                          borderRadius: BorderRadius.circular(currentRadius),
-                          border: Border.all(color: borderColor, width: 1.0),
-                        ),
-                        child: OverflowBox(
-                          maxWidth: maxWidth,
-                          maxHeight: _fullHeight,
-                          alignment: Alignment.topLeft,
-                          child: Stack(
-                            children: [
-                              AnimatedOpacity(
-                                duration: const Duration(milliseconds: 200),
-                                opacity: _currentState == WeatherState.compact
-                                    ? 0.0
-                                    : 1.0,
-                                child: IgnorePointer(
-                                  ignoring:
-                                      _currentState == WeatherState.compact,
-                                  child: SizedBox(
-                                    width: maxWidth,
-                                    height: _fullHeight,
-                                    child: _buildExpandedAndFullView(isNight,
-                                        isLightMode, displayCity, displayState),
-                                  ),
-                                ),
+                                ],
                               ),
-                              AnimatedOpacity(
-                                duration: const Duration(milliseconds: 200),
-                                opacity: _currentState == WeatherState.compact
-                                    ? 1.0
-                                    : 0.0,
-                                child: IgnorePointer(
-                                  ignoring:
-                                      _currentState != WeatherState.compact,
-                                  child: SizedBox(
-                                    width: _compactWidth,
-                                    height: _compactHeight,
-                                    child:
-                                        _buildCompactView(isNight, isLightMode),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ),
                     ),
                   ),
@@ -681,46 +543,128 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
       );
     }
 
-  Widget _buildCompactView(bool isNight, bool isLightMode) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              PremiumWeatherIcon(
-                  code: _weather!.weatherCode, size: 22, isNight: isNight),
-              const SizedBox(width: 4),
-              Text("${_weather!.temp.toInt()}°",
-                  style: GoogleFonts.inter(
-                      color: isLightMode ? Colors.black87 : accentColor,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 20,
-                      height: 1.0)),
-            ],
+    final isNight = DateTime.now().hour > 18 || DateTime.now().hour < 6;
+    final bool isCompact = _currentState == WeatherState.compact;
+    final double targetWidth = isCompact ? _compactWidth : maxWidth;
+    final double rawTargetHeight = _dragHeight ?? _getCurrentTargetHeight();
+    final double targetHeight =
+        isCompact ? _compactHeight : rawTargetHeight.clamp(_expandedHeight, safeFullHeight);
+    final double currentRadius = isCompact ? 22.0 : 28.0;
+
+    return TapRegion(
+      onTapOutside: (_) {
+        if (!isCompact) collapse();
+      },
+      child: PointerInterceptor(
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _handleTap,
+            onVerticalDragUpdate: _handleVerticalDragUpdate,
+            onVerticalDragEnd: _handleVerticalDragEnd,
+            child: AnimatedContainer(
+              duration: Duration(milliseconds: _dragHeight != null ? 0 : 340),
+              curve: _dragHeight != null ? Curves.linear : Curves.easeOutCubic,
+              width: targetWidth,
+              height: targetHeight,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(currentRadius),
+                boxShadow: pillShadows,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(currentRadius),
+                child: AdaptiveBlur(sigmaX: 14.0, sigmaY: 14.0,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: glassColor,
+                      borderRadius: BorderRadius.circular(currentRadius),
+                      border: Border.all(color: borderColor, width: 0.75),
+                    ),
+                    child: isCompact
+                        ? SizedBox(
+                            width: _compactWidth,
+                            height: _compactHeight,
+                            child: _buildCompactView(isNight, isLightMode),
+                          )
+                        : OverflowBox(
+                            maxWidth: maxWidth,
+                            maxHeight: safeFullHeight,
+                            alignment: isDesktop
+                                ? Alignment.topRight
+                                : Alignment.bottomLeft,
+                            child: SizedBox(
+                              width: maxWidth,
+                              height: safeFullHeight,
+                              child: _buildExpandedAndFullView(isNight,
+                                  isLightMode, displayCity, displayState),
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ),
           ),
-          const SizedBox(height: 5),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text("AQI ${_weather!.aqi}",
-                  style: GoogleFonts.inter(
-                      color: isLightMode ? Colors.black87 : Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      height: 1.0)),
-              const SizedBox(width: 4),
-              Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                      color: _getAqiColor(_weather!.aqi),
-                      shape: BoxShape.circle)),
-            ],
+        ),
+      ),
+    );
+    }
+
+  Widget _buildCompactView(bool isNight, bool isLightMode) {
+    final textPrimary = isLightMode ? const Color(0xFF111318) : Colors.white;
+    final textSecondary = isLightMode
+        ? const Color(0xFF4B5563)
+        : Colors.white.withValues(alpha: 0.78);
+    final sepColor = isLightMode
+        ? Colors.black.withValues(alpha: 0.14)
+        : Colors.white.withValues(alpha: 0.18);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 11),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          PremiumWeatherIcon(
+              code: _weather!.weatherCode, size: 18, isNight: isNight),
+          const SizedBox(width: 5),
+          Text(
+            "${_weather!.temp.toInt()}°",
+            style: GoogleFonts.inter(
+              color: textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              letterSpacing: -0.3,
+              height: 1.0,
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 7),
+            width: 1,
+            height: 13,
+            color: sepColor,
+          ),
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              color: _getAqiColor(_weather!.aqi),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              "${_weather!.aqi}",
+              maxLines: 1,
+              overflow: TextOverflow.clip,
+              style: GoogleFonts.inter(
+                color: textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                height: 1.0,
+              ),
+            ),
           ),
         ],
       ),

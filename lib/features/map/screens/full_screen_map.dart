@@ -28,6 +28,9 @@ import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/core/config/app_config.dart';
 import 'package:ridel/core/map/bridge/map_binary_bridge.dart';
 import 'package:ridel/main.dart';
+import 'package:ridel/core/utils/responsive.dart';
+import 'package:ridel/core/widgets/adaptive_blur.dart';
+import 'package:ridel/core/theme/app_theme.dart';
 
 class FullScreenMapPage extends StatefulWidget {
   final ValueNotifier<double> searchSheetProgressNotifier;
@@ -84,6 +87,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
   // 🚀 WEB GESTURE SHIELDS
   DateTime _lastTapTime = DateTime.now();
   Timer? _webLongPressTimer;
+  MapProvider? _boundMapProvider;
+  GlobalLocationService? _boundLocService;
+  VoidCallback? _mapProviderListener;
+  VoidCallback? _locServiceListener;
 
   void _onCameraMove(CameraPosition? position) {
     // 🚀 FAST PATH: Just update local variable, DO NOT trigger Flutter rebuilds here!
@@ -92,61 +99,6 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   void _onCameraIdle() {
     _onCameraIdleScaleBar();
-
-    // 🚀 Update the LocationProvider so the rest of the app knows where the map is
-    if (_currentCameraPosition != null) {
-      final cam = _currentCameraPosition!;
-      final currentZoom = cam.zoom;
-      final lat = cam.target.latitude;
-
-      double metersPerPixel =
-          156543.03392 * cos(lat * pi / 180.0) / pow(2, currentZoom);
-      double maxPixelWidth = 80.0;
-      double maxMeters = metersPerPixel * maxPixelWidth;
-
-      const scaleValues = [
-        10,
-        20,
-        50,
-        100,
-        200,
-        500,
-        1000,
-        2000,
-        5000,
-        10000,
-        20000,
-        50000,
-        100000,
-        200000,
-        500000,
-        1000000
-      ];
-
-      int chosenMeters = 10;
-      for (int v in scaleValues) {
-        if (v <= maxMeters) {
-          chosenMeters = v;
-        } else {
-          break;
-        }
-      }
-
-      double newWidth = chosenMeters / metersPerPixel;
-      String newText = chosenMeters >= 1000
-          ? '${chosenMeters ~/ 1000} km'
-          : '$chosenMeters m';
-
-      if (!mounted) return;
-      _showScaleBarNotifier.value = true;
-      _scaleTextNotifier.value = newText;
-      _scaleWidthNotifier.value = newWidth.clamp(20.0, 150.0);
-
-      _scaleBarTimer?.cancel();
-      _scaleBarTimer = Timer(const Duration(milliseconds: 1500), () {
-        if (mounted) _showScaleBarNotifier.value = false;
-      });
-    }
 
     // 🚀 Defer the state update until AFTER the current rendering frame finishes
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -252,18 +204,22 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       _initializeApp();
 
       final mapProvider = Provider.of<MapProvider>(context, listen: false);
-      mapProvider.addListener(() {
+      _boundMapProvider = mapProvider;
+      _mapProviderListener = () {
+        if (!mounted || _hasInitialCentered) return;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!_hasInitialCentered && mapProvider.currentLocation != null) {
+          if (mounted && !_hasInitialCentered && mapProvider.currentLocation != null) {
             _attemptInitialCameraCenter();
           }
         });
-      });
+      };
+      mapProvider.addListener(_mapProviderListener!);
 
       // 🚀 REACTIVE PERMISSION HOOK: Snap to real GPS the instant it arrives
       final locService =
           Provider.of<GlobalLocationService>(context, listen: false);
-      locService.addListener(() {
+      _boundLocService = locService;
+      _locServiceListener = () {
         final pos = locService.currentPosition;
         final ctrl = mapProvider.controller ?? _tempController;
         if (pos == null || ctrl == null) return;
@@ -308,7 +264,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
             // 🚀 Removed street level auto-zoom to respect startup freeze
           }
         });
-      });
+      };
+      locService.addListener(_locServiceListener!);
 
       locService.currentCityName.addListener(() {
         final cityName = locService.currentCityName.value;
@@ -465,6 +422,14 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
     widget.searchSheetProgressNotifier.removeListener(_onProgressChanged);
     _fadeScaleController.dispose();
     _scaleBarTimer?.cancel();
+    _webLongPressTimer?.cancel();
+    _sheetPixelHeightNotifier.dispose();
+    if (_mapProviderListener != null) {
+      _boundMapProvider?.removeListener(_mapProviderListener!);
+    }
+    if (_locServiceListener != null) {
+      _boundLocService?.removeListener(_locServiceListener!);
+    }
     super.dispose();
   }
 
@@ -524,14 +489,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.sizeOf(context);
-    final bool isDesktop = screenSize.width >= 600;
+    final bool isDesktop = ResponsiveLayout.isDesktop(context);
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     final edgePadding = MediaQuery.paddingOf(context);
     final double topMargin =
-        isDesktop ? 32.0 : edgePadding.top + 24.0;
-    final double sideMargin = isDesktop ? 32.0 : 28.0;
+        isDesktop ? 32.0 : edgePadding.top + 16.0;
+    final double sideMargin = ResponsiveLayout.horizontalMargin(context);
 
     if (!_isMapReadyToLoad) {
       return const SizedBox
@@ -653,21 +617,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 }
                               });
 
-                              // 🚀 TASK 3: Explicitly sync initial theme on map startup
-                              final isSystemDark =
-                                  Theme.of(context).brightness ==
-                                      Brightness.dark;
-                              MapStyleHelper.getOlaStyle(
-                                isSystemDark,
-                                themeType: mapProvider.currentTheme,
-                                showLabels: mapProvider.showLabels,
-                                showPOIs: mapProvider.showPOIs,
-                              ).then((rawStyleUrl) async {
-                                final curedJson = await MapStyleInterceptor.getCuredStyle(rawStyleUrl);
-                                await controller.setStyle(curedJson);
-                              }).catchError((e) {
-                                debugPrint("❌ Failed to set initial style: $e");
-                              });
+                              // Initial style is already passed via MapLibreMap(styleString: _loadedMapStyle!).
+                              // Avoid calling controller.setStyle() again here to prevent double style reload flicker on mobile.
 
                               // Removed premature camera animation to prevent WebGL style race condition
                             },
@@ -914,6 +865,24 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                   return;
                                 }
 
+                                // 📍 CHECK NEARBY POI DIRECT TAP PINNING (Google Maps Style)
+                                final nearbyPoi = mapProvider.findNearbyPoiAt(latLng);
+                                if (nearbyPoi != null) {
+                                  AppHaptics.selectionClick();
+                                  mapProvider.saveNewSearch(nearbyPoi);
+                                  mapProvider.setDestinationSelected(true);
+                                  final targetCoords = LatLng(nearbyPoi.latitude, nearbyPoi.longitude);
+                                  mapProvider.setTargetDestination(targetCoords);
+                                  mapProvider.addNativeDestinationPin(targetCoords);
+                                  mapProvider.engine.setUIState(MapUIState.placeSelected);
+                                  if (mapProvider.controller != null) {
+                                    await mapProvider.controller!.animateCamera(
+                                      CameraUpdate.newLatLngZoom(targetCoords, 16.0),
+                                    );
+                                  }
+                                  return;
+                                }
+
                                 bool handled = await mapProvider.handleRouteClick(point, latLng);
                                 if (!handled) {
                                   mapProvider.clearTargetLocation();
@@ -1136,51 +1105,51 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                     ),
                   ),
 
-                // 🚀 1. SMOOTH WEATHER WIDGET (Mobile = Top Left, Desktop = Top Right)
-                ValueListenableBuilder<bool>(
-                  valueListenable: globalSidebarOpen,
-                  builder: (context, isSidebarExpanded, _) {
-                    return AnimatedPositioned(
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.easeOutCubic,
-                        top: isDesktop
-                            ? 16.0
-                            : MediaQuery.paddingOf(context).top + 16.0,
-                        left: isDesktop ? null : 16.0,
-                        right: isDesktop ? 16.0 : null,
-                        child: ValueListenableBuilder<double>(
-                          valueListenable: widget.searchSheetProgressNotifier,
-                          builder: (context, progress, _) {
-                            double opacity = (progress <= 0.45)
+                // 🌤️ WEATHER CAPSULE PILL (Mobile = Bottom-Left above Search Sheet, Desktop = Top-Right)
+                ValueListenableBuilder<double>(
+                  valueListenable: widget.searchSheetProgressNotifier,
+                  builder: (context, progress, weatherChild) {
+                    return ValueListenableBuilder<double>(
+                      valueListenable: _sheetPixelHeightNotifier,
+                      builder: (context, pixelHeight, _) {
+                        final double opacity = isDesktop
+                            ? 1.0
+                            : ((progress <= 0.45)
                                 ? 1.0
-                                : (1.0 - ((progress - 0.45) / (0.90 - 0.45)))
-                                    .clamp(0.0, 1.0);
+                                : (1.0 - ((progress - 0.45) / (0.85 - 0.45)))
+                                    .clamp(0.0, 1.0));
 
-                            return Selector<MapProvider, bool>(
-                              selector: (context, provider) =>
-                                  !provider.isActiveNavigation,
-                              builder: (context, showWeather, child) {
-                                final finalOpacity =
-                                    showWeather ? opacity : 0.0;
-                                return IgnorePointer(
-                                  ignoring: finalOpacity == 0.0,
-                                  child: Opacity(
-                                    opacity: finalOpacity,
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: Builder(
-                                builder: (context) {
-                                  final weather = WeatherFloatingWidget(
-                                      onMapThemeChanged: (isDark) {});
-                                  return weather;
-                                },
-                              ),
-                            );
-                          },
-                        ));
+                        final double currentSheetHeightInPixels = (pixelHeight > 0.0)
+                            ? pixelHeight
+                            : (rootConstraints.maxHeight * progress);
+                        final double mobileBottom = currentSheetHeightInPixels + 16.0;
+
+                        return Positioned(
+                          top: isDesktop ? 16.0 : null,
+                          bottom: isDesktop ? null : mobileBottom,
+                          left: isDesktop ? null : 16.0,
+                          right: isDesktop ? 16.0 : null,
+                          child: Selector<MapProvider, bool>(
+                            selector: (context, provider) =>
+                                !provider.isActiveNavigation,
+                            builder: (context, showWeather, child) {
+                              final finalOpacity = showWeather ? opacity : 0.0;
+                              return IgnorePointer(
+                                ignoring: finalOpacity < 0.05,
+                                child: AnimatedOpacity(
+                                  duration: const Duration(milliseconds: 200),
+                                  opacity: finalOpacity,
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: weatherChild,
+                          ),
+                        );
+                      },
+                    );
                   },
+                  child: WeatherFloatingWidget(onMapThemeChanged: (isDark) {}),
                 ),
 
                 // 🚀 2. PREMIUM SCALE BAR (Mobile = Top Right, Desktop = Bottom Left)
@@ -1190,7 +1159,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                       // Exact placement logic based on device
                       final double? topOffset = isDesktop
                           ? null
-                          : MediaQuery.of(context).padding.top + 16.0;
+                          : MediaQuery.paddingOf(context).top + 16.0;
                       final double? bottomOffset = isDesktop ? 32.0 : null;
                       final double? rightOffset = isDesktop ? null : 16.0;
                       final double? leftOffset =
@@ -1307,10 +1276,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(36),
                             child: RepaintBoundary(
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(
-                                    sigmaX: kIsWeb ? 4.0 : 35.0,
-                                    sigmaY: kIsWeb ? 4.0 : 35.0),
+                              child: AdaptiveBlur(sigmaX: kIsWeb ? 4.0 : 35.0, sigmaY: kIsWeb ? 4.0 : 35.0,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 20, vertical: 14),
@@ -1749,10 +1715,7 @@ class _AppleStyleCompassState extends State<AppleStyleCompass> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(50),
                   child: RepaintBoundary(
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(
-                          sigmaX: kIsWeb ? 4.0 : 35.0,
-                          sigmaY: kIsWeb ? 4.0 : 35.0),
+                    child: AdaptiveBlur(sigmaX: kIsWeb ? 4.0 : 35.0, sigmaY: kIsWeb ? 4.0 : 35.0,
                       child: Container(
                         width: 48,
                         height: 48,
@@ -1860,9 +1823,7 @@ class _DesktopDraggableSearchWrapperState
                 AppHaptics.heavyImpact();
                 setState(() => _isMoveMode = false);
               },
-              child: BackdropFilter(
-                filter: ImageFilter.blur(
-                    sigmaX: kIsWeb ? 4.0 : 10.0, sigmaY: kIsWeb ? 4.0 : 10.0),
+              child: AdaptiveBlur(sigmaX: kIsWeb ? 4.0 : 10.0, sigmaY: kIsWeb ? 4.0 : 10.0,
                 child: Container(color: Colors.black.withValues(alpha: 0.65)),
               ),
             ),

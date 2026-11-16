@@ -8,6 +8,9 @@ import 'package:ridel/core/map/map_provider.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
 import 'package:ridel/core/utils/route_utils.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
+import 'package:ridel/core/utils/responsive.dart';
+import 'package:ridel/core/widgets/adaptive_blur.dart';
+import 'package:ridel/core/theme/app_theme.dart';
 
 class TurnByTurnBanner extends StatefulWidget {
   final bool isDark;
@@ -58,27 +61,17 @@ class _TurnByTurnBannerState extends State<TurnByTurnBanner> {
   Widget build(BuildContext context) {
     final isLight = !widget.isDark;
 
-    // Frosted glass — exact WeatherFloatingWidget match
-    final glassColor = isLight
-        ? Colors.white.withValues(alpha: 0.85)
-        : Colors.black.withValues(alpha: 0.6);
+    final glassColor = RidelSurfaceTokens.pillBackground(!isLight, elevated: true);
+    final borderColor = RidelSurfaceTokens.border(!isLight);
 
-    final borderColor = isLight
-        ? Colors.white.withValues(alpha: 0.9)
-        : Colors.white.withValues(alpha: 0.1);
-
-    double bannerWidth = MediaQuery.sizeOf(context).width - 32;
+    double bannerWidth = ResponsiveLayout.clampedOverlayWidth(context);
 
     return Selector<MapProvider, bool>(
         selector: (context, provider) => provider.isActiveNavigation,
         builder: (context, show, child) {
-          return IgnorePointer(
-            ignoring: !show,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 300),
-              opacity: show ? 1.0 : 0.0,
-              child: child,
-            ),
+          return AnimatedSwitcher(
+            duration: const Duration(milliseconds: 260),
+            child: show ? child! : const SizedBox.shrink(),
           );
         },
         child: Align(
@@ -144,8 +137,7 @@ class _TurnByTurnBannerState extends State<TurnByTurnBanner> {
                       child: RepaintBoundary(
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(42),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+                          child: AdaptiveBlur(sigmaX: 15.0, sigmaY: 15.0,
                             child: PointerInterceptor(
                               child: Container(
                                 decoration: BoxDecoration(

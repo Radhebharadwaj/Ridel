@@ -1,3 +1,5 @@
+import 'package:ridel/core/widgets/adaptive_blur.dart';
+import 'package:ridel/core/utils/responsive.dart';
 part of 'map_search_sheet.dart';
 
 // 🚀 FIX: Named the extension to fix method visibility bugs in the Dart analyzer
@@ -91,8 +93,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
             child: RepaintBoundary(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(36),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
+                child: AdaptiveBlur(sigmaX: 35.0, sigmaY: 35.0,
                   child: Container(
                     width: MediaQuery.sizeOf(context).width - 32,
                     constraints: BoxConstraints(
@@ -1045,7 +1046,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
   }
 
   Widget _buildSearchHeader(double headerHeight, double progress, bool isDark) {
-    final isDesktop = MediaQuery.of(context).size.width > 600;
+    final isDesktop = ResponsiveLayout.isDesktop(context);
     final pillBaseColor = isDark
         ? Colors.black.withValues(alpha: 0.85)
         : Colors.white.withValues(alpha: 0.85);
@@ -1066,8 +1067,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
           borderRadius: BorderRadius.circular(dynamicRadius),
           // 🚀 FIX: Wrapped BackdropFilter in RepaintBoundary to prevent extreme frame drops during animations
           child: RepaintBoundary(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
+            child: AdaptiveBlur(sigmaX: 35.0, sigmaY: 35.0,
               child: Container(
                 alignment: Alignment.center,
                 padding: const EdgeInsets.symmetric(horizontal: 16),

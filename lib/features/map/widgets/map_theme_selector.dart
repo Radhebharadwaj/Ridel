@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:ridel/core/map/map_style_helper.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/map/map_provider.dart';
+import 'package:ridel/core/widgets/adaptive_blur.dart';
 
 /// 🚀 ULTRA-MINIMALIST FLOATING GLASS MAP THEME SELECTOR
 /// This ONLY changes the map's render style (Dark/Light tiles).
@@ -154,8 +155,7 @@ class _MapThemePopupState extends State<_MapThemePopup> {
         borderRadius: BorderRadius.circular(24),
         // 🚀 CRITICAL FPS FIX: Cache the blur rasterization during animation
         child: RepaintBoundary(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
+          child: AdaptiveBlur(sigmaX: 35.0, sigmaY: 35.0,
             child: Container(
               width: 200, // Sleek, constrained width
               padding: const EdgeInsets.all(8),

@@ -34,6 +34,11 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
   StreamSubscription<Position>? _positionStreamSubscription;
   StreamSubscription<CompassEvent>? _compassStreamSubscription;
   bool _isLiveTrackingActive = false;
+  bool _isNavigationTracking = false;
+  double? _lastCompassHeading;
+  DateTime? _lastCompassEmit;
+  DateTime? _stationarySince;
+  bool _isStationaryPowerSave = false;
   final StreamController<Position> _engineStreamController =
       StreamController<Position>.broadcast();
 
@@ -93,18 +98,20 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
       });
     }
 
-    if (_positionStreamSubscription == null) return;
-
-    // 🚀 FIX 1: NEVER pause stream if active navigation is on!
-    if (_isLiveTrackingActive) return;
+    if (_positionStreamSubscription == null && _compassStreamSubscription == null) return;
 
     if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
-      debugPrint("App is paused, pausing GPS stream...");
-      _positionStreamSubscription?.pause();
+      // Always pause magnetometer/compass in background to prevent thermal drain
+      _compassStreamSubscription?.pause();
+      // Only keep GPS alive in background when turn-by-turn navigation is active
+      if (!_isNavigationTracking) {
+        _positionStreamSubscription?.pause();
+      }
     } else if (state == AppLifecycleState.resumed) {
-      debugPrint("App resumed, resuming GPS stream...");
-      _positionStreamSubscription?.resume();
-      _compassStreamSubscription?.resume();
+      if (_isLiveTrackingActive) {
+        _positionStreamSubscription?.resume();
+        _compassStreamSubscription?.resume();
+      }
     }
   }
 
@@ -676,14 +683,29 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
   // ==========================================
   // 2. ACTIVE MODE (LIVE NAVIGATION & SPEED)
   // ==========================================
-  void startLiveTracking() {
-    if (_isLiveTrackingActive) return;
-
-    // Agar IP fallback use kar raha hai, toh live tracking on mat karo (kyunki speed 0 hi rahegi)
+  void startLiveTracking({bool forNavigation = false}) {
     if (_isUsingIpFallback) return;
 
+    // Upgrade existing explore stream to navigation accuracy if needed
+    if (_isLiveTrackingActive) {
+      if (forNavigation && !_isNavigationTracking && !kIsWeb) {
+        _isNavigationTracking = true;
+        _positionStreamSubscription?.cancel();
+        _positionStreamSubscription = Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.bestForNavigation,
+            distanceFilter: 4,
+          ),
+        ).listen(_updatePositionAndSpeed, onError: (error) {
+          debugPrint("📍 [DEBUG] GPS stream lost or glitched: $error");
+        });
+      }
+      return;
+    }
+
     _isLiveTrackingActive = true;
-    notifyListeners(); // Notify tracking state
+    _isNavigationTracking = forNavigation;
+    notifyListeners();
 
     if (kIsWeb) {
       Timer.periodic(const Duration(seconds: 3), (timer) async {
@@ -692,7 +714,6 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
           return;
         }
         try {
-          // 🚀 Updated: Using LocationSettings for Web too
           final pos = await Geolocator.getCurrentPosition(
             locationSettings: const LocationSettings(
               accuracy: LocationAccuracy.high,
@@ -704,23 +725,46 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
+    // 3-Tier Battery Architecture:
+    // - Navigation mode: bestForNavigation with 4m distanceFilter (road-snapped)
+    // - Explore mode: balanced/medium accuracy with 30m filter (low battery)
     _positionStreamSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 50),
-    ).listen((Position position) {
-      _updatePositionAndSpeed(position);
-    }, onError: (error) {
+      locationSettings: LocationSettings(
+        accuracy: forNavigation
+            ? LocationAccuracy.bestForNavigation
+            : LocationAccuracy.medium,
+        distanceFilter: forNavigation ? 4 : 30,
+      ),
+    ).listen(_updatePositionAndSpeed, onError: (error) {
       debugPrint("📍 [DEBUG] GPS stream lost or glitched: $error");
     });
 
-    if (!kIsWeb) {
-      _compassStreamSubscription?.cancel();
-      _compassStreamSubscription = FlutterCompass.events?.listen((event) {
-        if (event.heading != null) {
-          currentHeadingNotifier.value = event.heading!;
-        }
-      });
-    }
+    // Battery-smart Compass:
+    // While moving in navigation mode (>= 1.5 m/s), road-segment bearing is both
+    // more accurate and uses zero magnetometer power, so skip compass updates.
+    _compassStreamSubscription?.cancel();
+    _compassStreamSubscription = FlutterCompass.events?.listen((event) {
+      if (_isStationaryPowerSave) return;
+      if (_isNavigationTracking && (currentSpeedKmphNotifier.value >= 5.5)) {
+        return; // Moving on road -> road-segment bearing owns heading
+      }
+      final heading = event.heading;
+      if (heading == null) return;
+      final now = DateTime.now();
+      final int minIntervalMs = _isNavigationTracking ? 150 : 250;
+      if (_lastCompassEmit != null &&
+          now.difference(_lastCompassEmit!).inMilliseconds < minIntervalMs) {
+        return;
+      }
+      if (_lastCompassHeading != null) {
+        double delta = (heading - _lastCompassHeading!).abs();
+        if (delta > 180) delta = 360 - delta;
+        if (delta < 3.0) return;
+      }
+      _lastCompassHeading = heading;
+      _lastCompassEmit = now;
+      currentHeadingNotifier.value = heading;
+    });
   }
 
   void _updatePositionAndSpeed(Position position) {
@@ -737,8 +781,21 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     double rawSpeed = (position.speed * 3.6).clamp(0.0, 240.0);
     _speedHistory.add(rawSpeed);
     if (_speedHistory.length > _smoothingWindow) _speedHistory.removeAt(0);
-    currentSpeedKmphNotifier.value =
+    final double smoothedKmph =
         _speedHistory.reduce((a, b) => a + b) / _speedHistory.length;
+    currentSpeedKmphNotifier.value = smoothedKmph;
+
+    // Stationary power-save: if stopped (< 2.5 km/h) for >20s, sleep compass
+    if (smoothedKmph < 2.5) {
+      _stationarySince ??= DateTime.now();
+      if (!_isStationaryPowerSave &&
+          DateTime.now().difference(_stationarySince!).inSeconds >= 20) {
+        _isStationaryPowerSave = true;
+      }
+    } else {
+      _stationarySince = null;
+      _isStationaryPowerSave = false;
+    }
 
     if (!_engineStreamController.isClosed) {
       _engineStreamController.add(position);
@@ -755,11 +812,13 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     if (!_isLiveTrackingActive) return;
 
     _isLiveTrackingActive = false;
+    _isNavigationTracking = false;
     _positionStreamSubscription?.cancel();
+    _positionStreamSubscription = null;
     _compassStreamSubscription?.cancel();
-    debugPrint("🛑 STOPPED Live GPS Tracking");
+    _compassStreamSubscription = null;
     _speedHistory.clear();
-    notifyListeners(); // Notify tracking state change
+    notifyListeners();
   }
 
   Future<void> forceRefreshLocation() async => await initializeEcoLocation();
@@ -769,6 +828,7 @@ class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _debounceTimer?.cancel();
     _positionStreamSubscription?.cancel();
+    _compassStreamSubscription?.cancel();
     _engineStreamController.close();
     currentPositionNotifier.dispose();
     currentSpeedKmphNotifier.dispose();

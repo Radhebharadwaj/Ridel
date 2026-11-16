@@ -44,6 +44,7 @@ final ValueNotifier<int> globalTransportMode = ValueNotifier<int>(0);
 final ValueNotifier<bool> globalSidebarOpen = ValueNotifier<bool>(true);
 final ValueNotifier<bool> globalSearchSheetOpen = ValueNotifier<bool>(true);
 final ValueNotifier<bool> globalIsHome = ValueNotifier<bool>(true);
+final Completer<void> _firebaseReadyCompleter = Completer<void>();
 
 // globalNavigatorKey is imported from toast_service.dart
 
@@ -221,9 +222,15 @@ Future<void> main() async {
           await Firebase.initializeApp();
           FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
         }
+        if (!_firebaseReadyCompleter.isCompleted) {
+          _firebaseReadyCompleter.complete();
+        }
         await NotificationService().init();
         debugPrint("🔥 Firebase & Notifications Ready!");
       } catch (e) {
+        if (!_firebaseReadyCompleter.isCompleted) {
+          _firebaseReadyCompleter.complete();
+        }
         debugPrint("❌ Firebase Error: $e");
       }
     }));
@@ -240,8 +247,7 @@ Future<void> main() async {
       MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => MapProvider()),
-          ChangeNotifierProvider(
-              create: (_) => GlobalLocationService()..autoDetectAndSetRegion()),
+          ChangeNotifierProvider(create: (_) => GlobalLocationService()),
           ChangeNotifierProvider(create: (_) => AppNavigationProvider()),
           ChangeNotifierProvider(
               create: (_) => NotificationProvider(), lazy: false),
@@ -273,6 +279,8 @@ class _RidelAppState extends State<RidelApp> {
   }
 
   Future<void> _setupInteractedMessage() async {
+    await _firebaseReadyCompleter.future;
+    if (!mounted) return;
     // 2FA & Notification Listeners
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       // 🚀 Security Alert Trigger

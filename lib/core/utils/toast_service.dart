@@ -4,8 +4,10 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:provider/provider.dart';
 import 'package:ridel/core/widgets/ridel_loading_dots.dart';
 
@@ -13,6 +15,7 @@ import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/main.dart';
 import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:ridel/core/widgets/branded_loader.dart';
+import 'package:ridel/core/widgets/adaptive_blur.dart';
 enum ToastType { success, error, info, warning }
 
 class ToastService {
@@ -333,6 +336,7 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bool isDesktop = MediaQuery.sizeOf(context).width >= 768;
     
     AppNavigationProvider? navProvider;
     try {
@@ -342,111 +346,82 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
     final isMapScreen = navProvider?.currentIndex == 1;
     final bool shouldHide = isMapScreen && widget.type != ToastType.error && widget.type != ToastType.warning;
 
-    double targetTop = 16.0;
-    try {
-      targetTop = MediaQuery.of(context).padding.top + 16;
-    } catch (_) {}
-
-    if (_isEntering) {
-      targetTop = -100;
-    } else {
-      targetTop += _dragOffsetY;
-    }
-
-    return AnimatedPositioned(
-      duration: const Duration(milliseconds: 600), // Butter smooth slide
-      curve: Curves.elasticOut,
-      top: targetTop,
-      left: 0,
-      right: 0,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 300),
-        opacity: shouldHide ? 0.0 : 1.0, // 🚨 Ensure errors are always visible
-        child: AnimatedScale(
-          scale: shouldHide ? 0.8 : _scale,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          child: IgnorePointer(
-            ignoring: shouldHide, // 🚨 Ensure errors are clickable
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  if (widget.isDynamicTransportToast && widget.onTapUpdateOrigin != null) {
-                    final transportMode = globalTransportMode.value;
-                    final provider = navProvider;
-                    String? name;
-                    if (transportMode == 0) {
-                      name = provider?.nearestMetroStation?['stop_name'];
-                    } else {
-                      name = provider?.nearestBusStop?['stop_name'];
-                    }
-                    if (name != null) {
-                      widget.onTapUpdateOrigin!(_toTitleCase(name));
-                    }
-                  } else if (widget.onTap != null) {
-                    widget.onTap!();
-                  }
-                  _dismiss();
-                },
-            onVerticalDragUpdate: (details) {
-              if (details.delta.dy < 0) {
-                setState(() => _dragOffsetY += details.delta.dy);
-              }
-            },
-            onVerticalDragEnd: (details) {
-              if (_dragOffsetY < -20 || details.primaryVelocity! < -300) {
-                AppHaptics.sheetInteraction();
-                _dismiss();
-              } else {
-                setState(() => _dragOffsetY = 0);
-              }
-            },
-            child: Material(
-              color: Colors.transparent,
+    final Widget pillGestureWidget = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        if (widget.isDynamicTransportToast && widget.onTapUpdateOrigin != null) {
+          final transportMode = globalTransportMode.value;
+          final provider = navProvider;
+          String? name;
+          if (transportMode == 0) {
+            name = provider?.nearestMetroStation?['stop_name'];
+          } else {
+            name = provider?.nearestBusStop?['stop_name'];
+          }
+          if (name != null) {
+            widget.onTapUpdateOrigin!(_toTitleCase(name));
+          }
+        } else if (widget.onTap != null) {
+          widget.onTap!();
+        }
+        _dismiss();
+      },
+      onVerticalDragUpdate: (details) {
+        if (isDesktop ? details.delta.dy > 0 : details.delta.dy < 0) {
+          setState(() => _dragOffsetY += details.delta.dy);
+        }
+      },
+      onVerticalDragEnd: (details) {
+        if (_dragOffsetY.abs() > 20 || details.primaryVelocity!.abs() > 300) {
+          AppHaptics.sheetInteraction();
+          _dismiss();
+        } else {
+          setState(() => _dragOffsetY = 0);
+        }
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          constraints: const BoxConstraints(
+            maxWidth: 340,
+            minHeight: 44,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(100),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.18),
+                blurRadius: 30,
+                spreadRadius: 0,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(100),
+            clipBehavior: Clip.antiAlias,
+            child: AdaptiveBlur(sigmaX: 30.0, sigmaY: 30.0,
               child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                constraints: const BoxConstraints(
-                  maxWidth: 320,
-                  minHeight: 44,
-                ),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(100),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.15),
-                      blurRadius: 30,
-                      spreadRadius: 0,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
+                  color: isDark 
+                      ? const Color(0xFF0B0E17).withValues(alpha: 0.88)
+                      : Colors.white.withValues(alpha: 0.85),
+                  border: Border.all(
+                    color: isDark 
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : Colors.black.withValues(alpha: 0.08),
+                    width: 0.5,
+                  ),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(100),
-                  clipBehavior: Clip.antiAlias,
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 30.0, sigmaY: 30.0), // Match sheet exactly
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(100),
-                        color: isDark 
-                            ? const Color(0xFF0B0E17).withValues(alpha: 0.80) // Exact bottom sheet match
-                            : Colors.white.withValues(alpha: 0.65), // Exact bottom sheet match
-                        border: Border.all(
-                          color: isDark 
-                              ? Colors.white.withValues(alpha: 0.08) // Hairline subtle border
-                              : Colors.black.withValues(alpha: 0.05),
-                          width: 0.5,
-                        ),
-                      ),
-                      child: ValueListenableBuilder<int>(
-                        valueListenable: globalTransportMode,
-                        builder: (context, transportMode, _) {
-                          String dynamicTitle = widget.title;
-                          String dynamicMessage = widget.message;
+                child: ValueListenableBuilder<int>(
+                  valueListenable: globalTransportMode,
+                  builder: (context, transportMode, _) {
+                    String dynamicTitle = widget.title;
+                    String dynamicMessage = widget.message;
                           
                           bool isLoading = false;
                           
@@ -603,16 +578,80 @@ class _ApplePillWidgetState extends State<_ApplePillWidget> {
                           );
                         },
                       ),
-                ), // Container
-              ), // BackdropFilter
-            ), // ClipRRect
-          ), // Container
-        ), // Material
-      ), // GestureDetector
-      ), // Align
-      ), // IgnorePointer
-      ), // AnimatedScale
-      ), // AnimatedOpacity
-    ); // AnimatedPositioned
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+    final Widget interactivePill =
+        kIsWeb ? PointerInterceptor(child: pillGestureWidget) : pillGestureWidget;
+
+    if (isDesktop) {
+      // 🖥️ DESKTOP/WEB: Right-Bottom corner placement (non-intrusive, native feel)
+      double targetBottom = 24.0;
+      if (_isEntering) {
+        targetBottom = -100.0;
+      } else {
+        targetBottom -= _dragOffsetY;
+      }
+
+      return AnimatedPositioned(
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+        bottom: targetBottom,
+        right: 24.0,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 250),
+          opacity: shouldHide ? 0.0 : 1.0,
+          child: AnimatedScale(
+            scale: shouldHide ? 0.8 : _scale,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            child: IgnorePointer(
+              ignoring: shouldHide,
+              child: interactivePill,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 📱 MOBILE: Top-center drop-down (Apple Pill / Dynamic Island style)
+    double targetTop = 16.0;
+    try {
+      targetTop = MediaQuery.paddingOf(context).top + 16;
+    } catch (_) {}
+
+    if (_isEntering) {
+      targetTop = -100.0;
+    } else {
+      targetTop += _dragOffsetY;
+    }
+
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.elasticOut,
+      top: targetTop,
+      left: 0,
+      right: 0,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 300),
+        opacity: shouldHide ? 0.0 : 1.0,
+        child: AnimatedScale(
+          scale: shouldHide ? 0.8 : _scale,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          child: IgnorePointer(
+            ignoring: shouldHide,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: interactivePill,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -480,7 +480,10 @@ class SavedPlacesRow extends StatelessWidget {
                     onTap: () async {
                       AppHaptics.mediumImpact();
                       final provider = context.read<MapProvider>();
-                      final selectedLocation = provider.targetDestination;
+                      // Read live center camera coordinate under the moved crosshair pin first
+                      final selectedLocation =
+                          provider.controller?.cameraPosition?.target ??
+                              provider.targetDestination;
 
                       if (provider.isAddingStopMode &&
                           selectedLocation != null) {

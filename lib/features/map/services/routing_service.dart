@@ -67,10 +67,13 @@ class RoutingService {
   static const double _rad2deg = 180.0 / pi;
 
   /// Cross-track distance threshold for triggering a reroute (meters).
-  static const double offRouteThresholdMeters = 30.0;
+  /// 38m accommodates multi-lane urban roads & GPS multipath between buildings
+  /// without falsely releasing road-lock.
+  static const double offRouteThresholdMeters = 38.0;
 
   /// Default window size for local segment scanning.
-  static const int defaultWindowSize = 4;
+  /// 24 segments handles high-speed travel on dense overview=full polylines.
+  static const int defaultWindowSize = 24;
 
   /// Fraction along segment beyond which the window should advance.
   static const double windowAdvanceThreshold = 0.85;
@@ -108,10 +111,10 @@ class RoutingService {
       return result;
     }
 
-    // Clamp window to valid range
+    // Allow 2-segment lookback so minor GPS jitter backward never breaks road-lock
     final int maxSegmentIndex = polyline.length - 2;
-    final int wStart = windowStart.clamp(0, maxSegmentIndex);
-    final int wEnd = (wStart + windowSize).clamp(0, maxSegmentIndex + 1);
+    final int wStart = (windowStart - 2).clamp(0, maxSegmentIndex);
+    final int wEnd = (windowStart + windowSize).clamp(0, maxSegmentIndex + 1);
 
     double bestDist = double.infinity;
     int bestIdx = wStart;

@@ -41,6 +41,9 @@ import 'package:ridel/core/utils/toast_service.dart';
 import 'saved_places/location_picker_sheet.dart';
 import 'saved_places/places_repository.dart' as saved;
 import 'package:ridel/layout/account_settings_sheet.dart';
+import 'package:ridel/core/widgets/adaptive_blur.dart';
+import 'package:ridel/core/utils/responsive.dart';
+import 'package:ridel/core/theme/app_theme.dart';
 
 // YE DONO FILES ISI KA HISSA HAIN (Do not change structure)
 part 'search_sheet_headers.dart';
@@ -497,7 +500,40 @@ class _MapSearchSheetState extends State<MapSearchSheet>
 
     try {
       if (safeProvider.isAddingStopMode) {
-        safeProvider.addIntermediateStop(place);
+        // Resolve exact coordinates if autocomplete item returned (0.0, 0.0)
+        double stopLat = place.latitude;
+        double stopLng = place.longitude;
+        if ((stopLat == 0.0 || stopLng == 0.0) && place.placeId.isNotEmpty) {
+          try {
+            final exactCoords =
+                await PlaceService.getPlaceDetails(place.placeId);
+            if (exactCoords != null) {
+              stopLat = exactCoords.latitude;
+              stopLng = exactCoords.longitude;
+            }
+          } catch (_) {}
+        }
+
+        if (stopLat == 0.0 && stopLng == 0.0) {
+          if (mounted) {
+            ToastService.showError(
+                context, "Could not resolve stop location. Try another place.");
+          }
+          return;
+        }
+
+        final resolvedStop = PlaceModel(
+          placeId: place.placeId.isNotEmpty
+              ? place.placeId
+              : 'stop_${DateTime.now().millisecondsSinceEpoch}',
+          name: place.name,
+          address: place.address,
+          latitude: stopLat,
+          longitude: stopLng,
+          categories: place.categories,
+        );
+
+        safeProvider.addIntermediateStop(resolvedStop);
         safeProvider.setAddingStopMode(false);
 
         setState(() {
@@ -509,6 +545,14 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         }
 
         FocusManager.instance.primaryFocus?.unfocus();
+
+        // Immediately recalculate & redraw route with the newly added stop
+        if (mounted && safeProvider.targetDestination != null) {
+          unawaited(safeProvider.calculateAndDrawNativeRoute(
+            context,
+            mode: safeProvider.currentNavMode,
+          ));
+        }
         return;
       }
 
@@ -1225,8 +1269,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       child: child,
     );
 
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 35.0, sigmaY: 35.0),
+    return AdaptiveBlur(sigmaX: 35.0, sigmaY: 35.0,
       child: innerContainer,
     );
   }
@@ -1240,22 +1283,18 @@ class _MapSearchSheetState extends State<MapSearchSheet>
         onVerticalDragUpdate: _handleManualDragUpdate,
         onVerticalDragEnd: _handleManualDragEnd,
         behavior: HitTestBehavior.translucent,
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 300),
-          opacity: _isDashVisible ? 1.0 : 0.0,
+        child: Container(
+          height: 28,
+          alignment: Alignment.center,
+          color: Colors.transparent,
           child: Container(
-            height: 32,
-            alignment: Alignment.center,
-            color: Colors.transparent,
-            child: Container(
-              width: 40,
-              height: 5,
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.25)
-                    : Colors.black.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(2),
-              ),
+            width: 36,
+            height: 4.5,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: _isDashVisible ? 0.36 : 0.24)
+                  : Colors.black.withValues(alpha: _isDashVisible ? 0.24 : 0.16),
+              borderRadius: BorderRadius.circular(3),
             ),
           ),
         ),
@@ -1269,7 +1308,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     final isActiveNavigation =
         context.select<MapProvider, bool>((p) => p.isActiveNavigation);
     final screenSize = MediaQuery.sizeOf(context);
-    final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final double keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
     final bool isKeyboardOpen = keyboardHeight > 0;
 
     if (isKeyboardOpen && !_wasKeyboardOpen) {
@@ -1280,7 +1319,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isDesktop = screenSize.width > 600;
+    final isDesktop = ResponsiveLayout.isDesktop(context);
 
     // Header height is computed inside the builder where progress is available
 
@@ -1343,8 +1382,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
               ? (kIsWeb
                   ? Container(color: Colors.black.withValues(alpha: 0.85))
                   : RepaintBoundary(
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                      child: AdaptiveBlur(sigmaX: 8.0, sigmaY: 8.0,
                         child: Container(
                             color: Colors.black.withValues(alpha: 0.3)),
                       ),
@@ -1476,9 +1514,8 @@ snapAnimationDuration:
                                         ? (_isNavSheetExpanded ? navExpandedHeight - 40 : navCollapsedHeight)
                                         : (_showDirections ? 190.0 : 70.0);
 
-                                    final Color sheetBgColor = isDark 
-                                        ? const Color(0xFF0B0E17).withValues(alpha: 0.70) 
-                                        : Colors.white.withValues(alpha: 0.70);
+                                    final Color sheetBgColor =
+                                        RidelSurfaceTokens.sheetBackground(isDark);
 
                                     return PointerInterceptor(
                                       child: Align(

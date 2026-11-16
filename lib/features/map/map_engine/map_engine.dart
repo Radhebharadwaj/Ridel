@@ -142,35 +142,8 @@ class MapEngine {
     };
 
     try {
-      Future<void> safeAddEngineImage(String? id, Uint8List bytes) async {
-        if (id == null || id.trim().isEmpty) return;
-        try {
-          await controller.addImage(id, bytes);
-        } catch (e) {
-          debugPrint("SafeAddImage error: $e");
-        }
-      }
-
-      try {
-        final Uint8List pinBytes = await MapProvider.loadAndResizeImage('assets/images/custom_pin.png', 36);
-        await safeAddEngineImage('custom_pin', pinBytes);
-      } catch (_) {}
-
-      try {
-        final Uint8List yellowPinBytes = await MapProvider.loadAndResizeImage('assets/images/add_places.png', 32);
-        await safeAddEngineImage('intermediate_pin', yellowPinBytes);
-      } catch (_) {}
-
-      try {
-        final Uint8List transparentPixel = Uint8List.fromList([
-          137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
-          1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65,
-          84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73,
-          69, 78, 68, 174, 66, 96, 130
-        ]);
-        await safeAddEngineImage('Arrow', transparentPixel);
-      } catch (_) {}
-
+      // Textures (custom_pin, intermediate_pin, nav_puck, Arrow) are already
+      // uploaded once in FullScreenMapPage.onStyleLoadedCallback.
       await layers?.initLayerSystem();
 
       _initGPS();
@@ -200,13 +173,15 @@ class MapEngine {
   void _initGPS() {
     if (locService == null) return;
 
-    locService!.startLiveTracking();
+    // Do NOT burn high-accuracy GPS + compass while idle on explore screen.
+    // Live tracking starts on demand when navigation or driving mode begins.
+    _positionStream?.cancel();
     _positionStream = locService!.engineLocationStream.listen((newPos) {
-      // 🚀 FIX: Granular reactive update. Zero main-thread frame drops.
       realTimeSpeedKmph.value = locService!.currentSpeedKmph;
-      camera?.processLocationUpdate(newPos);
 
-      // 🚀 CRITICAL WIRE: Feed navigation controller on every GPS tick
+      // During active navigation, route ALL updates strictly through
+      // MapNavigationController so road-snapping runs FIRST before camera/puck
+      // updates (eliminates raw off-road GPS fighting the road-locked marker).
       if (navigation.isNavigating.value) {
         if (_lastRoutedPosition != null) {
           final distance = Geolocator.distanceBetween(
@@ -215,12 +190,13 @@ class MapEngine {
             newPos.latitude,
             newPos.longitude,
           );
-          if (distance < 15.0) return; // 🛑 BREAK THE LOOP: Ignore micro-movements
+          if (distance < 3.0) return; // Filter sub-3m stationary jitter
         }
         _lastRoutedPosition = newPos;
         navigation.processLocationUpdate(newPos);
       } else {
         _lastRoutedPosition = null;
+        camera?.processLocationUpdate(newPos);
       }
     });
   }
@@ -294,7 +270,7 @@ class MapEngine {
 
     // 4. Ensure GPS is feeding the navigation loop
     if (locService != null && !locService!.isLiveTracking) {
-      locService!.startLiveTracking();
+      locService!.startLiveTracking(forNavigation: true);
     }
 
     // 5. Transition UI state machine
@@ -309,22 +285,13 @@ class MapEngine {
     
     // 🚀 1. ABSOLUTE TOP PRIORITY: Free the camera immediately!
     try {
-      if (mapController != null) {
-        // Reset tilt and bearing for a clean 2D exit state
-        await mapController!.animateCamera(
-          CameraUpdate.bearingTo(0.0), 
-          duration: const Duration(milliseconds: 600)
-        );
-        await mapController!.animateCamera(
-          CameraUpdate.tiltTo(0.0), 
-          duration: const Duration(milliseconds: 600)
-        );
-      }
+      // Camera tilt/bearing reset is handled cleanly in a single move by setCameraForMode(explore) below.
     } catch (e) {
       debugPrint("Warning: Failed to release camera tracking: $e");
     }
 
     navigation.stopNavigation();
+    locService?.stopLiveTracking();
     _navigationDestination = null;
 
     if (mapController != null) {

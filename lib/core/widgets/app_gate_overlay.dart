@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:ridel/core/services/app_config_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/widgets/ridel_logo.dart';
+import 'package:ridel/core/widgets/adaptive_blur.dart';
 
 // ======================================================================
 // 🚧 AppGateOverlay — Non-dismissible glassmorphism enforcement modal
@@ -34,7 +35,7 @@ class _AppGateOverlayState extends State<AppGateOverlay>
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
-    )..repeat(reverse: true);
+    );
 
     _pulseAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
@@ -46,6 +47,9 @@ class _AppGateOverlayState extends State<AppGateOverlay>
   Future<void> _checkStatus() async {
     final status = await AppConfigService().checkAppStatus();
     if (mounted) {
+      if (status != AppStatus.normal && !_pulseController.isAnimating) {
+        _pulseController.repeat(reverse: true);
+      }
       setState(() {
         _status = status;
         _isChecking = false;
@@ -96,8 +100,7 @@ class _AppGateOverlayState extends State<AppGateOverlay>
             Positioned.fill(
               child: GestureDetector(
                 onTap: () {}, // Absorb taps
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                child: AdaptiveBlur(sigmaX: 30, sigmaY: 30,
                   child: Container(
                     color: isDark
                         ? const Color(0xFF0B0E17).withValues(alpha: 0.92)
@@ -124,7 +127,7 @@ class _AppGateOverlayState extends State<AppGateOverlay>
                     return Opacity(opacity: opacity, child: child);
                   },
                   child: Container(
-                    width: MediaQuery.of(context).size.width * 0.88,
+                    width: MediaQuery.sizeOf(context).width * 0.88,
                     constraints: const BoxConstraints(maxWidth: 400),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(32),
@@ -144,8 +147,7 @@ class _AppGateOverlayState extends State<AppGateOverlay>
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(32),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                      child: AdaptiveBlur(sigmaX: 40, sigmaY: 40,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 28, vertical: 36),

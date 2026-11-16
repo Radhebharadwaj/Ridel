@@ -38,6 +38,7 @@ class MapLayerController {
   static const String _blueCoreLayerId = "apple-premium-pin-core";
 
   bool _isDrawingRoute = false;
+  DateTime? _lastRouteSourceUpdate;
 
   MapLayerController(MapLibreMapController initMap) {
     _map = initMap;
@@ -185,7 +186,13 @@ class MapLayerController {
   }
 
   Future<void> updateRouteSource(List<LatLng> remainingPoints) async {
-    if (_map == null || remainingPoints.length < 2 || !_isDrawingRoute) return;
+    if (_map == null || remainingPoints.length < 2 || _isDrawingRoute) return;
+    final now = DateTime.now();
+    if (_lastRouteSourceUpdate != null &&
+        now.difference(_lastRouteSourceUpdate!).inMilliseconds < 2000) {
+      return;
+    }
+    _lastRouteSourceUpdate = now;
     try {
       final geoJsonCoordinates = remainingPoints.map((p) => [p.longitude, p.latitude]).toList();
       final geoJson = _buildRouteGeoJson(geoJsonCoordinates);

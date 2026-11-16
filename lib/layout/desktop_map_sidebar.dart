@@ -20,6 +20,7 @@ import 'package:ridel/features/auth/widgets/auth_dialog.dart';
 import 'package:ridel/features/map/map_engine/map_engine.dart';
 import 'package:ridel/features/map/models/place_model.dart';
 import 'package:ridel/features/map/services/master_search_service.dart';
+import 'package:ridel/core/widgets/adaptive_blur.dart';
 
 class DesktopMapSidebar extends StatefulWidget {
   final VoidCallback onCollapse;
@@ -51,40 +52,46 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
 
   final List<Map<String, dynamic>> _quickCategories = const [
     {
+      'key': 'petrol',
       'label': 'Petrol',
       'icon': Icons.local_gas_station_rounded,
       'color': Color(0xFF00E5FF),
-      'query': 'Petrol Pump',
+      'osmTag': 'fuel',
     },
     {
+      'key': 'food',
       'label': 'Food',
       'icon': Icons.restaurant_rounded,
       'color': Color(0xFFFF9500),
-      'query': 'Restaurant Cafe',
+      'osmTag': 'restaurant|cafe|fast_food',
     },
     {
+      'key': 'parking',
       'label': 'Parking',
       'icon': Icons.local_parking_rounded,
       'color': Color(0xFF34C759),
-      'query': 'Parking',
+      'osmTag': 'parking',
     },
     {
+      'key': 'hospitals',
       'label': 'Hospitals',
       'icon': Icons.local_hospital_rounded,
       'color': Color(0xFFFF3B30),
-      'query': 'Hospital',
+      'osmTag': 'hospital|clinic',
     },
     {
+      'key': 'ev',
       'label': 'EV Station',
       'icon': Icons.ev_station_rounded,
       'color': Color(0xFFA28BFE),
-      'query': 'EV Charging',
+      'osmTag': 'charging_station',
     },
     {
+      'key': 'atms',
       'label': 'ATMs',
       'icon': Icons.atm_rounded,
       'color': Color(0xFF007AFF),
-      'query': 'ATM Bank',
+      'osmTag': 'atm|bank',
     },
   ];
 
@@ -190,7 +197,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final user = Supabase.instance.client.auth.currentUser;
-    final screenHeight = MediaQuery.of(context).size.height;
+    final screenHeight = MediaQuery.sizeOf(context).height;
 
     final containerColor = isDark
         ? const Color(0xFF131722).withValues(alpha: 0.94)
@@ -219,8 +226,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+        child: AdaptiveBlur(sigmaX: 25, sigmaY: 25,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -281,25 +287,29 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
       padding: const EdgeInsets.fromLTRB(18, 16, 14, 10),
       child: Row(
         children: [
-          // Logo
+          // Official Ridel Logo
           Container(
-            padding: const EdgeInsets.all(7),
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [cyanAccent, blueAccent],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
               borderRadius: BorderRadius.circular(10),
               boxShadow: [
                 BoxShadow(
-                  color: cyanAccent.withValues(alpha: 0.3),
+                  color: cyanAccent.withValues(alpha: 0.28),
                   blurRadius: 10,
                   offset: const Offset(0, 2),
                 ),
               ],
             ),
-            child: const Icon(Icons.explore_rounded, color: Colors.white, size: 18),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.asset(
+                'assets/icon/logo.png',
+                width: 32,
+                height: 32,
+                fit: BoxFit.cover,
+              ),
+            ),
           ),
           const SizedBox(width: 10),
           Text(
@@ -447,56 +457,123 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
   }
 
   // -------------------------------------------------------------------------
-  // 3. EXPLORE NEARBY CATEGORIES
+  // 3. EXPLORE NEARBY CATEGORIES (Multi-Select Subtle POI Overlays)
   // -------------------------------------------------------------------------
   Widget _buildCategoriesSection(bool isDark) {
+    final mapProvider = Provider.of<MapProvider>(context);
+    final activeCategories = mapProvider.activeNearbyCategories;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'EXPLORE NEARBY',
-          style: GoogleFonts.inter(
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.0,
-            color: isDark ? Colors.white38 : Colors.black38,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'EXPLORE NEARBY',
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.0,
+                color: isDark ? Colors.white38 : Colors.black38,
+              ),
+            ),
+            if (activeCategories.isNotEmpty)
+              GestureDetector(
+                onTap: () {
+                  AppHaptics.lightImpact();
+                  mapProvider.clearAllNearbyCategories();
+                },
+                child: Text(
+                  'Clear all',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: cyanAccent,
+                  ),
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: _quickCategories.map((cat) {
+            final key = cat['key'] as String;
+            final isSelected = activeCategories.contains(key);
+            final color = cat['color'] as Color;
+
             return InkWell(
               borderRadius: BorderRadius.circular(10),
-              onTap: () => _triggerCategorySearch(cat['query'] as String),
-              child: Container(
+              onTap: () {
+                AppHaptics.selectionClick();
+                mapProvider.toggleNearbyCategory(
+                  key: key,
+                  label: cat['label'] as String,
+                  osmTag: cat['osmTag'] as String,
+                  color: color,
+                  context: context,
+                );
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                 decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.black.withValues(alpha: 0.03),
+                  color: isSelected
+                      ? color.withValues(alpha: isDark ? 0.22 : 0.16)
+                      : (isDark
+                          ? Colors.white.withValues(alpha: 0.05)
+                          : Colors.black.withValues(alpha: 0.03)),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.06),
+                    color: isSelected
+                        ? color.withValues(alpha: 0.8)
+                        : (isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.06)),
+                    width: isSelected ? 1.5 : 1.0,
                   ),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: color.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(cat['icon'] as IconData,
-                        size: 15, color: cat['color'] as Color),
+                    Icon(
+                      cat['icon'] as IconData,
+                      size: 15,
+                      color: isSelected ? color : color.withValues(alpha: 0.8),
+                    ),
                     const SizedBox(width: 5),
                     Text(
                       cat['label'] as String,
                       style: GoogleFonts.inter(
                         fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white.withValues(alpha: 0.87) : Colors.black87,
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                        color: isSelected
+                            ? (isDark ? Colors.white : Colors.black87)
+                            : (isDark ? Colors.white.withValues(alpha: 0.87) : Colors.black87),
                       ),
                     ),
+                    if (isSelected) ...[
+                      const SizedBox(width: 5),
+                      Container(
+                        width: 5,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

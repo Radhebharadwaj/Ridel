@@ -16,6 +16,8 @@ import 'package:ridel/features/map/models/place_model.dart';
 import 'package:ridel/core/services/saved_places_service.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
 import 'package:ridel/core/widgets/branded_loader.dart';
+import 'package:ridel/core/widgets/adaptive_blur.dart';
+import 'package:ridel/core/theme/app_theme.dart';
 
 class QuickActionButtons extends StatefulWidget {
   final bool isDark;
@@ -476,13 +478,8 @@ class DesktopZoomPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final Color pillBgColor = isDark
-        ? const Color(0xFF0B0E17).withValues(alpha: 0.65)
-        : Colors.white.withValues(alpha: 0.65);
-
-    final Color pillBorderColor = isDark
-        ? const Color(0xFF7CA1FF).withValues(alpha: 0.15)
-        : Colors.white.withValues(alpha: 0.9);
+    final Color pillBgColor = RidelSurfaceTokens.pillBackground(isDark);
+    final Color pillBorderColor = RidelSurfaceTokens.border(isDark);
 
     final content = Container(
         // OUTER: CLEAN SHADOWS MATCHING TOP PILL
@@ -510,8 +507,7 @@ class DesktopZoomPill extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(50),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+          child: AdaptiveBlur(sigmaX: 12.0, sigmaY: 12.0,
             child: Container(
               width: 48,
                 // INNER: COLOR & BORDER ONLY
@@ -535,7 +531,11 @@ class DesktopZoomPill extends StatelessWidget {
                             CameraUpdate.zoomTo((z + 1.0).clamp(3.0, 18.5)));
                       },
                     ),
-                    // CRITICAL: NO DIVIDER HERE TO MATCH THE TOP PILL
+                    Container(
+                      height: 0.5,
+                      width: 26,
+                      color: RidelSurfaceTokens.divider(isDark),
+                    ),
                     _ContinuousZoomButton(
                       icon: Icons.remove_rounded,
                       isDark: isDark,
@@ -634,13 +634,8 @@ class MapControlsPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final Color pillBgColor = isDark
-        ? const Color(0xFF0B0E17).withValues(alpha: 0.65)
-        : Colors.white.withValues(alpha: 0.65);
-
-    final Color pillBorderColor = isDark
-        ? const Color(0xFF7CA1FF).withValues(alpha: 0.15)
-        : Colors.white.withValues(alpha: 0.9);
+    final Color pillBgColor = RidelSurfaceTokens.pillBackground(isDark);
+    final Color pillBorderColor = RidelSurfaceTokens.border(isDark);
 
     final content = Container(
       decoration: BoxDecoration(
@@ -667,8 +662,7 @@ class MapControlsPill extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(50),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+        child: AdaptiveBlur(sigmaX: 12.0, sigmaY: 12.0,
           child: Container(
             width: 48,
               decoration: BoxDecoration(
@@ -685,10 +679,15 @@ class MapControlsPill extends StatelessWidget {
                       height: 44,
                       width: 48,
                       child: Center(
-                          child: Icon(Icons.map,
-                              color: isDark ? Colors.white70 : Colors.black87,
+                          child: Icon(Icons.layers_rounded,
+                              color: isDark ? Colors.white : const Color(0xFF1F2937),
                               size: 20)),
                     ),
+                  ),
+                  Container(
+                    height: 0.5,
+                    width: 26,
+                    color: RidelSurfaceTokens.divider(isDark),
                   ),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,

@@ -57,6 +57,7 @@ class MapNavigationController {
   // ───── 🚀 NEW — Local Windowing State ─────
   /// Current start index of the sliding window over the polyline.
   int _windowStart = 0;
+  int _lastEmittedPolylineSegment = -1;
 
   /// Pre-allocated snap result — reused every GPS tick. Zero GC pressure.
   final SnapResult _snapResult = SnapResult();
@@ -97,6 +98,7 @@ class MapNavigationController {
     _activeRoute = route;
     _currentStepIndex = 0;
     _windowStart = 0;
+    _lastEmittedPolylineSegment = -1;
     _consecutiveOffRouteTicks = 0;
     _snapResult.reset();
     isOffRoute.value = false;
@@ -155,6 +157,7 @@ class MapNavigationController {
     _activeRoute = null;
     _currentStepIndex = 0;
     _windowStart = 0;
+    _lastEmittedPolylineSegment = -1;
     _consecutiveOffRouteTicks = 0;
     _parsedInstructions = [];
     _maneuverIcons = [];
@@ -185,7 +188,11 @@ class MapNavigationController {
       return;
     }
 
-    _updateCompassAndBearing(userPos.heading);
+    // Reject noisy cell-tower / indoor multipath bounces (>35m accuracy)
+    // so the marker NEVER jumps off the road into nearby buildings.
+    if (!isSimulated && userPos.accuracy > 35.0) {
+      return;
+    }
 
     final List<LatLng> polyline = _activeRoute!.coordinates;
     if (polyline.length < 2) return;
@@ -228,11 +235,21 @@ class MapNavigationController {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // 🎯 STEP 4: Window Advance — Slide forward if needed
+    // 🎯 STEP 4: Monotonic Window Advance + Road-Locked Bearing
     // ─────────────────────────────────────────────────────────────────────
-    if (_snapResult.shouldAdvanceWindow) {
+    if (_snapResult.segmentIndex > _windowStart) {
+      _windowStart = _snapResult.segmentIndex.clamp(0, polyline.length - 2);
+    } else if (_snapResult.shouldAdvanceWindow) {
       _windowStart = (_windowStart + 1).clamp(0, polyline.length - 2);
     }
+
+    // Lock heading to the road segment direction when on-route so the arrow
+    // glides smoothly along the road instead of wobbling left/right into buildings.
+    final bool isOnRoad = !isOffRoute.value && !_isRerouting;
+    final double effectiveHeading = isOnRoad
+        ? _snapResult.segmentBearing
+        : (userPos.heading >= 0 ? userPos.heading : currentBearing.value);
+    _updateCompassAndBearing(effectiveHeading);
 
     // ─────────────────────────────────────────────────────────────────────
     // 🎯 STEP 5: Step Instruction Matching
@@ -264,8 +281,17 @@ class MapNavigationController {
       _snapResult.segmentIndex,
       _snapResult.alongTrackFraction,
     );
-    remainingDistance.value = remDist;
-    remainingPolyline.value = [snappedPosition.value!, ...polyline.sublist(_snapResult.segmentIndex + 1)];
+    if ((remainingDistance.value - remDist).abs() >= 1.0) {
+      remainingDistance.value = remDist;
+    }
+    if (_lastEmittedPolylineSegment < 0 ||
+        (_snapResult.segmentIndex - _lastEmittedPolylineSegment).abs() >= 2) {
+      _lastEmittedPolylineSegment = _snapResult.segmentIndex;
+      remainingPolyline.value = [
+        snappedPosition.value!,
+        ...polyline.sublist(_snapResult.segmentIndex + 1),
+      ];
+    }
 
     // Null-safe speed fallback
     final double currentSpeed = userPos.speed >= 0 ? userPos.speed : 0.0;
@@ -315,9 +341,23 @@ class MapNavigationController {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // 🎯 STEP 8: Camera Follow (using snapped position + segment bearing)
+    // 🎯 STEP 8: Camera Follow — strictly pass ROAD-SNAPPED position & bearing
     // ─────────────────────────────────────────────────────────────────────
-    await _cameraController?.processLocationUpdate(userPos, isSimulated: isSimulated);
+    final LatLng camTarget = snappedPosition.value ?? LatLng(userPos.latitude, userPos.longitude);
+    final Position roadLockedPos = Position(
+      latitude: camTarget.latitude,
+      longitude: camTarget.longitude,
+      timestamp: userPos.timestamp,
+      accuracy: userPos.accuracy,
+      altitude: userPos.altitude,
+      altitudeAccuracy: userPos.altitudeAccuracy,
+      heading: effectiveHeading,
+      headingAccuracy: userPos.headingAccuracy,
+      speed: userPos.speed,
+      speedAccuracy: userPos.speedAccuracy,
+      isMocked: userPos.isMocked,
+    );
+    await _cameraController?.processLocationUpdate(roadLockedPos, isSimulated: isSimulated);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

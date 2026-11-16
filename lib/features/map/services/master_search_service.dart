@@ -104,47 +104,61 @@ class MasterSearchService {
   // 2. NEARBY PLACES (e.g. Restaurants, Fuel)
   // =========================================================================
   Future<List<PlaceModel>> getNearbyPlaces(
-      LatLng location, String category) async {
+      LatLng location, String category, {String? osmTag}) async {
+    final String tag = osmTag ?? category;
     final cacheKey =
-        "nearby_${category}_${location.latitude.toStringAsFixed(3)}_${location.longitude.toStringAsFixed(3)}";
+        "nearby_${tag}_${location.latitude.toStringAsFixed(3)}_${location.longitude.toStringAsFixed(3)}";
 
     if (_searchCache.containsKey(cacheKey)) {
       final entry = _searchCache.remove(cacheKey)!;
       if (entry.isFresh) {
         _searchCache[cacheKey] = entry; // LRU Bump
-        debugPrint("⚡ MasterSearch: Nearby RAM Cache Hit!");
+        debugPrint("⚡ MasterSearch: Nearby RAM Cache Hit for $tag!");
         return entry.data;
       }
     }
 
-    // 🚀 FIX: Broader Overpass Query (Regex-like) for better category matches
+    // 🚀 Overpass Query: searches nodes, ways, and relations within 3500m
     final String overpassQuery = '''
-      [out:json][timeout:5];
+      [out:json][timeout:6];
       (
-        node["amenity"~"$category", i](around:2000, ${location.latitude}, ${location.longitude});
-        node["shop"~"$category", i](around:2000, ${location.latitude}, ${location.longitude});
-        node["tourism"~"$category", i](around:2000, ${location.latitude}, ${location.longitude});
+        nwr["amenity"~"$tag", i](around:3500, ${location.latitude}, ${location.longitude});
+        nwr["shop"~"$tag", i](around:3500, ${location.latitude}, ${location.longitude});
+        nwr["tourism"~"$tag", i](around:3500, ${location.latitude}, ${location.longitude});
       );
-      out center 20;
+      out center 30;
     ''';
 
     try {
       final response = await _client.post(
         Uri.parse('https://overpass-api.de/api/interpreter'),
         body: overpassQuery,
-        headers: {
-          'User-Agent': 'Ridel-App/1.0'
-        }, // 🚀 FIX: Overpass User-Agent Added
-      ).timeout(const Duration(seconds: 5));
+        headers: {'User-Agent': 'Ridel-App/1.0'},
+      ).timeout(const Duration(seconds: 6));
 
       if (response.statusCode == 200) {
         final places = _parseOverpassSync(response.body, category);
-        if (places.isNotEmpty) _saveToCache(cacheKey, places);
-        return places;
+        if (places.isNotEmpty) {
+          _saveToCache(cacheKey, places);
+          return places;
+        }
       }
     } catch (e) {
-      debugPrint("⚠️ Overpass Fetch Failed: $e");
+      debugPrint("⚠️ Overpass Fetch Failed ($e), trying fallback...");
     }
+
+    // Fallback: Nominatim nearby search
+    try {
+      final fallbackResults = await _fallbackNominatimSearch(
+        '$category near me',
+        location,
+      );
+      if (fallbackResults.isNotEmpty) {
+        _saveToCache(cacheKey, fallbackResults);
+        return fallbackResults;
+      }
+    } catch (_) {}
+
     return [];
   }
 

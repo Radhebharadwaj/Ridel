@@ -31,6 +31,10 @@ class MapCameraController {
 
   bool _isPuckInitialized = false;
   double _blueDotOpacity = 1.0;
+  double? _lastSentHeading;
+  double? _lastSentHaloRadius;
+  double? _lastSentPuckOpacity;
+  DateTime? _lastNativeAnimateCamera;
 
   void setBlueDotOpacity(double opacity) {
     _blueDotOpacity = opacity;
@@ -103,7 +107,8 @@ class MapCameraController {
             center: _calculateLookAhead(LatLng(pos.latitude, pos.longitude), _currentBearing, _currentZoom),
             zoom: _currentZoom,
             bearing: _currentBearing,
-            pitch: _currentPitch
+            pitch: _currentPitch,
+            force: true,
           );
         }
       });
@@ -191,8 +196,9 @@ class MapCameraController {
     }
 
     final now = DateTime.now();
+    // Cap web ticker to ~30fps (33ms) for cool laptop fans; mobile uses native animateCamera
     if (_lastCameraNativeUpdate == null ||
-        now.difference(_lastCameraNativeUpdate!).inMilliseconds >= 16) {
+        now.difference(_lastCameraNativeUpdate!).inMilliseconds >= 33) {
       _lastCameraNativeUpdate = now;
       map.moveCamera(CameraUpdate.newCameraPosition(CameraPosition(
         target: LatLng(lat, lng),
@@ -222,7 +228,7 @@ class MapCameraController {
     _currentDotPos = LatLng(lat, lng);
 
     final now = DateTime.now();
-    if (_lastDotNativeUpdate == null || now.difference(_lastDotNativeUpdate!).inMilliseconds >= 16) {
+    if (_lastDotNativeUpdate == null || now.difference(_lastDotNativeUpdate!).inMilliseconds >= 50) {
       _lastDotNativeUpdate = now;
 
       // 🚀 120FPS FIX: Zero-overhead GeoJSON mutation instead of Annotation updates
@@ -244,10 +250,37 @@ class MapCameraController {
     double? zoom,
     double? pitch,
     double? bearing,
+    bool force = false,
   }) async {
     try {
       final cam = map.cameraPosition;
       if (cam == null) return;
+
+      // On Mobile (!kIsWeb), use native MapLibre C++/GL camera interpolation
+      // instead of a 60fps Dart Ticker calling moveCamera over MethodChannel.
+      if (!kIsWeb) {
+        final now = DateTime.now();
+        if (!force &&
+            _lastNativeAnimateCamera != null &&
+            now.difference(_lastNativeAnimateCamera!).inMilliseconds < 450) {
+          return;
+        }
+        _lastNativeAnimateCamera = now;
+        cancelAnimations();
+        await map.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: center,
+              zoom: (zoom ?? cam.zoom).clamp(2.0, 22.0),
+              tilt: pitch ?? cam.tilt,
+              bearing: bearing ?? cam.bearing,
+            ),
+          ),
+          duration: const Duration(milliseconds: 550),
+        );
+        _clearError();
+        return;
+      }
 
       final currentLat = _latSim?.x(_elapsedTime) ?? cam.target.latitude;
       final currentLng = _lngSim?.x(_elapsedTime) ?? cam.target.longitude;
@@ -343,7 +376,8 @@ class MapCameraController {
               center: cam.target,
               zoom: mode == CameraMode.explore ? 14.5 : 13.5,
               pitch: 0.0,
-              bearing: 0.0);
+              bearing: 0.0,
+              force: true);
         }
         break;
 
@@ -355,9 +389,7 @@ class MapCameraController {
         }
 
         try {
-          if (!locService.isLiveTracking) {
-            locService.startLiveTracking();
-          }
+          locService.startLiveTracking(forNavigation: true);
           Position? pos = locService.currentPosition;
           if (pos != null) {
             await animateCameraCinematic(
@@ -381,9 +413,7 @@ class MapCameraController {
         }
 
         try {
-          if (!locService.isLiveTracking) {
-            locService.startLiveTracking();
-          }
+          locService.startLiveTracking(forNavigation: true);
           Position? pos = locService.currentPosition;
           if (pos != null) {
             await animateCameraCinematic(
@@ -581,24 +611,42 @@ class MapCameraController {
       return;
     }
 
-    // 2. Update mutatable source and layer properties
+    // 2. Update mutable source and layer properties with change-detection & mobile throttling
+    final now = DateTime.now();
+    final double effectivePuckOpacity = targetPuckOpacity * _blueDotOpacity;
+    final bool haloChanged = _lastSentHaloRadius != targetHaloRadius;
+    final bool opacityChanged = _lastSentPuckOpacity != effectivePuckOpacity;
+    final bool headingChanged = _lastSentHeading == null ||
+        ((heading - _lastSentHeading!).abs() >= 2.5);
+
     try {
-      if (ignoreThrottle) {
-        await map.setGeoJsonSource('user-puck-source', geoJson);
+      if (ignoreThrottle || !kIsWeb) {
+        if (ignoreThrottle ||
+            _lastDotNativeUpdate == null ||
+            now.difference(_lastDotNativeUpdate!).inMilliseconds >= 150) {
+          _lastDotNativeUpdate = now;
+          await map.setGeoJsonSource('user-puck-source', geoJson);
+        }
       }
-      
-      // Update opacity and rotation dynamically via layer properties instead of redrawing the symbol
-      await map.setLayerProperties('user-halo-layer', CircleLayerProperties(
-        circleRadius: targetHaloRadius,
-        circleOpacity: targetHaloOpacity * _blueDotOpacity,
-      ));
-      await map.setLayerProperties('user-puck-layer', SymbolLayerProperties(
-        iconOpacity: targetPuckOpacity * _blueDotOpacity,
-        iconRotate: heading,
-      ));
+
+      if (haloChanged || opacityChanged) {
+        _lastSentHaloRadius = targetHaloRadius;
+        await map.setLayerProperties('user-halo-layer', CircleLayerProperties(
+          circleRadius: targetHaloRadius,
+          circleOpacity: targetHaloOpacity * _blueDotOpacity,
+        ));
+      }
+      if (opacityChanged || headingChanged) {
+        _lastSentPuckOpacity = effectivePuckOpacity;
+        _lastSentHeading = heading;
+        await map.setLayerProperties('user-puck-layer', SymbolLayerProperties(
+          iconOpacity: effectivePuckOpacity,
+          iconRotate: heading,
+        ));
+      }
     } catch (_) {}
 
-    if (ignoreThrottle) {
+    if (ignoreThrottle || !kIsWeb) {
       _currentDotPos = pos;
       return;
     }

@@ -784,7 +784,7 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
                         itemBuilder: (context, index) {
                           final stop = provider.intermediateStops[index];
                           return Container(
-                            key: ValueKey(stop.placeId),
+                            key: ValueKey('${stop.placeId}_${stop.latitude}_${stop.longitude}_$index'),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [

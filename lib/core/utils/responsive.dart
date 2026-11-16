@@ -1,37 +1,44 @@
 import 'package:flutter/material.dart';
 
-class Responsive extends StatelessWidget {
-  final Widget mobile;
-  final Widget? tablet;
-  final Widget desktop;
+/// Unified responsive breakpoints across Mobile, Foldable/Tablet, and Desktop/Web.
+///
+/// Uses `MediaQuery.sizeOf(context)` so widgets only rebuild when window
+/// dimensions change (never on keyboard animation frames).
+class ResponsiveLayout {
+  ResponsiveLayout._();
 
-  const Responsive({
-    super.key,
-    required this.mobile,
-    this.tablet,
-    required this.desktop,
-  });
+  static const double compactMobileBreakpoint = 380.0;
+  static const double tabletBreakpoint = 600.0;
+  static const double desktopBreakpoint = 768.0;
 
-  // 🚀 Har file me check karne ke liye shortcuts
-  static bool isMobile(BuildContext context) => MediaQuery.of(context).size.width < 650;
-  static bool isTablet(BuildContext context) => MediaQuery.of(context).size.width >= 650 && MediaQuery.of(context).size.width < 1024;
-  static bool isDesktop(BuildContext context) => MediaQuery.of(context).size.width >= 1024;
+  static bool isDesktop(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= desktopBreakpoint;
 
-  @override
-  Widget build(BuildContext context) {
-    final Size size = MediaQuery.of(context).size;
-    
-    // Agar Desktop hai
-    if (size.width >= 1024) {
-      return desktop;
-    }
-    // Agar Tablet hai aur humne tablet widget diya hai
-    else if (size.width >= 650 && tablet != null) {
-      return tablet!;
-    }
-    // Baaki sab cases me Mobile
-    else {
-      return mobile;
-    }
+  static bool isTablet(BuildContext context) {
+    final w = MediaQuery.sizeOf(context).width;
+    return w >= tabletBreakpoint && w < desktopBreakpoint;
+  }
+
+  static bool isMobile(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < desktopBreakpoint;
+
+  static bool isCompactMobile(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < compactMobileBreakpoint;
+
+  static double horizontalMargin(BuildContext context) {
+    final w = MediaQuery.sizeOf(context).width;
+    if (w >= desktopBreakpoint) return 32.0;
+    if (w < compactMobileBreakpoint) return 16.0;
+    return 20.0;
+  }
+
+  static double clampedOverlayWidth(
+    BuildContext context, {
+    double horizontalInset = 32.0,
+    double minWidth = 260.0,
+    double maxWidth = 520.0,
+  }) {
+    final available = MediaQuery.sizeOf(context).width - horizontalInset;
+    return available.clamp(minWidth, maxWidth);
   }
 }

@@ -99,18 +99,98 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
+  int _pinDropGeneration = 0;
+
   void setDropPinMode(bool value) {
     if (isDropPinMode != value) {
       isDropPinMode = value;
+      // When entering Move/Drop Pin mode, hide any stale static pin so only
+      // the single center crosshair pin is visible.
+      if (value) {
+        _clearStaticDestinationPins();
+      }
       notifyListeners();
     }
   }
 
+  Future<void> _clearStaticDestinationPins() async {
+    _pinDropGeneration++;
+    if (_droppedPinSymbol != null && controller != null) {
+      try {
+        await controller!.removeSymbol(_droppedPinSymbol!);
+      } catch (_) {}
+      _droppedPinSymbol = null;
+    }
+    if (controller != null) {
+      try {
+        await controller!.removeLayer('ultimate-pin-layer');
+      } catch (_) {}
+      try {
+        await controller!.removeSource('ultimate-pin-source');
+      } catch (_) {}
+    }
+    await engine.layers?.removeSearchPin();
+  }
+
+  /// Syncs intermediate stop pins on the map cleanly (also clears the layer
+  /// when the last stop is removed so ghost pins never remain).
+  Future<void> syncIntermediateStopPins() async {
+    if (controller == null) return;
+    try {
+      await controller!.removeLayer('intermediate-pins-layer');
+    } catch (_) {}
+    try {
+      await controller!.removeSource('intermediate-pins-source');
+    } catch (_) {}
+
+    if (intermediateStops.isEmpty) return;
+
+    final features = intermediateStops
+        .where((s) => s.latitude != 0.0 || s.longitude != 0.0)
+        .map((stop) => {
+              "type": "Feature",
+              "geometry": {
+                "type": "Point",
+                "coordinates": [stop.longitude, stop.latitude],
+              }
+            })
+        .toList();
+    if (features.isEmpty) return;
+
+    try {
+      await controller!.addGeoJsonSource('intermediate-pins-source', {
+        "type": "FeatureCollection",
+        "features": features,
+      });
+      await controller!.addSymbolLayer(
+        'intermediate-pins-source',
+        'intermediate-pins-layer',
+        SymbolLayerProperties(
+          iconImage: 'intermediate_pin',
+          iconSize: 1.0 * mapItemScale,
+          iconAnchor: 'bottom',
+          iconAllowOverlap: true,
+          iconIgnorePlacement: true,
+        ),
+      );
+    } catch (e) {
+      debugPrint("🗺️ INTERMEDIATE PIN SYNC ERROR: $e");
+    }
+  }
+
   void addIntermediateStop(PlaceModel place) {
+    if (place.latitude == 0.0 && place.longitude == 0.0) return;
+    // Prevent duplicate stops within 15m of an existing stop
+    final isDuplicate = intermediateStops.any((s) =>
+        Geolocator.distanceBetween(
+            s.latitude, s.longitude, place.latitude, place.longitude) <
+        15.0);
+    if (isDuplicate) return;
+
     if (intermediateStops.length < 3) {
-      // Limit to 3 stops for premium UX
       intermediateStops.add(place);
       notifyListeners();
+      unawaited(syncIntermediateStopPins());
     }
   }
 
@@ -118,6 +198,15 @@ class MapProvider extends ChangeNotifier {
     if (index >= 0 && index < intermediateStops.length) {
       intermediateStops.removeAt(index);
       notifyListeners();
+      unawaited(syncIntermediateStopPins());
+
+      // Auto-recalculate active route so removed stop disappears from polyline
+      if (targetDestination != null && hasActiveRoute) {
+        final context = ToastService.navigatorKey.currentContext;
+        if (context != null) {
+          calculateAndDrawNativeRoute(context, mode: currentNavMode);
+        }
+      }
     }
   }
 
@@ -1672,48 +1761,8 @@ class MapProvider extends ChangeNotifier {
       } catch (_) {}
     }
 
-    // 9. INTERMEDIATE PINS
-    if (intermediateStops.isNotEmpty && controller != null) {
-      try {
-        await controller!.removeLayer('intermediate-pins-layer');
-      } catch (_) {}
-      try {
-        await controller!.removeSource('intermediate-pins-source');
-      } catch (_) {}
-
-      final features = intermediateStops
-          .map((stop) => {
-                "type": "Feature",
-                "geometry": {
-                  "type": "Point",
-                  "coordinates": [stop.longitude, stop.latitude]
-                }
-              })
-          .toList();
-
-      try {
-        await controller!.addGeoJsonSource('intermediate-pins-source', {
-          "type": "FeatureCollection",
-          "features": features,
-        });
-      } catch (_) {}
-
-      try {
-        await controller!.addSymbolLayer(
-          'intermediate-pins-source',
-          'intermediate-pins-layer',
-          SymbolLayerProperties(
-            iconImage: 'intermediate_pin',
-            iconSize: 1.0 * mapItemScale,
-            iconAnchor: 'bottom',
-            iconAllowOverlap: true,
-            iconIgnorePlacement: true,
-          ),
-        );
-      } catch (e) {
-        debugPrint("🗺️ INTERMEDIATE PIN DROP ERROR: $e");
-      }
-    }
+    // 9. INTERMEDIATE PINS (always synced — cleans up when empty)
+    await syncIntermediateStopPins();
 
     if (targetDestination != null) {
       await clearNativeDestinationPin();
@@ -2106,32 +2155,38 @@ class MapProvider extends ChangeNotifier {
   void startTurnByTurnNavigation() {
     if (_lastRouteData != null) {
       engine.navigation.startNavigation(_lastRouteData!);
+      engine.locService?.startLiveTracking(forNavigation: true);
 
+      // Single unified GPS stream via GlobalLocationService (no duplicate Geolocator stream)
       _liveLocationSub?.cancel();
-      _liveLocationSub = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.bestForNavigation,
-          distanceFilter: 2,
-        ),
-      ).listen((pos) {
-        engine.navigation.processLocationUpdate(pos);
-      }, onError: (error) {
-        debugPrint(
-            "📍 [DEBUG] Map Provider GPS stream lost or glitched: $error");
-      });
+      if (engine.locService != null) {
+        _liveLocationSub = engine.locService!.engineLocationStream.listen(
+          (pos) => engine.navigation.processLocationUpdate(pos),
+          onError: (error) {
+            debugPrint("📍 [DEBUG] Navigation location stream error: $error");
+          },
+        );
+      }
 
       AppHaptics.success();
     }
   }
 
-  // 🚨 MULTIPLE NEARBY PINS TRACKER
+  // 🚨 MULTIPLE NEARBY PINS TRACKER & MULTI-CATEGORY POI SYSTEM
   final List<Circle> _nearbyCircles = [];
   final List<Symbol> _nearbyLabels = [];
+
+  final Set<String> _activeNearbyCategories = {};
+  Set<String> get activeNearbyCategories => Set.unmodifiable(_activeNearbyCategories);
+  final Map<String, List<Circle>> _categoryCircles = {};
+  final Map<String, List<Symbol>> _categorySymbols = {};
+  final Map<String, List<PlaceModel>> _categoryPlaces = {};
 
   final ValueNotifier<bool> isSpeaking = ValueNotifier(false);
   Timer? _glowTimer;
   StreamSubscription<Position>? _liveLocationSub;
   StreamSubscription<Position>? _locServiceSub;
+  bool _navPuckLayerActive = false;
 
   MapProvider() {
     engine.state.addListener(() {
@@ -2148,13 +2203,18 @@ class MapProvider extends ChangeNotifier {
 
             if (!isActiveNavigation &&
                 engine.mapUIState.value == MapUIState.idle) {
-              // If the stream fires while navigation is off, mercilessly kill the layer again.
-              controller?.removeLayer("nav_puck_layer").catchError((_) {});
-              return; // 🚀 ABORT: Do not update puck logic!
+              if (_navPuckLayerActive) {
+                _navPuckLayerActive = false;
+                controller?.removeLayer("nav_puck_layer").catchError((_) {});
+              }
+              return;
             }
 
-            if (engine.mapUIState.value == MapUIState.navigating ||
-                engine.mapUIState.value == MapUIState.routeDrawn) {
+            // During active navigation, the puck is driven strictly by
+            // engine.navigation.snappedPosition (road-locked), NEVER raw GPS.
+            if (engine.mapUIState.value == MapUIState.routeDrawn &&
+                !isActiveNavigation) {
+              _navPuckLayerActive = true;
               updateNavigationPuck(
                   LatLng(pos.latitude, pos.longitude), pos.heading);
             }
@@ -2188,6 +2248,15 @@ class MapProvider extends ChangeNotifier {
         } else {
           ToastService.showSuccess(context, "GPS Signal Restored");
         }
+      }
+    });
+
+    // Road-locked navigation puck listener: keeps marker strictly on the road
+    engine.navigation.snappedPosition.addListener(() {
+      final snapped = engine.navigation.snappedPosition.value;
+      if (snapped != null && engine.navigation.isNavigating.value) {
+        _navPuckLayerActive = true;
+        updateNavigationPuck(snapped, engine.navigation.currentBearing.value);
       }
     });
 
@@ -2566,111 +2635,181 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
-  // 🚨 FIND AND SHOW MULTIPLE NEARBY PINS
-  Future<void> findAndShowNearby(String category, BuildContext context) async {
-    if (!_isMapReady) return;
-    _setLoading(true);
+  // =========================================================================
+  // ── MULTI-CATEGORY NEARBY POI SYSTEM (Google Maps Style) ──
+  // =========================================================================
+
+  bool isNearbyCategoryActive(String key) => _activeNearbyCategories.contains(key);
+
+  Future<void> toggleNearbyCategory({
+    required String key,
+    required String label,
+    required String osmTag,
+    required Color color,
+    required BuildContext context,
+  }) async {
+    if (!_isMapReady || controller == null) return;
+
+    if (_activeNearbyCategories.contains(key)) {
+      // 1. Unselect & remove marks for this category
+      _activeNearbyCategories.remove(key);
+      await _removeCategoryMarks(key);
+      notifyListeners();
+      return;
+    }
+
+    // 2. Select & fetch marks for this category
+    _activeNearbyCategories.add(key);
+    notifyListeners();
 
     try {
-      final locService = Provider.of<GlobalLocationService>(
-        context,
-        listen: false,
-      );
-      if (locService.currentPosition == null) {
-        await locService.forceRefreshLocation();
-      }
-      final pos = locService.currentPosition;
-      if (pos == null) throw Exception("GPS Unavailable");
-
-      final MasterSearchService searchService = MasterSearchService();
-      final places = await searchService.getNearbyPlaces(
-        LatLng(pos.latitude, pos.longitude),
-        category,
-      );
-
-      await clearNearbyPins();
-
-      if (places.isNotEmpty) {
-        double minLat = pos.latitude, maxLat = pos.latitude;
-        double minLng = pos.longitude, maxLng = pos.longitude;
-
-        for (var place in places) {
-          minLat = math.min(minLat, place.latitude);
-          maxLat = math.max(maxLat, place.latitude);
-          minLng = math.min(minLng, place.longitude);
-          maxLng = math.max(maxLng, place.longitude);
-
-          final circle = await controller?.addCircle(
-            CircleOptions(
-              geometry: LatLng(place.latitude, place.longitude),
-              circleRadius: 8.0,
-              circleColor: "#00E5FF",
-              circleStrokeWidth: 2.5,
-              circleStrokeColor: "#FFFFFF",
-            ),
-          );
-          if (circle != null) _nearbyCircles.add(circle);
-
-          final label = await controller?.addSymbol(
-            SymbolOptions(
-              geometry: LatLng(place.latitude, place.longitude),
-              textField: place.name,
-              textOffset: const Offset(0, 1.5),
-              textColor:
-                  _currentTheme == MapThemeType.light ? '#000000' : '#FFFFFF',
-              textHaloColor:
-                  _currentTheme == MapThemeType.light ? '#FFFFFF' : '#000000',
-              textHaloWidth: 1.5,
-              textSize: 13.0,
-            ),
-          );
-          if (label != null) _nearbyLabels.add(label);
-        }
-
-        try {
-          await controller?.animateCamera(
-            CameraUpdate.newLatLngBounds(
-              LatLngBounds(
-                southwest: LatLng(minLat - 0.005, minLng - 0.005),
-                northeast: LatLng(maxLat + 0.005, maxLng + 0.005),
-              ),
-              left: 50,
-              top: 100,
-              right: 50,
-              bottom: 380,
-            ),
-            duration: const Duration(milliseconds: 1000),
-          );
-        } catch (e) {
-          debugPrint(
-              "⚠️ Bounds fit failed (screen too small), falling back to center focus: $e");
-          final centerLat = (minLat + maxLat) / 2;
-          final centerLng = (minLng + maxLng) / 2;
-          await controller?.animateCamera(CameraUpdate.newCameraPosition(
-              CameraPosition(
-                  target: LatLng(centerLat, centerLng),
-                  zoom: _getClampedZoom(12.0))));
-        }
+      final locService = Provider.of<GlobalLocationService>(context, listen: false);
+      LatLng? searchCenter;
+      if (currentCameraPosition != null) {
+        searchCenter = currentCameraPosition!.target;
+      } else if (locService.currentPosition != null) {
+        searchCenter = LatLng(
+          locService.currentPosition!.latitude,
+          locService.currentPosition!.longitude,
+        );
       } else {
-        debugPrint("No places found for $category");
+        await locService.forceRefreshLocation();
+        if (locService.currentPosition != null) {
+          searchCenter = LatLng(
+            locService.currentPosition!.latitude,
+            locService.currentPosition!.longitude,
+          );
+        }
       }
-    } catch (e) {
-      debugPrint("Find Nearby Error: $e");
-    } finally {
-      _setLoading(false);
+
+      if (searchCenter == null) {
+        _activeNearbyCategories.remove(key);
+        notifyListeners();
+        return;
+      }
+
+      final searchService = MasterSearchService();
+      final places = await searchService.getNearbyPlaces(
+        searchCenter,
+        label,
+        osmTag: osmTag,
+      );
+
+      // Discard if user toggled off while network fetch was running
+      if (!_activeNearbyCategories.contains(key)) return;
+
+      _categoryPlaces[key] = places;
+      final circles = <Circle>[];
+      final symbols = <Symbol>[];
+
+      final String colorHex = '#${(color.toARGB32() & 0x00FFFFFF).toRadixString(16).padLeft(6, '0')}';
+      final bool isLightMode = _currentTheme == MapThemeType.light;
+
+      for (final place in places) {
+        if (place.latitude == 0.0 && place.longitude == 0.0) continue;
+        final geom = LatLng(place.latitude, place.longitude);
+
+        // Subtle, elegant POI circle dot (Google Maps style)
+        final circle = await controller!.addCircle(
+          CircleOptions(
+            geometry: geom,
+            circleRadius: 6.5,
+            circleColor: colorHex,
+            circleStrokeWidth: 2.0,
+            circleStrokeColor: isLightMode ? '#FFFFFF' : '#0B0E17',
+            circleOpacity: 0.95,
+          ),
+        );
+        if (circle != null) circles.add(circle);
+
+        // Subtle place name label below the dot
+        final displayName = place.name.trim();
+        final truncated = displayName.length > 18
+            ? '${displayName.substring(0, 16)}…'
+            : displayName;
+
+        final symbol = await controller!.addSymbol(
+          SymbolOptions(
+            geometry: geom,
+            textField: truncated,
+            textOffset: const Offset(0, 1.2),
+            textSize: 10.0,
+            textColor: isLightMode ? '#111827' : '#FFFFFF',
+            textHaloColor: isLightMode ? '#FFFFFF' : '#000000',
+            textHaloWidth: 1.5,
+          ),
+        );
+        if (symbol != null) symbols.add(symbol);
+      }
+
+      _categoryCircles[key] = circles;
+      _categorySymbols[key] = symbols;
       notifyListeners();
+    } catch (e) {
+      debugPrint("⚠️ Toggle Nearby Error for $key: $e");
     }
   }
 
+  Future<void> _removeCategoryMarks(String key) async {
+    final circles = _categoryCircles.remove(key) ?? [];
+    for (final c in circles) {
+      try {
+        await controller?.removeCircle(c);
+      } catch (_) {}
+    }
+    final symbols = _categorySymbols.remove(key) ?? [];
+    for (final s in symbols) {
+      try {
+        await controller?.removeSymbol(s);
+      } catch (_) {}
+    }
+    _categoryPlaces.remove(key);
+  }
+
+  Future<void> clearAllNearbyCategories() async {
+    final keys = _activeNearbyCategories.toList();
+    _activeNearbyCategories.clear();
+    for (final k in keys) {
+      await _removeCategoryMarks(k);
+    }
+    notifyListeners();
+  }
+
+  /// Finds the closest nearby POI place to a given tap coordinate (within threshold).
+  PlaceModel? findNearbyPoiAt(LatLng target, {double thresholdMeters = 65.0}) {
+    PlaceModel? closest;
+    double minDistance = double.infinity;
+
+    for (final placeList in _categoryPlaces.values) {
+      for (final place in placeList) {
+        final d = Geolocator.distanceBetween(
+          target.latitude,
+          target.longitude,
+          place.latitude,
+          place.longitude,
+        );
+        if (d <= thresholdMeters && d < minDistance) {
+          minDistance = d;
+          closest = place;
+        }
+      }
+    }
+    return closest;
+  }
+
+  // Legacy compatibility: find and show single category
+  Future<void> findAndShowNearby(String category, BuildContext context) async {
+    await toggleNearbyCategory(
+      key: category.toLowerCase().replaceAll(' ', '_'),
+      label: category,
+      osmTag: category,
+      color: const Color(0xFF00E5FF),
+      context: context,
+    );
+  }
+
   Future<void> clearNearbyPins() async {
-    for (var circle in _nearbyCircles) {
-      await controller?.removeCircle(circle);
-    }
-    for (var label in _nearbyLabels) {
-      await controller?.removeSymbol(label);
-    }
-    _nearbyCircles.clear();
-    _nearbyLabels.clear();
+    await clearAllNearbyCategories();
   }
 
   // =========================================================================
@@ -2912,18 +3051,16 @@ class MapProvider extends ChangeNotifier {
         }
 
         engine.navigation.startNavigation(routeData);
+        engine.locService?.startLiveTracking(forNavigation: true);
         _liveLocationSub?.cancel();
-        _liveLocationSub = Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.bestForNavigation,
-            distanceFilter: 2,
-          ),
-        ).listen((pos) {
-          engine.navigation.processLocationUpdate(pos);
-        }, onError: (error) {
-          debugPrint(
-              "📍 [DEBUG] Map Provider GPS stream lost or glitched: $error");
-        });
+        if (engine.locService != null) {
+          _liveLocationSub = engine.locService!.engineLocationStream.listen(
+            (pos) => engine.navigation.processLocationUpdate(pos),
+            onError: (error) {
+              debugPrint("📍 [DEBUG] Station navigation stream error: $error");
+            },
+          );
+        }
 
         double minLat = math.min(currentLoc.latitude, stationLoc.latitude);
         double maxLat = math.max(currentLoc.latitude, stationLoc.latitude);
@@ -3023,6 +3160,10 @@ class MapProvider extends ChangeNotifier {
     isNavigatingToStation = false;
     targetStationLocation = null;
     targetStationName = null;
+    _liveLocationSub?.cancel();
+    _liveLocationSub = null;
+    engine.navigation.stopNavigation();
+    engine.locService?.stopLiveTracking();
     await clearRouteData();
     notifyListeners();
   }
@@ -3143,44 +3284,31 @@ class MapProvider extends ChangeNotifier {
         }
       });
 
-      // Clear existing pin if any
-      if (_droppedPinSymbol != null && controller != null) {
-        await controller!.removeSymbol(_droppedPinSymbol!);
-        _droppedPinSymbol = null;
-      }
+      // Clear ALL stale destination pins (both symbol and ultimate-pin-layer)
+      await _clearStaticDestinationPins();
+      final int gen = _pinDropGeneration;
 
       if (controller != null && !isDropPinMode) {
-        // 1. Drop the pin tilted slightly right
         _droppedPinSymbol = await controller!.addSymbol(
           SymbolOptions(
             geometry: target,
             iconImage: 'custom_pin',
             iconSize: 1.0 * mapItemScale,
             iconAnchor: 'bottom',
-            iconRotate: 15.0, // Head tilted right
+            iconRotate: 12.0,
             zIndex: 998,
           ),
         );
 
-        // 2. Sway Left
-        Future.delayed(const Duration(milliseconds: 150), () async {
-          if (_droppedPinSymbol != null && controller != null) {
+        Future.delayed(const Duration(milliseconds: 140), () async {
+          if (gen == _pinDropGeneration && _droppedPinSymbol != null && controller != null) {
             await controller!.updateSymbol(
-                _droppedPinSymbol!, const SymbolOptions(iconRotate: -10.0));
+                _droppedPinSymbol!, const SymbolOptions(iconRotate: -8.0));
           }
         });
 
-        // 3. Sway slightly Right
-        Future.delayed(const Duration(milliseconds: 300), () async {
-          if (_droppedPinSymbol != null && controller != null) {
-            await controller!.updateSymbol(
-                _droppedPinSymbol!, const SymbolOptions(iconRotate: 5.0));
-          }
-        });
-
-        // 4. Settle firmly in the center
-        Future.delayed(const Duration(milliseconds: 450), () async {
-          if (_droppedPinSymbol != null && controller != null) {
+        Future.delayed(const Duration(milliseconds: 280), () async {
+          if (gen == _pinDropGeneration && _droppedPinSymbol != null && controller != null) {
             await controller!.updateSymbol(
                 _droppedPinSymbol!, const SymbolOptions(iconRotate: 0.0));
           }
@@ -3435,6 +3563,11 @@ class MapProvider extends ChangeNotifier {
   void dispose() {
     _liveLocationSub?.cancel();
     _liveLocationSub = null;
+    _locServiceSub?.cancel();
+    _locServiceSub = null;
+    _puckTweenTimer?.cancel();
+    _glowTimer?.cancel();
+    isSpeaking.dispose();
     _pinAnimController?.dispose();
     engine.dispose();
     super.dispose();
@@ -3551,26 +3684,46 @@ Map<String, dynamic> _buildPrimaryGeoJson(Map<String, dynamic> data) {
 
   List<Map<String, dynamic>> features = [];
 
-  if (congestionData != null && congestionData.isNotEmpty) {
+  if (congestionData != null && congestionData.isNotEmpty && coords.length >= 2) {
+    // Merge consecutive segments with identical congestion into multi-point LineStrings
+    // (~40x fewer GeoJSON features and faster MapLibre GL tessellation on mobile).
+    String? activeLevel;
+    List<List<double>> activeCoords = [];
+
     for (int i = 0; i < coords.length - 1; i++) {
       int congestionIndex = (i / coords.length * congestionData.length).floor();
       if (congestionIndex >= congestionData.length) {
         congestionIndex = congestionData.length - 1;
       }
+      final String level = congestionData[congestionIndex];
 
+      if (activeLevel == null) {
+        activeLevel = level;
+        activeCoords = [
+          [coords[i].longitude, coords[i].latitude],
+          [coords[i + 1].longitude, coords[i + 1].latitude],
+        ];
+      } else if (level == activeLevel) {
+        activeCoords.add([coords[i + 1].longitude, coords[i + 1].latitude]);
+      } else {
+        features.add({
+          "type": "Feature",
+          "properties": {"index": 0, "congestion": activeLevel},
+          "geometry": {"type": "LineString", "coordinates": activeCoords},
+        });
+        activeLevel = level;
+        activeCoords = [
+          [coords[i].longitude, coords[i].latitude],
+          [coords[i + 1].longitude, coords[i + 1].latitude],
+        ];
+      }
+    }
+
+    if (activeLevel != null && activeCoords.length >= 2) {
       features.add({
         "type": "Feature",
-        "properties": {
-          "index": 0,
-          "congestion": congestionData[congestionIndex]
-        },
-        "geometry": {
-          "type": "LineString",
-          "coordinates": [
-            [coords[i].longitude, coords[i].latitude],
-            [coords[i + 1].longitude, coords[i + 1].latitude]
-          ]
-        },
+        "properties": {"index": 0, "congestion": activeLevel},
+        "geometry": {"type": "LineString", "coordinates": activeCoords},
       });
     }
   } else {

@@ -1,3 +1,4 @@
+import 'package:ridel/core/widgets/adaptive_blur.dart';
 part of 'map_search_sheet.dart';
 
 extension _PremiumDetailsExt on _MapSearchSheetState {
@@ -39,9 +40,7 @@ extension _PremiumDetailsExt on _MapSearchSheetState {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(sheetRadius),
-                child: BackdropFilter(
-                  filter:
-                      ImageFilter.blur(sigmaX: blurAmount, sigmaY: blurAmount),
+                child: AdaptiveBlur(sigmaX: blurAmount, sigmaY: blurAmount,
                   child: Container(
                     decoration: BoxDecoration(
                       color: sheetBgColor,

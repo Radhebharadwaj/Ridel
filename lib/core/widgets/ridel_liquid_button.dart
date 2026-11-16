@@ -3,6 +3,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
+import 'package:ridel/core/widgets/adaptive_blur.dart';
 
 enum LiquidShapeType { circle, pill, squircle }
 
@@ -159,8 +160,7 @@ class _RidelLiquidButtonState extends State<RidelLiquidButton> {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(borderRadius),
                           clipBehavior: Clip.antiAlias,
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                          child: AdaptiveBlur(sigmaX: 18, sigmaY: 18,
                             child: Container(
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(borderRadius),

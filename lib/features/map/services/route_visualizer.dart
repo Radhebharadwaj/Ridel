@@ -76,8 +76,9 @@ class RouteVisualizer {
     final bool isDark = theme == true ||
         (theme != null && theme.toString().toLowerCase().contains('dark'));
 
-    final String casingColor = isDark ? '#FFFFFF' : '#000000';
-    final double casingOpacity = isDark ? 0.25 : 0.12;
+    final String coreColor = isDark ? '#0A84FF' : '#007AFF';
+    final String casingColor = isDark ? '#5AC8FA' : '#004EA8';
+    final double casingOpacity = isDark ? 0.45 : 0.85;
 
     Future<void> safeAddLineLayer(String sourceId, String layerId, LineLayerProperties props) async {
       try {
@@ -120,7 +121,7 @@ class RouteVisualizer {
       _sourceId,
       _coreLayerId,
       LineLayerProperties(
-        lineColor: _safeColor('#00E5FF'),
+        lineColor: _safeColor(coreColor),
         lineWidth: _safeDouble(5.0, 5.0),
         lineOpacity: _safeDouble(1.0, 1.0),
         lineCap: 'round',
@@ -133,7 +134,7 @@ class RouteVisualizer {
       _sourceId,
       _glowLayerId,
       LineLayerProperties(
-        lineColor: _safeColor('#00E5FF'),
+        lineColor: _safeColor(coreColor),
         lineWidth: _safeDouble(14.0, 10.0),
         lineOpacity: _safeDouble(0.12, 0.12),
         lineCap: 'round',

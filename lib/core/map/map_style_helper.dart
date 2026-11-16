@@ -159,47 +159,97 @@ class MapStyleHelper {
           }
         }
 
+        // SILKY-SMOOTH CURVES: Force round joins & caps on EVERY line layer (zero sharp corners)
+        if (type == 'line') {
+          if (!layer.containsKey('layout') || layer['layout'] is! Map) {
+            layer['layout'] = <String, dynamic>{};
+          }
+          layer['layout']['line-join'] = 'round';
+          layer['layout']['line-cap'] = 'round';
+          layer['layout']['line-round-limit'] = 1.05;
+        }
+
         if (layer.containsKey('paint') && layer['paint'] is Map) {
           final Map<String, dynamic> paint = layer['paint'];
+          final bool isCasing = id.contains('casing');
+          final bool isRoad = id.contains('road') ||
+              id.contains('street') ||
+              id.contains('highway') ||
+              id.contains('motorway') ||
+              id.contains('trunk') ||
+              id.contains('primary') ||
+              id.contains('secondary') ||
+              id.contains('tertiary') ||
+              id.contains('bridge') ||
+              id.contains('tunnel') ||
+              sourceLayer.contains('transportation') ||
+              sourceLayer.contains('road');
+
           if (useDark) {
             if (type == 'background') {
-              paint['background-color'] = '#181A1F';
-            } else if ((id.contains('landuse') || id.contains('building')) && type == 'fill') {
-              paint['fill-color'] = '#1E2128';
+              paint['background-color'] = '#0E1117';
+            } else if (type == 'fill-extrusion') {
+              paint['fill-extrusion-color'] = '#1A202D';
+              paint['fill-extrusion-opacity'] = 0.90;
             } else if (id.contains('water') && type == 'fill') {
-              paint['fill-color'] = '#14202A';
-            } else if ((id.contains('park') || id.contains('green')) && type == 'fill') {
-              paint['fill-color'] = '#1A2421';
-            } else if ((id.contains('road') || sourceLayer.contains('road')) && type == 'line') {
-              if (paint.containsKey('line-color')) {
-                if (id.contains('highway') || id.contains('primary') || id.contains('trunk')) {
-                  paint['line-color'] = '#3A404A'; 
-                } else {
-                  paint['line-color'] = '#2D323A'; 
-                }
-              }
+              paint['fill-color'] = '#0A192D';
+            } else if ((id.contains('park') || id.contains('green') || id.contains('wood') || id.contains('grass')) && type == 'fill') {
+              paint['fill-color'] = '#122620';
+            } else if ((id.contains('landuse') || id.contains('building')) && type == 'fill') {
+              paint['fill-color'] = id.contains('building') ? '#1A202D' : '#141821';
+            } else if (id.contains('waterway') && type == 'line') {
+              paint['line-color'] = '#102540';
             } else if ((id.contains('railway') || id.contains('transit')) && type == 'line') {
-              if (paint.containsKey('line-color')) {
-                paint['line-color'] = '#454C59';
+              if (paint.containsKey('line-color') && !id.contains('metro') && !id.contains('monorail')) {
+                paint['line-color'] = '#424E66';
               }
+            } else if (isRoad && type == 'line' && paint.containsKey('line-color')) {
+              if (id.contains('motorway')) {
+                paint['line-color'] = isCasing ? '#2C2216' : '#6E5535';
+              } else if (id.contains('highway') || id.contains('trunk') || id.contains('primary')) {
+                paint['line-color'] = isCasing ? '#1A212E' : '#3C4961';
+              } else if (id.contains('secondary') || id.contains('tertiary')) {
+                paint['line-color'] = isCasing ? '#131822' : '#2C3547';
+              } else {
+                paint['line-color'] = isCasing ? '#12161F' : '#212836';
+              }
+            } else if (type == 'symbol' && paint.containsKey('text-color')) {
+              paint['text-halo-color'] = 'rgba(11, 14, 20, 0.90)';
+              paint['text-halo-width'] = 1.6;
+              paint['text-halo-blur'] = 0.7;
             }
           } else {
             if (type == 'background') {
-              paint['background-color'] = '#E0E4E8'; 
-            } else if ((id.contains('landuse') || id.contains('building')) && type == 'fill') {
-              paint['fill-color'] = '#D4D9DF'; 
+              paint['background-color'] = '#F3F4F6';
+            } else if (type == 'fill-extrusion') {
+              paint['fill-extrusion-color'] = '#E3E6EE';
+              paint['fill-extrusion-opacity'] = 0.88;
             } else if (id.contains('water') && type == 'fill') {
-              paint['fill-color'] = '#96C1E3'; 
-            } else if ((id.contains('park') || id.contains('green')) && type == 'fill') {
-              paint['fill-color'] = '#B7D9BA'; 
-            } else if ((id.contains('road') || sourceLayer.contains('road')) && type == 'line') {
-              if (paint.containsKey('line-color')) {
-                paint['line-color'] = '#FFFFFF'; 
-              }
+              paint['fill-color'] = '#A6D4F7';
+            } else if ((id.contains('park') || id.contains('green') || id.contains('wood') || id.contains('grass')) && type == 'fill') {
+              paint['fill-color'] = '#CBE8C6';
+            } else if ((id.contains('landuse') || id.contains('building')) && type == 'fill') {
+              paint['fill-color'] = id.contains('building') ? '#E3E6EE' : '#ECEEF2';
+            } else if (id.contains('waterway') && type == 'line') {
+              paint['line-color'] = '#95C9F0';
             } else if ((id.contains('railway') || id.contains('transit')) && type == 'line') {
-              if (paint.containsKey('line-color')) {
-                paint['line-color'] = '#4F5D73'; 
+              if (paint.containsKey('line-color') && !id.contains('metro') && !id.contains('monorail')) {
+                paint['line-color'] = '#A2ADBF';
               }
+            } else if (isRoad && type == 'line' && paint.containsKey('line-color')) {
+              if (id.contains('motorway')) {
+                paint['line-color'] = isCasing ? '#D99A32' : '#FBD277';
+              } else if (id.contains('highway') || id.contains('trunk') || id.contains('primary')) {
+                paint['line-color'] = isCasing ? '#DBB65C' : '#FEE7AC';
+              } else if (id.contains('secondary') || id.contains('tertiary')) {
+                paint['line-color'] = isCasing ? '#CFD5DF' : '#FFFFFF';
+              } else {
+                paint['line-color'] = isCasing ? '#D8DDE6' : '#FFFFFF';
+              }
+            } else if (type == 'symbol' && paint.containsKey('text-color')) {
+              paint['text-halo-color'] = 'rgba(255, 255, 255, 0.92)';
+              paint['text-halo-width'] = 1.5;
+              paint['text-halo-blur'] = 0.6;
             }
           }
         }
@@ -311,7 +361,7 @@ class MapStyleHelper {
 
     final bool useDark = themeType != null ? (themeType == MapThemeType.dark) : isSystemDark;
     final String styleName = useDark ? "default-dark-standard" : "default-light-standard";
-    final String cacheKey = "ola_v311_$styleName";
+    final String cacheKey = "ola_v400_appleplus_$styleName";
 
     final prefs = await SharedPreferences.getInstance();
     
