@@ -1319,6 +1319,7 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                         },
                       ),
                     ),
+                  ),
                   ],
                 ),
               ),
