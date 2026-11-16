@@ -54,12 +54,42 @@ class MapProvider extends ChangeNotifier {
 
   bool _is3D = false;
   bool get is3D => _is3D;
+  bool get is3DMode => _is3D;
 
   void setIs3D(bool value) {
     if (_is3D != value) {
       _is3D = value;
       notifyListeners();
     }
+  }
+
+  Future<void> toggle3DView() async {
+    setIs3D(!_is3D);
+    if (controller != null) {
+      final currentPos = controller!.cameraPosition;
+      if (currentPos != null) {
+        await controller!.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: currentPos.target,
+              zoom: currentPos.zoom,
+              tilt: _is3D ? 55.0 : 0.0,
+              bearing: currentPos.bearing,
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> clearDestination() async {
+    clearActiveDestination();
+    setTargetDestination(null);
+    setDestinationSelected(false);
+    await clearNativeDestinationPin();
+    await clearNativeRoute();
+    engine.setUIState(MapUIState.idle);
+    notifyListeners();
   }
 
   void setAddingStopMode(bool value) {
