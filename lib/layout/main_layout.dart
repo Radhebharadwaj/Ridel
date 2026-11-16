@@ -16,8 +16,8 @@ import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/core/widgets/ridel_glass.dart';
 import 'package:ridel/core/widgets/ridel_sheet.dart';
-import 'package:ridel/features/auth/screens/login_screen.dart';
 import 'package:ridel/features/auth/services/auth_service.dart';
+import 'package:ridel/features/auth/widgets/auth_dialog.dart';
 import 'package:ridel/features/map/screens/full_screen_map.dart';
 import 'package:ridel/layout/desktop_map_sidebar.dart';
 import 'package:ridel/main.dart';
@@ -84,12 +84,17 @@ class _MainLayoutState extends State<MainLayout> {
 
   void _openAccountSheet() {
     AppHaptics.lightImpact();
-    RidelSheet.show(
-      context,
-      title: "Account",
-      showCloseButton: true,
-      child: const AccountSettingsSheet(),
-    );
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      showRidelAuthDialog(context);
+    } else {
+      RidelSheet.show(
+        context,
+        title: "Account",
+        showCloseButton: true,
+        child: const AccountSettingsSheet(),
+      );
+    }
   }
 
   @override
@@ -137,9 +142,8 @@ class _MainLayoutState extends State<MainLayout> {
                       AnimatedPositioned(
                         duration: const Duration(milliseconds: 400),
                         curve: Curves.easeOutCubic,
-                        top: 24,
-                        bottom: 24,
-                        left: isOpen ? 24 : -420,
+                        top: 20,
+                        left: isOpen ? 20 : -420,
                         child: DesktopMapSidebar(
                           onCollapse: () {
                             globalSidebarOpen.value = false;
@@ -362,10 +366,7 @@ class AccountSettingsSheet extends StatelessWidget {
               Navigator.pop(context);
               await AuthService().signOut();
               if (context.mounted) {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                  (route) => false,
-                );
+                ToastService.showSuccess(context, 'Signed out');
               }
             },
             icon: const Icon(Icons.logout_rounded, size: 20),

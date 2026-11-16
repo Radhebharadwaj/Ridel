@@ -352,8 +352,8 @@ class _RidelAppState extends State<RidelApp> {
           themeAnimationDuration: const Duration(milliseconds: 850),
           themeAnimationCurve: Curves.easeInOutQuart,
           scrollBehavior: const _AppScrollBehavior(),
-          home: AppGateOverlay(
-            child: widget.isLoggedIn ? const MainLayout() : const LoginScreen(),
+          home: const AppGateOverlay(
+            child: MainLayout(),
           ),
         );
       },

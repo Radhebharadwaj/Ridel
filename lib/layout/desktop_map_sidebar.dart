@@ -15,12 +15,12 @@ import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/services/saved_places_service.dart';
 import 'package:ridel/core/services/theme_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
-import 'package:ridel/features/auth/screens/login_screen.dart';
+import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/features/auth/services/auth_service.dart';
+import 'package:ridel/features/auth/widgets/auth_dialog.dart';
 import 'package:ridel/features/map/map_engine/map_engine.dart';
 import 'package:ridel/features/map/models/place_model.dart';
 import 'package:ridel/features/map/services/master_search_service.dart';
-import 'package:ridel/main.dart';
 
 class DesktopMapSidebar extends StatefulWidget {
   final VoidCallback onCollapse;
@@ -45,8 +45,10 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
 
   PlaceModel? _savedHome;
   PlaceModel? _savedWork;
+  StreamSubscription<AuthState>? _authSubscription;
 
   static const Color cyanAccent = Color(0xFF00E5FF);
+  static const Color blueAccent = Color(0xFF007AFF);
 
   final List<Map<String, dynamic>> _quickCategories = const [
     {
@@ -91,6 +93,10 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
   void initState() {
     super.initState();
     _loadSavedPlaces();
+    _authSubscription =
+        Supabase.instance.client.auth.onAuthStateChange.listen((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _loadSavedPlaces() async {
@@ -111,6 +117,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
     _searchCtrl.dispose();
     _searchFocus.dispose();
     _debounceTimer?.cancel();
+    _authSubscription?.cancel();
     super.dispose();
   }
 
@@ -184,73 +191,79 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final user = Supabase.instance.client.auth.currentUser;
+    final screenHeight = MediaQuery.of(context).size.height;
 
     final containerColor = isDark
-        ? const Color(0xFF161922).withValues(alpha: 0.90)
-        : Colors.white.withValues(alpha: 0.92);
+        ? const Color(0xFF131722).withValues(alpha: 0.94)
+        : Colors.white.withValues(alpha: 0.95);
 
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.12)
         : Colors.black.withValues(alpha: 0.08);
 
-    final sidebarContent = ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-        child: Container(
-          width: 380,
-          decoration: BoxDecoration(
-            color: containerColor,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: borderColor, width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
-                blurRadius: 32,
-                offset: const Offset(0, 8),
-              ),
-            ],
+    final sidebarContent = Container(
+      width: 380,
+      constraints: BoxConstraints(
+        maxHeight: screenHeight - 48,
+      ),
+      decoration: BoxDecoration(
+        color: containerColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: borderColor, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.10),
+            blurRadius: 36,
+            offset: const Offset(0, 10),
           ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. BRAND HEADER & COLLAPSE
+              // 1. BRAND HEADER WITH THEME TOGGLE & COLLAPSE
               _buildHeader(isDark),
 
               // 2. SEARCH BOX
               _buildSearchField(isDark),
 
               // 3. SCROLLABLE BODY
-              Expanded(
+              Flexible(
+                fit: FlexFit.loose,
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Active Route or Destination card (if any)
+                      // Active Route Card (if selected)
                       _buildActiveRouteSection(isDark),
 
-                      // Search Results (if searching)
+                      // Search Results or Default Sections
                       if (_searchResults.isNotEmpty || _isSearching)
                         _buildSearchResultsList(isDark)
                       else ...[
-                        const SizedBox(height: 12),
-                        // Quick Categories Grid
+                        const SizedBox(height: 10),
                         _buildCategoriesSection(isDark),
-
-                        const SizedBox(height: 20),
-                        // Saved Places
+                        const SizedBox(height: 16),
                         _buildSavedPlacesSection(isDark),
+                        const SizedBox(height: 14),
+                        _buildQuickControlsSection(isDark),
                       ],
 
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 12),
                     ],
                   ),
                 ),
               ),
 
-              // 4. FOOTER: USER & SETTINGS
+              // 4. FOOTER: USER PROFILE / LOGIN POPUP TRIGGER
               _buildFooter(isDark, user),
             ],
           ),
@@ -261,28 +274,39 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
     return kIsWeb ? PointerInterceptor(child: sidebarContent) : sidebarContent;
   }
 
+  // -------------------------------------------------------------------------
+  // 1. HEADER (Brand + Theme Toggle + Collapse)
+  // -------------------------------------------------------------------------
   Widget _buildHeader(bool isDark) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 16, 12),
+      padding: const EdgeInsets.fromLTRB(18, 16, 14, 10),
       child: Row(
         children: [
+          // Logo
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF00E5FF), Color(0xFF007AFF)],
+                colors: [cyanAccent, blueAccent],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: cyanAccent.withValues(alpha: 0.3),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            child: const Icon(Icons.explore_rounded, color: Colors.white, size: 20),
+            child: const Icon(Icons.explore_rounded, color: Colors.white, size: 18),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Text(
             'Ridel Maps',
             style: GoogleFonts.inter(
-              fontSize: 19,
+              fontSize: 17,
               fontWeight: FontWeight.w800,
               color: isDark ? Colors.white : Colors.black87,
               letterSpacing: -0.4,
@@ -306,38 +330,80 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
             ),
           ),
           const Spacer(),
-          IconButton(
-            tooltip: 'Collapse Sidebar',
-            icon: Icon(
-              Icons.keyboard_double_arrow_left_rounded,
-              color: isDark ? Colors.white70 : Colors.black54,
-              size: 22,
+
+          // 🌙/☀️ LIGHT/DARK THEME TOGGLE (Clean, top-right placement)
+          Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(10),
             ),
-            onPressed: () {
-              AppHaptics.selectionClick();
-              widget.onCollapse();
-            },
+            child: IconButton(
+              tooltip: isDark ? 'Switch to Light Theme' : 'Switch to Dark Theme',
+              icon: Icon(
+                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                size: 18,
+                color: isDark ? Colors.amberAccent : Colors.orange,
+              ),
+              splashRadius: 16,
+              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+              padding: EdgeInsets.zero,
+              onPressed: () {
+                AppHaptics.selectionClick();
+                ThemeService.toggleTheme();
+              },
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Collapse Sidebar Button
+          Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: IconButton(
+              tooltip: 'Collapse Sidebar',
+              icon: Icon(
+                Icons.keyboard_double_arrow_left_rounded,
+                color: isDark ? Colors.white70 : Colors.black54,
+                size: 19,
+              ),
+              splashRadius: 16,
+              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+              padding: EdgeInsets.zero,
+              onPressed: () {
+                AppHaptics.selectionClick();
+                widget.onCollapse();
+              },
+            ),
           ),
         ],
       ),
     );
   }
 
+  // -------------------------------------------------------------------------
+  // 2. SEARCH BAR
+  // -------------------------------------------------------------------------
   Widget _buildSearchField(bool isDark) {
-    final searchBg = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.04);
-
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Container(
-        height: 48,
+        height: 44,
         decoration: BoxDecoration(
-          color: searchBg,
-          borderRadius: BorderRadius.circular(16),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isDark ? Colors.white12 : Colors.black12,
-            width: 1,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.10)
+                : Colors.black.withValues(alpha: 0.08),
           ),
         ),
         child: TextField(
@@ -345,24 +411,28 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
           focusNode: _searchFocus,
           onChanged: _onSearchChanged,
           style: GoogleFonts.inter(
-            fontSize: 14,
+            fontSize: 13,
             color: isDark ? Colors.white : Colors.black87,
           ),
           decoration: InputDecoration(
+            isDense: true,
             hintText: 'Search places, petrol, food...',
             hintStyle: GoogleFonts.inter(
-              fontSize: 14,
+              fontSize: 13,
               color: isDark ? Colors.white38 : Colors.black38,
             ),
             prefixIcon: Icon(
-              CupertinoIcons.search,
-              size: 18,
-              color: isDark ? Colors.white54 : Colors.black54,
+              Icons.search_rounded,
+              size: 20,
+              color: isDark ? Colors.white60 : Colors.black54,
             ),
             suffixIcon: _searchCtrl.text.isNotEmpty
                 ? IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 16),
-                    color: isDark ? Colors.white54 : Colors.black54,
+                    icon: Icon(
+                      Icons.clear_rounded,
+                      size: 18,
+                      color: isDark ? Colors.white54 : Colors.black45,
+                    ),
                     onPressed: () {
                       _searchCtrl.clear();
                       _onSearchChanged('');
@@ -370,13 +440,16 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                   )
                 : null,
             border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(vertical: 12),
           ),
         ),
       ),
     );
   }
 
+  // -------------------------------------------------------------------------
+  // 3. EXPLORE NEARBY CATEGORIES
+  // -------------------------------------------------------------------------
   Widget _buildCategoriesSection(bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -384,42 +457,43 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
         Text(
           'EXPLORE NEARBY',
           style: GoogleFonts.inter(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.0,
             color: isDark ? Colors.white38 : Colors.black38,
-            letterSpacing: 0.6,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: _quickCategories.map((cat) {
             return InkWell(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               onTap: () => _triggerCategorySearch(cat['query'] as String),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                 decoration: BoxDecoration(
                   color: isDark
                       ? Colors.white.withValues(alpha: 0.05)
                       : Colors.black.withValues(alpha: 0.03),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: (cat['color'] as Color).withValues(alpha: 0.25),
-                    width: 1,
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.06),
                   ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(cat['icon'] as IconData,
-                        size: 16, color: cat['color'] as Color),
-                    const SizedBox(width: 6),
+                        size: 15, color: cat['color'] as Color),
+                    const SizedBox(width: 5),
                     Text(
                       cat['label'] as String,
                       style: GoogleFonts.inter(
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: isDark ? Colors.white.withOpacity(0.87) : Colors.black87,
                       ),
@@ -434,247 +508,9 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
     );
   }
 
-  Widget _buildActiveRouteSection(bool isDark) {
-    return Consumer<MapProvider>(
-      builder: (context, provider, _) {
-        final hasPlace = provider.targetDestination != null;
-        final hasRoute = provider.isRouteCalculated;
-        final routeResult = provider.currentRouteResult;
-
-        if (!hasPlace && !hasRoute) return const SizedBox.shrink();
-
-        final distanceKm =
-            routeResult != null ? routeResult.distanceKm.toStringAsFixed(1) : '—';
-        final durationMins =
-            routeResult != null ? routeResult.durationMins.toString() : '—';
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: isDark
-                  ? [
-                      const Color(0xFF00E5FF).withValues(alpha: 0.12),
-                      const Color(0xFF007AFF).withValues(alpha: 0.08),
-                    ]
-                  : [
-                      const Color(0xFF00E5FF).withValues(alpha: 0.08),
-                      const Color(0xFF007AFF).withValues(alpha: 0.04),
-                    ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: cyanAccent.withValues(alpha: 0.3),
-              width: 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.navigation_rounded, color: cyanAccent, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      hasRoute ? 'Route Ready' : 'Destination Selected',
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 18),
-                    color: isDark ? Colors.white54 : Colors.black45,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () {
-                      AppHaptics.lightImpact();
-                      provider.clearSearchSession(context);
-                    },
-                  ),
-                ],
-              ),
-              if (hasRoute) ...[
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _buildStatChip(
-                      icon: Icons.timer_outlined,
-                      label: '$durationMins mins',
-                      isDark: isDark,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildStatChip(
-                      icon: Icons.straighten_rounded,
-                      label: '$distanceKm km',
-                      isDark: isDark,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: cyanAccent,
-                    foregroundColor: Colors.black87,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  onPressed: () {
-                    AppHaptics.heavyImpact();
-                    provider.start3DNavigation();
-                  },
-                  icon: const Icon(Icons.navigation_rounded, size: 18),
-                  label: Text(
-                    'Start 3D Navigation',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ] else ...[
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF007AFF),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  onPressed: () {
-                    AppHaptics.selectionClick();
-                    provider.calculateAndDrawNativeRoute(context, mode: 'driving');
-                  },
-                  icon: const Icon(Icons.directions_car_rounded, size: 18),
-                  label: Text(
-                    'Get Directions',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildStatChip({
-    required IconData icon,
-    required String label,
-    required bool isDark,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: cyanAccent),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchResultsList(bool isDark) {
-    if (_isSearching) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
-        child: Center(
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2.5),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'RESULTS (${_searchResults.length})',
-          style: GoogleFonts.inter(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: isDark ? Colors.white38 : Colors.black38,
-            letterSpacing: 0.6,
-          ),
-        ),
-        const SizedBox(height: 8),
-        ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _searchResults.length,
-          separatorBuilder: (_, __) => Divider(
-            height: 1,
-            color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
-          ),
-          itemBuilder: (context, index) {
-            final place = _searchResults[index];
-            return ListTile(
-              dense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              leading: CircleAvatar(
-                radius: 16,
-                backgroundColor: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
-                child: const Icon(Icons.location_on_outlined, size: 16, color: cyanAccent),
-              ),
-              title: Text(
-                place.name,
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                place.address,
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  color: isDark ? Colors.white38 : Colors.black45,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onTap: () => _selectPlace(place),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
+  // -------------------------------------------------------------------------
+  // 4. SAVED PLACES (Home / Work)
+  // -------------------------------------------------------------------------
   Widget _buildSavedPlacesSection(bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -682,45 +518,62 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
         Text(
           'SAVED PLACES',
           style: GoogleFonts.inter(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.0,
             color: isDark ? Colors.white38 : Colors.black38,
-            letterSpacing: 0.6,
           ),
         ),
         const SizedBox(height: 8),
-        _buildSavedPlaceTile(
-          icon: Icons.home_rounded,
-          title: 'Home',
-          place: _savedHome,
+        _buildSavedPlaceRow(
           isDark: isDark,
+          title: 'Home',
+          subtitle: _savedHome?.name ?? 'Tap to search & set',
+          icon: Icons.home_rounded,
+          iconColor: const Color(0xFF00E5FF),
+          place: _savedHome,
+          onTap: () {
+            if (_savedHome != null) {
+              _selectPlace(_savedHome!);
+            } else {
+              _searchFocus.requestFocus();
+              _searchCtrl.text = 'Home';
+            }
+          },
         ),
         const SizedBox(height: 6),
-        _buildSavedPlaceTile(
-          icon: Icons.work_rounded,
-          title: 'Work',
-          place: _savedWork,
+        _buildSavedPlaceRow(
           isDark: isDark,
+          title: 'Work',
+          subtitle: _savedWork?.name ?? 'Tap to search & set',
+          icon: Icons.work_rounded,
+          iconColor: const Color(0xFF007AFF),
+          place: _savedWork,
+          onTap: () {
+            if (_savedWork != null) {
+              _selectPlace(_savedWork!);
+            } else {
+              _searchFocus.requestFocus();
+              _searchCtrl.text = 'Work';
+            }
+          },
         ),
       ],
     );
   }
 
-  Widget _buildSavedPlaceTile({
-    required IconData icon,
-    required String title,
-    required PlaceModel? place,
+  Widget _buildSavedPlaceRow({
     required bool isDark,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color iconColor,
+    required PlaceModel? place,
+    required VoidCallback onTap,
   }) {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: () {
-        if (place != null) {
-          _selectPlace(place);
-        } else {
-          _triggerCategorySearch(title);
-        }
-      },
+      onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
@@ -729,12 +582,21 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
               : Colors.black.withValues(alpha: 0.02),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.05),
           ),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 18, color: cyanAccent),
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 16, color: iconColor),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -743,13 +605,13 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                   Text(
                     title,
                     style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
                       color: isDark ? Colors.white : Colors.black87,
                     ),
                   ),
                   Text(
-                    place?.address ?? 'Tap to search & set',
+                    subtitle,
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       color: isDark ? Colors.white38 : Colors.black45,
@@ -760,89 +622,354 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded,
-                size: 18, color: isDark ? Colors.white24 : Colors.black26),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: isDark ? Colors.white24 : Colors.black26,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildFooter(bool isDark, User? user) {
+  // -------------------------------------------------------------------------
+  // 5. QUICK CONTROLS (3D View, Recenter)
+  // -------------------------------------------------------------------------
+  Widget _buildQuickControlsSection(bool isDark) {
+    final mapProvider = Provider.of<MapProvider>(context);
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06),
-            width: 1,
-          ),
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.03)
+            : Colors.black.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.05)
+              : Colors.black.withValues(alpha: 0.04),
         ),
       ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: cyanAccent.withValues(alpha: 0.2),
-            child: const Icon(Icons.person_rounded, size: 18, color: cyanAccent),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  user?.userMetadata?['full_name'] ?? 'Explorer',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white : Colors.black87,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          Row(
+            children: [
+              Icon(Icons.view_in_ar_rounded,
+                  size: 16, color: isDark ? cyanAccent : blueAccent),
+              const SizedBox(width: 8),
+              Text(
+                '3D Buildings',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white70 : Colors.black87,
                 ),
-                Text(
-                  user?.email ?? '',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    color: isDark ? Colors.white38 : Colors.black45,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: isDark ? 'Light Theme' : 'Dark Theme',
-            icon: Icon(
-              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-              size: 20,
-              color: isDark ? Colors.amberAccent : Colors.orange,
-            ),
-            onPressed: () {
+          Switch.adaptive(
+            value: mapProvider.is3DMode,
+            activeColor: cyanAccent,
+            onChanged: (val) {
               AppHaptics.selectionClick();
-              ThemeService.toggleTheme();
-            },
-          ),
-          IconButton(
-            tooltip: 'Sign Out',
-            icon: const Icon(Icons.logout_rounded, size: 20, color: Colors.redAccent),
-            onPressed: () async {
-              AppHaptics.heavyImpact();
-              await AuthService().signOut();
-              if (context.mounted) {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                  (route) => false,
-                );
-              }
+              mapProvider.toggle3DView();
             },
           ),
         ],
       ),
     );
   }
-}
 
+  // -------------------------------------------------------------------------
+  // 6. ACTIVE ROUTE / SELECTION SUMMARY
+  // -------------------------------------------------------------------------
+  Widget _buildActiveRouteSection(bool isDark) {
+    final mapProvider = Provider.of<MapProvider>(context);
+    final target = mapProvider.targetDestination;
+    if (target == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: cyanAccent.withValues(alpha: isDark ? 0.08 : 0.05),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: cyanAccent.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.location_on_rounded, size: 18, color: cyanAccent),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Selected Destination',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 16),
+                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                  padding: EdgeInsets.zero,
+                  onPressed: () {
+                    mapProvider.clearDestination();
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 36,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: cyanAccent,
+                  foregroundColor: Colors.black87,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () {
+                  AppHaptics.heavyImpact();
+                  mapProvider.startTurnByTurnNavigation();
+                },
+                icon: const Icon(Icons.navigation_rounded, size: 16),
+                label: Text(
+                  'Start Navigation',
+                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // 7. SEARCH RESULTS
+  // -------------------------------------------------------------------------
+  Widget _buildSearchResultsList(bool isDark) {
+    if (_isSearching) {
+      return const Padding(
+        padding: EdgeInsets.all(20),
+        child: Center(
+          child: SizedBox(
+            height: 24,
+            width: 24,
+            child: CircularProgressIndicator(strokeWidth: 2, color: cyanAccent),
+          ),
+        ),
+      );
+    }
+
+    if (_searchResults.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(20),
+        child: Center(
+          child: Text(
+            'No matching places found',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: isDark ? Colors.white38 : Colors.black38,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: _searchResults.map((place) {
+        return InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => _selectPlace(place),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(
+              children: [
+                Icon(Icons.place_outlined,
+                    size: 18, color: isDark ? Colors.white60 : Colors.black54),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        place.name,
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (place.address != null && place.address!.isNotEmpty)
+                        Text(
+                          place.address!,
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: isDark ? Colors.white38 : Colors.black45,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // 8. FOOTER: USER / SIGN IN POPUP TRIGGER
+  // -------------------------------------------------------------------------
+  Widget _buildFooter(bool isDark, User? user) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.03)
+            : Colors.black.withValues(alpha: 0.02),
+        border: Border(
+          top: BorderSide(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
+        ),
+      ),
+      child: user == null
+          // Guest User -> Sleek "Sign In" Banner
+          ? Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: cyanAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.person_outline_rounded,
+                      size: 18, color: cyanAccent),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Sign In',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        'Save places & sync trips',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          color: isDark ? Colors.white38 : Colors.black45,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(
+                  height: 32,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: cyanAccent,
+                      foregroundColor: Colors.black87,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () {
+                      AppHaptics.selectionClick();
+                      showRidelAuthDialog(context);
+                    },
+                    child: Text(
+                      'Sign In',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          // Logged In User -> Profile with Sign Out
+          : Row(
+              children: [
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: cyanAccent.withValues(alpha: 0.2),
+                  child: const Icon(Icons.person_rounded, size: 16, color: cyanAccent),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        user.userMetadata?['full_name'] ?? 'Explorer',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        user.email ?? '',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          color: isDark ? Colors.white38 : Colors.black45,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Sign Out',
+                  icon: const Icon(Icons.logout_rounded, size: 18, color: Colors.redAccent),
+                  splashRadius: 16,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  padding: EdgeInsets.zero,
+                  onPressed: () async {
+                    AppHaptics.heavyImpact();
+                    await AuthService().signOut();
+                    if (mounted) {
+                      setState(() {});
+                      ToastService.showSuccess(context, 'Signed out');
+                    }
+                  },
+                ),
+              ],
+            ),
+    );
+  }
+}
