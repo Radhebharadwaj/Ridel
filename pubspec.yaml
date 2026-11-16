@@ -10,104 +10,68 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # --- 9. FIREBASE & NOTIFICATIONS ---
-  crypto: ^3.0.7
-  firebase_core: any
-  firebase_messaging: any
-  flutter_image_compress: ^2.3.0 # 🪄 Image Magic (WebP conversion) ke liye
-
   # --- 1. CORE MAP ENGINE ---
-  # 🔥 Git override hata diya hai. Hum strict stable version use karenge jo Java 21 nahi mangta.
-  maplibre_gl: any   
+  maplibre_gl: any
   flutter_compass: ^0.8.0
+  flutter_polyline_points: ^2.0.0
 
-  # --- 2. UI & UX ---
-  sliding_up_panel: ^2.0.0+1 
-
-  # --- 3. DATABASE ---
-  sqflite_sqlcipher: ^3.0.0
-  path: ^1.9.1
-  path_provider: ^2.1.5
-  
-  # Web & Desktop Support
-  sqflite_common_ffi: ^2.3.2
-  sqflite_common_ffi_web: ^0.4.2
-  sqlite3: ^2.1.0
-
-  # --- 4. STATE MANAGEMENT ---
+  # --- 2. STATE & BACKEND ---
   provider: ^6.1.1
-
-  # --- 5. LOCATION & UTILS ---
-  geolocator: any
-  share_plus: any  # 👈 Yahan strict version hata kar 'any' kar do
-  geocoding: any
-  permission_handler: ^12.0.1
-  intl: ^0.20.2
-
-  # --- 6. ANIMATIONS & DESIGN ---
-  google_fonts: ^8.0.0
-  cupertino_icons: ^1.0.6
-  animated_text_kit: ^4.3.0
-  avatar_glow: ^2.0.0
-  image_picker: ^1.2.1
-  image_cropper: ^11.0.0
-
-  # --- 7. BACKEND ---
   supabase_flutter: ^2.12.0
   flutter_secure_storage: ^10.0.0
-  local_auth: ^3.0.0
-  device_info_plus: ^10.1.0
-  package_info_plus: ^8.3.0
-  flutter_native_splash: ^2.4.0 # 👈 'any' hata kar stable version diya
-  shimmer: ^3.0.0
-  
-  # --- 8. EXTRAS ---
-  speech_to_text: any
-  collection: ^1.19.1
+  shared_preferences: ^2.5.5
+  flutter_dotenv: ^6.0.0
+
+  # --- 3. DATABASE & STORAGE ---
+  sqflite_sqlcipher: ^3.0.0
+  sqflite_common_ffi_web: ^0.4.2
+  path: ^1.9.1
+  path_provider: ^2.1.5
+
+  # --- 4. LOCATION & ENVIRONMENT ---
+  geolocator: any
+  intl: ^0.20.2
   sunrise_sunset_calc: any
 
-  http: ^1.6.0
-  url_launcher: ^6.3.2
-  flutter_polyline_points: ^2.0.0
-  path_drawing: ^1.0.1
+  # --- 5. UI, DESIGN & GRAPHICS ---
+  google_fonts: ^8.0.0
   flutter_svg: ^2.2.3
+  shimmer: ^3.0.0
+  avatar_glow: ^2.0.0
   pointer_interceptor: any
+  flutter_native_splash: ^2.4.0
 
-  flutter_local_notifications: ^21.0.0
-  flutter_map: any
-  latlong2: any
-  flutter_dotenv: ^6.0.0
-  timezone: ^0.11.0
-  flutter_timezone: ^5.0.2
-  shared_preferences: ^2.5.5
+  # --- 6. AUTHENTICATION & SECURITY ---
   google_sign_in: ^7.2.0
   sign_in_with_apple: ^7.0.1
-  image: ^4.8.0
   flutter_turnstile: ^1.2.0
-  cached_network_image: any
   pinput: ^6.0.2
+  local_auth: ^3.0.0
 
+  # --- 7. NOTIFICATIONS & BACKGROUND ---
+  firebase_core: any
+  firebase_messaging: any
+  flutter_local_notifications: ^21.0.0
+  timezone: ^0.11.0
+  flutter_timezone: ^5.0.2
+
+  # --- 8. UTILS, SPEECH & MEDIA ---
+  http: ^1.6.0
+  url_launcher: ^6.3.2
+  crypto: ^3.0.7
+  device_info_plus: ^10.1.0
+  package_info_plus: ^8.3.0
+  speech_to_text: any
+  image_picker: ^1.2.1
+  share_plus: any
+  image: ^4.8.0
+  web: any
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
   flutter_launcher_icons: ^0.14.4
-  analyzer: any  # 👈 Yahan ^6.5.0 ko hata kar wapas 'any' likh do
-  dependency_validator: ^5.0.5
-
-# 🛑 YAHAN MAINE OVERRIDES KO COMMENT KAR DIYA HAI TAALI STABLE VERSION USE HO
-# dependency_overrides:
-#   maplibre_gl:
-#     git:
-#       url: https://github.com/maplibre/flutter-maplibre-gl.git
-#       path: maplibre_gl
-#       ref: main
-#   maplibre_gl_web:
-#     git:
-#       url: https://github.com/maplibre/flutter-maplibre-gl.git
-#       path: maplibre_gl_web
-#       ref: main
 
 # --- App Icon Config ---
 flutter_launcher_icons:
@@ -120,7 +84,7 @@ flutter_launcher_icons:
 
 # --- Splash Screen Config ---
 flutter_native_splash:
-  color: "#050505" # Premium dark background to match the app theme
+  color: "#050505"
   image: assets/icon/logo.png
   android: true
   ios: true
@@ -135,17 +99,9 @@ flutter:
   uses-material-design: true
   assets:
     - assets/style.json
+    - assets/ridel_dark_theme.json
     - assets/icon/icon.png
     - assets/icon/logo.png
-    - assets/images/whatsapp.png
-    - assets/images/gpay.png
-    - assets/images/phonepe.png
-    - assets/images/paytm.png
-    - assets/images/upi.png
-    - assets/images/metrocard.png
-    - assets/images/splash.png
     - assets/images/nav_puck.png
     - assets/images/custom_pin.png
     - assets/images/add_places.png
-    - assets/ridel_dark_theme.json
-    - .env

@@ -81,7 +81,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                     : _buildDefaultQuickActionsRow(context, isDark),
               ),
             ),
-          if (showQuickActions && isLoggedIn)
+          if (showQuickActions)
             Column(
               children: [
                 QuickActionButtons(

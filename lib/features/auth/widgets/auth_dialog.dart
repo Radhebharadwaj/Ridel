@@ -616,3 +616,4 @@ class _RidelAuthDialogContentState extends State<RidelAuthDialogContent> {
     );
   }
 }
+
