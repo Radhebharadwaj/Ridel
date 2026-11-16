@@ -248,6 +248,11 @@ class _RidelSheetState extends State<RidelSheet> {
         children: [
           // ================= CONTENT =================
           Positioned.fill(
+            top: widget.customHeader
+                ? 0
+                : (_isFullScreen
+                    ? MediaQuery.paddingOf(context).top + 72
+                    : 72),
             child: MediaQuery.removePadding(
               context: context,
               removeTop: true,
@@ -261,7 +266,9 @@ class _RidelSheetState extends State<RidelSheet> {
               top: 0,
               left: 0,
               right: 0,
-              height: 115, // 🚀 Extra height to allow the smooth blur fade
+              height: _isFullScreen
+                  ? MediaQuery.paddingOf(context).top + 72
+                  : 72,
               child: RepaintBoundary(
                 child: ClipRect(
                 child: ShaderMask(

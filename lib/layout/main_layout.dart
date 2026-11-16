@@ -17,6 +17,8 @@ import 'package:ridel/features/map/screens/full_screen_map.dart';
 import 'package:ridel/layout/desktop_map_sidebar.dart';
 import 'package:ridel/main.dart';
 import 'package:ridel/core/utils/responsive.dart';
+import 'package:ridel/core/theme/app_theme.dart';
+import 'package:ridel/core/widgets/adaptive_blur.dart';
 
 export 'package:ridel/layout/account_settings_sheet.dart';
 
@@ -153,38 +155,49 @@ class _MainLayoutState extends State<MainLayout> {
         globalSidebarOpen.value = true;
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isDark
-              ? const Color(0xFF161922).withValues(alpha: 0.90)
-              : Colors.white.withValues(alpha: 0.92),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark ? Colors.white12 : Colors.black12,
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
-              blurRadius: 20,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: RidelSurfaceTokens.pillShadows(isDark),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.menu_rounded, size: 20, color: Color(0xFF00E5FF)),
-            const SizedBox(width: 8),
-            Text(
-              'Ridel Maps',
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: isDark ? Colors.white : Colors.black87,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: AdaptiveBlur(
+            sigmaX: 14.0,
+            sigmaY: 14.0,
+            child: Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: RidelSurfaceTokens.pillBackground(isDark, elevated: true),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: RidelSurfaceTokens.border(isDark),
+                  width: 0.75,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.menu_rounded,
+                    size: 18,
+                    color: isDark
+                        ? RidelSurfaceTokens.iosBlueDark
+                        : RidelSurfaceTokens.iosBlueLight,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Ridel Maps',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white : const Color(0xFF111318),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

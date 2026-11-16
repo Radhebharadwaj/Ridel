@@ -122,24 +122,7 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                         _showPremiumNotification('Your current location has been pinned on the map.');
                     },
                   ),
-                  Divider(height: 1, color: Colors.grey.withValues(alpha: 0.2), indent: 50),
-                  ListTile(
-                    leading: const Icon(Icons.person_outline_rounded, color: Colors.blueAccent),
-                    title: const Text('Account & Settings', style: TextStyle(fontWeight: FontWeight.w500)),
-                    subtitle: Text(
-                      Supabase.instance.client.auth.currentUser != null
-                          ? (Supabase.instance.client.auth.currentUser?.email ?? 'Logged In')
-                          : 'Sign In / Preferences',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.white54 : Colors.black54,
-                      ),
-                    ),
-                    trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
-                    onTap: () {
-                      openAccountSettings(context);
-                    },
-                  ),
+                  // Account & Settings is accessible cleanly from the top search-bar profile avatar.
                 ],
               ),
             ),

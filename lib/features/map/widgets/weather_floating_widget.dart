@@ -108,8 +108,8 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
   }
 
   double? _dragHeight;
-  final double _compactHeight = 40;
-  final double _compactWidth = 128;
+  final double _compactHeight = 36;
+  final double _compactWidth = 76;
   final double _expandedHeight = 260;
   final double _fullHeight = 460;
 
@@ -592,7 +592,7 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                             maxHeight: safeFullHeight,
                             alignment: isDesktop
                                 ? Alignment.topRight
-                                : Alignment.bottomLeft,
+                                : Alignment.topLeft,
                             child: SizedBox(
                               width: maxWidth,
                               height: safeFullHeight,
@@ -612,58 +612,24 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
 
   Widget _buildCompactView(bool isNight, bool isLightMode) {
     final textPrimary = isLightMode ? const Color(0xFF111318) : Colors.white;
-    final textSecondary = isLightMode
-        ? const Color(0xFF4B5563)
-        : Colors.white.withValues(alpha: 0.78);
-    final sepColor = isLightMode
-        ? Colors.black.withValues(alpha: 0.14)
-        : Colors.white.withValues(alpha: 0.18);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 11),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           PremiumWeatherIcon(
-              code: _weather!.weatherCode, size: 18, isNight: isNight),
+              code: _weather!.weatherCode, size: 17, isNight: isNight),
           const SizedBox(width: 5),
           Text(
             "${_weather!.temp.toInt()}°",
             style: GoogleFonts.inter(
               color: textPrimary,
               fontWeight: FontWeight.w700,
-              fontSize: 14,
+              fontSize: 13.5,
               letterSpacing: -0.3,
               height: 1.0,
-            ),
-          ),
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 7),
-            width: 1,
-            height: 13,
-            color: sepColor,
-          ),
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(
-              color: _getAqiColor(_weather!.aqi),
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              "${_weather!.aqi}",
-              maxLines: 1,
-              overflow: TextOverflow.clip,
-              style: GoogleFonts.inter(
-                color: textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                height: 1.0,
-              ),
             ),
           ),
         ],

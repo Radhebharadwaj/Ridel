@@ -1125,8 +1125,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                         final double mobileBottom = currentSheetHeightInPixels + 16.0;
 
                         return Positioned(
-                          top: isDesktop ? 16.0 : null,
-                          bottom: isDesktop ? null : mobileBottom,
+                          top: isDesktop
+                              ? 16.0
+                              : MediaQuery.paddingOf(context).top + 14.0,
                           left: isDesktop ? null : 16.0,
                           right: isDesktop ? 16.0 : null,
                           child: Selector<MapProvider, bool>(
