@@ -23,6 +23,7 @@ void openAccountSettings(BuildContext context) {
       context,
       title: "Account & Settings",
       showCloseButton: true,
+      isDynamicHeight: true,
       child: const AccountSettingsSheet(),
     );
   }
@@ -30,6 +31,19 @@ void openAccountSettings(BuildContext context) {
 
 class AccountSettingsSheet extends StatelessWidget {
   const AccountSettingsSheet({super.key});
+
+  static String _getUserInitials(User? user) {
+    final name = user?.userMetadata?['full_name']?.toString().trim();
+    if (name != null && name.isNotEmpty) {
+      final parts = name.split(' ').where((s) => s.isNotEmpty).toList();
+      if (parts.length >= 2) {
+        return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+      } else if (parts.isNotEmpty) {
+        return parts[0].substring(0, parts[0].length >= 2 ? 2 : 1).toUpperCase();
+      }
+    }
+    return 'BW';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,9 +53,11 @@ class AccountSettingsSheet extends StatelessWidget {
     final accent =
         isDark ? RidelSurfaceTokens.iosBlueDark : RidelSurfaceTokens.iosBlueLight;
     final cardBg = isDark
-        ? Colors.white.withValues(alpha: 0.045)
-        : Colors.black.withValues(alpha: 0.03);
-    final border = RidelSurfaceTokens.border(isDark);
+        ? const Color(0xFF141824).withValues(alpha: 0.90)
+        : Colors.white.withValues(alpha: 0.95);
+    final border = isDark
+        ? Colors.white.withValues(alpha: 0.09)
+        : Colors.black.withValues(alpha: 0.07);
     final divider = RidelSurfaceTokens.divider(isDark);
     final primaryText = isDark ? Colors.white : const Color(0xFF111318);
     final secondaryText = isDark ? Colors.white54 : const Color(0xFF6B7280);
@@ -58,42 +74,114 @@ class AccountSettingsSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. PROFILE CARD
+          // 1. PREMIUM PROFILE HERO CARD
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: border, width: 0.75),
+              gradient: LinearGradient(
+                colors: isDark
+                    ? [
+                        const Color(0xFF182030),
+                        const Color(0xFF111624),
+                      ]
+                    : [
+                        Colors.white,
+                        const Color(0xFFF8FAFC),
+                      ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: border, width: 1.0),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.06),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: accent.withValues(alpha: 0.16),
-                  child: Icon(Icons.person_rounded, size: 26, color: accent),
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF00C6FF).withValues(alpha: 0.40),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Text(
+                      _getUserInitials(user),
+                      style: GoogleFonts.inter(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        user?.userMetadata?['full_name'] ?? 'Explorer',
-                        style: GoogleFonts.inter(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: primaryText,
-                          letterSpacing: -0.2,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              user?.userMetadata?['full_name'] ?? 'Billionaire World',
+                              style: GoogleFonts.inter(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: primaryText,
+                                letterSpacing: -0.3,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF00E5FF).withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: const Color(0xFF00E5FF).withValues(alpha: 0.35),
+                                width: 0.75,
+                              ),
+                            ),
+                            child: Text(
+                              'PRO',
+                              style: GoogleFonts.inter(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF00E5FF),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        user?.email ?? '',
+                        user?.email ?? 'radhebw@gmail.com',
                         style: GoogleFonts.inter(
                           fontSize: 12.5,
+                          fontWeight: FontWeight.w400,
                           color: secondaryText,
                         ),
                         maxLines: 1,
@@ -106,7 +194,7 @@ class AccountSettingsSheet extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
           _sectionLabel('APPEARANCE & MAP', secondaryText),
           const SizedBox(height: 8),
 
@@ -114,8 +202,15 @@ class AccountSettingsSheet extends StatelessWidget {
           Container(
             decoration: BoxDecoration(
               color: cardBg,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(22),
               border: Border.all(color: border, width: 0.75),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+                  blurRadius: 14,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
             child: Column(
               children: [
@@ -125,6 +220,9 @@ class AccountSettingsSheet extends StatelessWidget {
                       : Icons.light_mode_rounded,
                   iconColor:
                       isDark ? const Color(0xFFFFD60A) : const Color(0xFFF59E0B),
+                  iconBg: isDark
+                      ? const Color(0xFFFFD60A).withValues(alpha: 0.15)
+                      : const Color(0xFFF59E0B).withValues(alpha: 0.12),
                   title: 'Dark Mode',
                   value: isDark,
                   accent: accent,
@@ -143,19 +241,29 @@ class AccountSettingsSheet extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.layers_rounded, size: 19, color: accent),
-                          const SizedBox(width: 12),
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF007AFF).withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            child: const Center(
+                              child: Icon(Icons.layers_rounded, size: 18, color: Color(0xFF007AFF)),
+                            ),
+                          ),
+                          const SizedBox(width: 13),
                           Text(
                             'Map Style',
                             style: GoogleFonts.inter(
-                              fontSize: 14,
+                              fontSize: 14.5,
                               fontWeight: FontWeight.w600,
                               color: primaryText,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 11),
                       Row(
                         children: [
                           _styleChip(
@@ -201,7 +309,8 @@ class AccountSettingsSheet extends StatelessWidget {
                 _hairline(divider),
                 _switchRow(
                   icon: Icons.view_in_ar_rounded,
-                  iconColor: accent,
+                  iconColor: const Color(0xFF00E5FF),
+                  iconBg: const Color(0xFF00E5FF).withValues(alpha: 0.12),
                   title: '3D Buildings',
                   value: mapProvider.is3DMode,
                   accent: accent,
@@ -215,6 +324,7 @@ class AccountSettingsSheet extends StatelessWidget {
                 _switchRow(
                   icon: Icons.label_outline_rounded,
                   iconColor: const Color(0xFF30D158),
+                  iconBg: const Color(0xFF30D158).withValues(alpha: 0.12),
                   title: 'Map Labels',
                   value: mapProvider.showLabels,
                   accent: accent,
@@ -228,6 +338,7 @@ class AccountSettingsSheet extends StatelessWidget {
                 _switchRow(
                   icon: Icons.storefront_rounded,
                   iconColor: const Color(0xFFFF9500),
+                  iconBg: const Color(0xFFFF9500).withValues(alpha: 0.12),
                   title: 'Show Nearby POIs',
                   value: mapProvider.showPOIs,
                   accent: accent,
@@ -241,7 +352,7 @@ class AccountSettingsSheet extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
           _sectionLabel('EXPERIENCE & PRIVACY', secondaryText),
           const SizedBox(height: 8),
 
@@ -249,8 +360,15 @@ class AccountSettingsSheet extends StatelessWidget {
           Container(
             decoration: BoxDecoration(
               color: cardBg,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(22),
               border: Border.all(color: border, width: 0.75),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+                  blurRadius: 14,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
             child: Column(
               children: [
@@ -261,6 +379,7 @@ class AccountSettingsSheet extends StatelessWidget {
                     return _switchRow(
                       icon: Icons.vibration_rounded,
                       iconColor: const Color(0xFFBF5AF2),
+                      iconBg: const Color(0xFFBF5AF2).withValues(alpha: 0.12),
                       title: 'Haptic Feedback',
                       value: enabled,
                       accent: accent,
@@ -276,7 +395,7 @@ class AccountSettingsSheet extends StatelessWidget {
                 _hairline(divider),
                 InkWell(
                   borderRadius:
-                      const BorderRadius.vertical(bottom: Radius.circular(20)),
+                      const BorderRadius.vertical(bottom: Radius.circular(22)),
                   onTap: () async {
                     AppHaptics.lightImpact();
                     mapProvider.recentSearches.clear();
@@ -292,14 +411,24 @@ class AccountSettingsSheet extends StatelessWidget {
                         horizontal: 14, vertical: 13),
                     child: Row(
                       children: [
-                        const Icon(Icons.delete_outline_rounded,
-                            size: 19, color: Color(0xFFFF453A)),
-                        const SizedBox(width: 12),
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF453A).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: const Center(
+                            child: Icon(Icons.delete_outline_rounded,
+                                size: 18, color: Color(0xFFFF453A)),
+                          ),
+                        ),
+                        const SizedBox(width: 13),
                         Expanded(
                           child: Text(
                             'Clear Search History',
                             style: GoogleFonts.inter(
-                              fontSize: 14,
+                              fontSize: 14.5,
                               fontWeight: FontWeight.w600,
                               color: primaryText,
                             ),
@@ -315,20 +444,20 @@ class AccountSettingsSheet extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 22),
 
           // 4. SIGN OUT PILL BUTTON
           SizedBox(
             height: 48,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF453A).withValues(alpha: 0.14),
+                backgroundColor: const Color(0xFFFF453A).withValues(alpha: 0.12),
                 foregroundColor: const Color(0xFFFF453A),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(999),
                   side: BorderSide(
-                    color: const Color(0xFFFF453A).withValues(alpha: 0.30),
+                    color: const Color(0xFFFF453A).withValues(alpha: 0.28),
                     width: 0.75,
                   ),
                 ),
@@ -341,7 +470,7 @@ class AccountSettingsSheet extends StatelessWidget {
                   ToastService.showSuccess(context, 'Signed out');
                 }
               },
-              icon: const Icon(Icons.logout_rounded, size: 19),
+              icon: const Icon(Icons.logout_rounded, size: 18),
               label: Text(
                 'Sign Out',
                 style: GoogleFonts.inter(
@@ -377,6 +506,7 @@ class AccountSettingsSheet extends StatelessWidget {
   Widget _switchRow({
     required IconData icon,
     required Color iconColor,
+    required Color iconBg,
     required String title,
     required bool value,
     required Color accent,
@@ -384,16 +514,26 @@ class AccountSettingsSheet extends StatelessWidget {
     required ValueChanged<bool> onChanged,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
       child: Row(
         children: [
-          Icon(icon, size: 19, color: iconColor),
-          const SizedBox(width: 12),
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: iconBg,
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Center(
+              child: Icon(icon, size: 18, color: iconColor),
+            ),
+          ),
+          const SizedBox(width: 13),
           Expanded(
             child: Text(
               title,
               style: GoogleFonts.inter(
-                fontSize: 14,
+                fontSize: 14.5,
                 fontWeight: FontWeight.w600,
                 color: primaryText,
               ),

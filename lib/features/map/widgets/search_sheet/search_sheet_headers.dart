@@ -1136,191 +1136,191 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                             isDense: true,
                             contentPadding: EdgeInsets.zero,
                             suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-                            suffixIcon: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ValueListenableBuilder(
-                                valueListenable: _searchCtrl,
-                                builder: (context, value, child) {
-                                  return Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (value.text.isNotEmpty)
-                                        RidelBounceButton(
-                                          onTap: () {
-                                            AppHaptics.lightImpact();
-                                            _searchCtrl.clear();
-                                            rebuildState(() {});
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.all(4),
-                                            decoration: BoxDecoration(
-                                              color: isDark
-                                                  ? Colors.white30
-                                                  : Colors.black26,
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: Icon(
-                                              Icons.close,
-                                              size: 12,
-                                              color: isDark
-                                                  ? Colors.black87
-                                                  : Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                      if (value.text.isEmpty)
-                                        UniversalMicButton(
-                                          isDark: isDark,
-                                          onTextRecognized: (text) =>
-                                              _searchCtrl.text = text,
-                                        ),
-                                    ],
-                                  );
-                                },
-                              ),
-                              if (!isDesktop) ...[
-                                const SizedBox(width: 8),
-                                ValueListenableBuilder(
-                                  valueListenable: _searchCtrl,
-                                  builder: (context, value, child) {
-                                    final isSearching = _searchFocus.hasFocus || _isSearchExpanded || value.text.isNotEmpty;
-
-                                    if (isSearching) {
-                                      return GestureDetector(
-                                        onTap: () {
-                                          AppHaptics.selectionClick();
-                                          FocusScope.of(context).unfocus(); // Always kill keyboard
-
-                                          if (_sheetController.isAttached) {
-                                            final currentSize = _sheetController.size;
-
-                                            // STATE 1: If Expanded -> Drop to Half
-                                            if (currentSize > _safeMidSize + 0.05) {
-                                              rebuildState(() {
-                                                _isSearchExpanded = false;
-                                                _searchCtrl.clear();
-                                              });
-                                              _sheetController.animateTo(
-                                                _safeMidSize, 
-                                                duration: const Duration(milliseconds: 350), 
-                                                curve: Curves.easeOutExpo,
-                                              );
-                                            } 
-                                            // STATE 2: If Half-Open -> Drop to Fully Closed
-                                            else if (currentSize > _safeMinSize + 0.05) {
-                                              rebuildState(() {
-                                                _isSearchExpanded = false;
-                                                _searchCtrl.clear();
-                                              });
-                                              _sheetController.animateTo(
-                                                _safeMinSize, 
-                                                duration: const Duration(milliseconds: 350), 
-                                                curve: Curves.easeOutExpo,
-                                              );
-                                            } 
-                                            // STATE 3: Already Closed
-                                            else {
-                                              rebuildState(() {
-                                                _isSearchExpanded = false;
-                                                _searchCtrl.clear();
-                                              });
-                                              widget.onSearchModeChanged(false);
-                                              final provider = Provider.of<MapProvider>(context, listen: false);
-                                              provider.clearSearchSession(context);
-                                              widget.onBackToPreviousTab(); 
-                                            }
-                                          }
-                                        },
-                                        child: Container(
-                                          alignment: Alignment.center,
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                          child: const Text(
-                                            'Cancel',
-                                            style: TextStyle(
-                                              color: Color(0xFF00E5FF),
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    }
-
-                                    // 🚀 MOBILE IDLE: Sleek Profile & Settings avatar button embedded in bottom sheet header
-                                    final currentUser = Supabase.instance.client.auth.currentUser;
-                                    return GestureDetector(
-                                      onTap: () {
-                                        openAccountSettings(context);
-                                      },
-                                      child: Container(
-                                        width: 32,
-                                        height: 32,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: isDark
-                                              ? const Color(0xFF00E5FF).withValues(alpha: 0.15)
-                                              : const Color(0xFF007AFF).withValues(alpha: 0.10),
-                                          border: Border.all(
-                                            color: isDark
-                                                ? const Color(0xFF00E5FF).withValues(alpha: 0.35)
-                                                : const Color(0xFF007AFF).withValues(alpha: 0.25),
-                                            width: 1.5,
-                                          ),
-                                        ),
-                                        child: Center(
-                                          child: Icon(
-                                            currentUser != null
-                                                ? Icons.person_rounded
-                                                : Icons.person_outline_rounded,
-                                            size: 18,
-                                            color: isDark
-                                                ? const Color(0xFF00E5FF)
-                                                : const Color(0xFF007AFF),
-                                          ),
-                                        ),
+                            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                              valueListenable: _searchCtrl,
+                              builder: (context, value, _) {
+                                if (value.text.isEmpty) return const SizedBox.shrink();
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 6),
+                                  child: RidelBounceButton(
+                                    onTap: () {
+                                      AppHaptics.lightImpact();
+                                      _searchCtrl.clear();
+                                      rebuildState(() {});
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? Colors.white30
+                                            : Colors.black26,
+                                        shape: BoxShape.circle,
                                       ),
-                                    );
-                                  },
-                                ),
-                              ],
-                            ],
+                                      child: Icon(
+                                        Icons.close,
+                                        size: 12,
+                                        color: isDark
+                                            ? Colors.black87
+                                            : Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                           ),
+                          onSubmitted: (value) async {
+                            FocusScope.of(context).unfocus();
+                            final query = value.trim();
+                            if (query.isEmpty) return;
+
+                            List<PlaceModel> suggestions =
+                                List.from(_searchResults);
+
+                            if (suggestions.isEmpty) {
+                              final globalLoc =
+                                  Provider.of<GlobalLocationService>(context,
+                                      listen: false);
+                              final pos = globalLoc.currentPosition;
+                              final latLng = pos != null
+                                  ? LatLng(pos.latitude, pos.longitude)
+                                  : null;
+                              suggestions = await MasterSearchService()
+                                  .searchPlaces(query, userLocation: latLng);
+                            }
+
+                            if (!mounted) return;
+
+                            if (suggestions.isNotEmpty) {
+                              final topSuggestion = suggestions.first;
+                              AppHaptics.selectionClick();
+                              await _selectPlaceFromList(topSuggestion);
+                            } else {
+                              ToastService.showInfo(
+                                  context, "No places found for '$query'");
+                            }
+                          },
                         ),
-                        onSubmitted: (value) async {
-                          FocusScope.of(context).unfocus();
-                          final query = value.trim();
-                          if (query.isEmpty) return;
-
-                          List<PlaceModel> suggestions =
-                              List.from(_searchResults);
-
-                          if (suggestions.isEmpty) {
-                            final globalLoc =
-                                Provider.of<GlobalLocationService>(context,
-                                    listen: false);
-                            final pos = globalLoc.currentPosition;
-                            final latLng = pos != null
-                                ? LatLng(pos.latitude, pos.longitude)
-                                : null;
-                            suggestions = await MasterSearchService()
-                                .searchPlaces(query, userLocation: latLng);
-                          }
-
-                          if (!mounted) return;
-
-                          if (suggestions.isNotEmpty) {
-                            final topSuggestion = suggestions.first;
-                            AppHaptics.selectionClick();
-                            await _selectPlaceFromList(topSuggestion);
-                          } else {
-                            ToastService.showInfo(
-                                context, "No places found for '$query'");
-                          }
-                        },
                       ),
                     ),
-                  ),
+
+                    // 🎤 Mic Button when search query is empty
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _searchCtrl,
+                      builder: (context, value, _) {
+                        if (value.text.isNotEmpty) return const SizedBox.shrink();
+                        return UniversalMicButton(
+                          isDark: isDark,
+                          onTextRecognized: (text) => _searchCtrl.text = text,
+                        );
+                      },
+                    ),
+
+                    // 👤 Independent Profile Avatar / Cancel Button (NEVER triggers TextField.onTap!)
+                    if (!isDesktop) ...[
+                      const SizedBox(width: 8),
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: _searchCtrl,
+                        builder: (context, value, _) {
+                          final isSearching =
+                              _searchFocus.hasFocus || _isSearchExpanded || value.text.isNotEmpty;
+
+                          if (isSearching) {
+                            return GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () {
+                                AppHaptics.selectionClick();
+                                FocusScope.of(context).unfocus(); // Always kill keyboard
+
+                                if (_sheetController.isAttached) {
+                                  final currentSize = _sheetController.size;
+                                  if (currentSize > _safeMidSize + 0.05) {
+                                    rebuildState(() {
+                                      _isSearchExpanded = false;
+                                      _searchCtrl.clear();
+                                    });
+                                    _sheetController.animateTo(
+                                      _safeMidSize, 
+                                      duration: const Duration(milliseconds: 350), 
+                                      curve: Curves.easeOutExpo,
+                                    );
+                                  } else if (currentSize > _safeMinSize + 0.05) {
+                                    rebuildState(() {
+                                      _isSearchExpanded = false;
+                                      _searchCtrl.clear();
+                                    });
+                                    _sheetController.animateTo(
+                                      _safeMinSize, 
+                                      duration: const Duration(milliseconds: 350), 
+                                      curve: Curves.easeOutExpo,
+                                    );
+                                  } else {
+                                    rebuildState(() {
+                                      _isSearchExpanded = false;
+                                      _searchCtrl.clear();
+                                    });
+                                    widget.onSearchModeChanged(false);
+                                    final provider = Provider.of<MapProvider>(context, listen: false);
+                                    provider.clearSearchSession(context);
+                                    widget.onBackToPreviousTab(); 
+                                  }
+                                }
+                              },
+                              child: Container(
+                                alignment: Alignment.center,
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                child: const Text(
+                                  'Cancel',
+                                  style: TextStyle(
+                                    color: Color(0xFF00E5FF),
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+
+                          // 🚀 IDLE PROFILE AVATAR: Sits cleanly in the row outside the TextField
+                          final currentUser = Supabase.instance.client.auth.currentUser;
+                          return GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              AppHaptics.lightImpact();
+                              FocusScope.of(context).unfocus();
+                              openAccountSettings(context);
+                            },
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isDark
+                                    ? const Color(0xFF00E5FF).withValues(alpha: 0.15)
+                                    : const Color(0xFF007AFF).withValues(alpha: 0.10),
+                                border: Border.all(
+                                  color: isDark
+                                      ? const Color(0xFF00E5FF).withValues(alpha: 0.35)
+                                      : const Color(0xFF007AFF).withValues(alpha: 0.25),
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  currentUser != null
+                                      ? Icons.person_rounded
+                                      : Icons.person_outline_rounded,
+                                  size: 18,
+                                  color: isDark
+                                      ? const Color(0xFF00E5FF)
+                                      : const Color(0xFF007AFF),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),
