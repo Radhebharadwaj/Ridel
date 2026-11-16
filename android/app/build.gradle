@@ -8,9 +8,23 @@ plugins {
     id "com.google.gms.google-services" // Firebase Services
 }
 
-// NOTE: Flutter properties ko define karne ka safe tareeka
-def flutterVersionCode = project.hasProperty('flutterVersionCode') ? project.property('flutterVersionCode').toInteger() : 1
-def flutterVersionName = project.hasProperty('flutterVersionName') ? project.property('flutterVersionName') : '1.0.0'
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+if (flutterVersionCode == null) {
+    flutterVersionCode = '1'
+}
+
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+if (flutterVersionName == null) {
+    flutterVersionName = '1.0.0'
+}
 
 android {
     repositories {
@@ -38,7 +52,7 @@ android {
         applicationId "in.ridel"
         minSdkVersion flutter.minSdkVersion
         targetSdkVersion flutter.targetSdkVersion.toInteger()
-        versionCode flutterVersionCode
+        versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }
 
