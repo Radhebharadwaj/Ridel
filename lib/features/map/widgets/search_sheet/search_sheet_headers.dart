@@ -1086,9 +1086,9 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                 child: Row(
                   children: [
                     Icon(
-                      CupertinoIcons.search,
+                      Icons.search_rounded,
                       color: isDark ? Colors.white54 : Colors.black54,
-                      size: 20,
+                      size: 22,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -1177,65 +1177,99 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
                                 ValueListenableBuilder(
                                   valueListenable: _searchCtrl,
                                   builder: (context, value, child) {
+                                    final isSearching = _searchFocus.hasFocus || _isSearchExpanded || value.text.isNotEmpty;
 
+                                    if (isSearching) {
+                                      return GestureDetector(
+                                        onTap: () {
+                                          AppHaptics.selectionClick();
+                                          FocusScope.of(context).unfocus(); // Always kill keyboard
+
+                                          if (_sheetController.isAttached) {
+                                            final currentSize = _sheetController.size;
+
+                                            // STATE 1: If Expanded -> Drop to Half
+                                            if (currentSize > _safeMidSize + 0.05) {
+                                              rebuildState(() {
+                                                _isSearchExpanded = false;
+                                                _searchCtrl.clear();
+                                              });
+                                              _sheetController.animateTo(
+                                                _safeMidSize, 
+                                                duration: const Duration(milliseconds: 350), 
+                                                curve: Curves.easeOutExpo,
+                                              );
+                                            } 
+                                            // STATE 2: If Half-Open -> Drop to Fully Closed
+                                            else if (currentSize > _safeMinSize + 0.05) {
+                                              rebuildState(() {
+                                                _isSearchExpanded = false;
+                                                _searchCtrl.clear();
+                                              });
+                                              _sheetController.animateTo(
+                                                _safeMinSize, 
+                                                duration: const Duration(milliseconds: 350), 
+                                                curve: Curves.easeOutExpo,
+                                              );
+                                            } 
+                                            // STATE 3: Already Closed
+                                            else {
+                                              rebuildState(() {
+                                                _isSearchExpanded = false;
+                                                _searchCtrl.clear();
+                                              });
+                                              widget.onSearchModeChanged(false);
+                                              final provider = Provider.of<MapProvider>(context, listen: false);
+                                              provider.clearSearchSession(context);
+                                              widget.onBackToPreviousTab(); 
+                                            }
+                                          }
+                                        },
+                                        child: Container(
+                                          alignment: Alignment.center,
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                          child: const Text(
+                                            'Cancel',
+                                            style: TextStyle(
+                                              color: Color(0xFF00E5FF),
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }
+
+                                    // 🚀 MOBILE IDLE: Sleek Profile & Settings avatar button embedded in bottom sheet header
+                                    final currentUser = Supabase.instance.client.auth.currentUser;
                                     return GestureDetector(
                                       onTap: () {
-                                        AppHaptics.selectionClick();
-                                        FocusScope.of(context).unfocus(); // Always kill keyboard
-
-                                        if (_sheetController.isAttached) {
-                                          final currentSize = _sheetController.size;
-
-                                          // STATE 1: If Expanded -> Drop to Half
-                                          if (currentSize > _safeMidSize + 0.05) {
-                                            rebuildState(() {
-                                              _isSearchExpanded = false;
-                                              _searchCtrl.clear();
-                                            });
-                                            _sheetController.animateTo(
-                                              _safeMidSize, 
-                                              duration: const Duration(milliseconds: 400), 
-                                              curve: Curves.easeOutExpo,
-                                            );
-                                          } 
-                                          // STATE 2: If Half-Open -> Drop to Fully Closed
-                                          else if (currentSize > _safeMinSize + 0.05) {
-                                            rebuildState(() {
-                                              _isSearchExpanded = false;
-                                              _searchCtrl.clear();
-                                            });
-                                            _sheetController.animateTo(
-                                              _safeMinSize, 
-                                              duration: const Duration(milliseconds: 400), 
-                                              curve: Curves.easeOutExpo,
-                                            );
-                                          } 
-                                          // STATE 3: Already Closed -> EXIT TO PREVIOUS SCREEN (Back Button)
-                                          else {
-                                            rebuildState(() {
-                                              _isSearchExpanded = false;
-                                              _searchCtrl.clear();
-                                            });
-                                            
-                                            // Reset map search modes
-                                            widget.onSearchModeChanged(false);
-                                            final provider = Provider.of<MapProvider>(context, listen: false);
-                                            provider.clearSearchSession(context);
-                                            
-                                            // Trigger the back/exit callback
-                                            widget.onBackToPreviousTab(); 
-                                          }
-                                        }
+                                        openAccountSettings(context);
                                       },
                                       child: Container(
-                                        alignment: Alignment.center,
-                                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                                        child: const Text(
-                                          'Cancel',
-                                          style: TextStyle(
-                                            color: Color(0xFF0A84FF),
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
+                                        width: 32,
+                                        height: 32,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: isDark
+                                              ? const Color(0xFF00E5FF).withValues(alpha: 0.15)
+                                              : const Color(0xFF007AFF).withValues(alpha: 0.10),
+                                          border: Border.all(
+                                            color: isDark
+                                                ? const Color(0xFF00E5FF).withValues(alpha: 0.35)
+                                                : const Color(0xFF007AFF).withValues(alpha: 0.25),
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                        child: Center(
+                                          child: Icon(
+                                            currentUser != null
+                                                ? Icons.person_rounded
+                                                : Icons.person_outline_rounded,
+                                            size: 18,
+                                            color: isDark
+                                                ? const Color(0xFF00E5FF)
+                                                : const Color(0xFF007AFF),
                                           ),
                                         ),
                                       ),

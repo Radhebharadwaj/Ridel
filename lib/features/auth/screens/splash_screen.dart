@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:ridel/layout/main_layout.dart';
-import 'package:ridel/features/auth/screens/login_screen.dart';
 import 'package:ridel/features/auth/services/auth_service.dart';
 
 class SplashScreen extends StatefulWidget {

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -96,7 +95,7 @@ class _AnimatedMapPinState extends State<AnimatedMapPin>
               ],
             ),
             child: const Icon(
-              CupertinoIcons.location_solid,
+              Icons.location_on_rounded,
               color: Colors.white,
               size: 25,
             ),
@@ -303,11 +302,11 @@ class SavedPlacesRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SavedPlaceChip(
-          icon: CupertinoIcons.house_fill,
+          icon: Icons.home_rounded,
           label: 'Home',
           subtitle: home?.address,
           isDark: isDark,
-          iconColor: CupertinoColors.systemBlue,
+          iconColor: const Color(0xFF00E5FF),
           hasValue: home != null,
           onTap: () async {
             if (home != null) {
@@ -330,11 +329,11 @@ class SavedPlacesRow extends StatelessWidget {
         ),
         const SizedBox(width: 24.0),
         _SavedPlaceChip(
-          icon: CupertinoIcons.briefcase_fill,
+          icon: Icons.work_rounded,
           label: 'Work',
           subtitle: work?.address,
           isDark: isDark,
-          iconColor: CupertinoColors.systemBlue,
+          iconColor: const Color(0xFF00E5FF),
           hasValue: work != null,
           onTap: () async {
             if (work != null) {
@@ -356,10 +355,10 @@ class SavedPlacesRow extends StatelessWidget {
         ),
         const SizedBox(width: 24.0),
         _SavedPlaceChip(
-          icon: CupertinoIcons.add,
+          icon: Icons.add_rounded,
           label: 'Add Place',
           isDark: isDark,
-          iconColor: CupertinoColors.systemBlue,
+          iconColor: const Color(0xFF00E5FF),
           hasValue: false,
           onTap: () {
             pickerController.startSelection('custom');
@@ -403,9 +402,9 @@ class SavedPlacesRow extends StatelessWidget {
               child: Row(
                 children: [
                   const Icon(
-                    CupertinoIcons.location_solid,
+                    Icons.location_on_rounded,
                     size: 18,
-                    color: Color(0xFF0A84FF),
+                    color: Color(0xFF00E5FF),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -452,7 +451,7 @@ class SavedPlacesRow extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    CupertinoIcons.move,
+                    Icons.open_with_rounded,
                     size: 14,
                     color: isDark ? Colors.white38 : Colors.black38,
                   ),
@@ -577,8 +576,8 @@ class SavedPlacesRow extends StatelessWidget {
     final place = type == 'home' ? home : work;
     final label = type == 'home' ? 'Home' : 'Work';
     final icon = type == 'home'
-        ? CupertinoIcons.house_fill
-        : CupertinoIcons.briefcase_fill;
+        ? Icons.home_rounded
+        : Icons.work_rounded;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -690,8 +689,8 @@ class SavedPlacesRow extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(CupertinoIcons.delete,
-                        color: Color(0xFFFF3B30), size: 16),
+                    const Icon(Icons.delete_outline_rounded,
+                        color: Color(0xFFFF3B30), size: 18),
                     const SizedBox(width: 6),
                     Text(
                       'Delete',

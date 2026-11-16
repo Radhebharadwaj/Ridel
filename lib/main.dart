@@ -16,7 +16,6 @@ import 'package:ridel/core/config/app_config.dart';
 import 'package:ridel/core/providers/app_navigation_provider.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:ridel/layout/main_layout.dart';
-import 'package:ridel/features/auth/screens/login_screen.dart';
 import 'package:ridel/core/utils/toast_service.dart';
 import 'package:ridel/core/widgets/app_gate_overlay.dart';
 import 'package:shared_preferences/shared_preferences.dart';

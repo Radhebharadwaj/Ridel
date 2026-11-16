@@ -31,7 +31,6 @@ import 'package:ridel/features/map/services/place_api_services.dart';
 import 'package:ridel/features/map/services/route_visualizer.dart';
 import 'package:ridel/features/map/services/route_engine_service.dart';
 
-import 'package:ridel/features/map/widgets/quick_action_buttons.dart';
 import 'package:ridel/core/utils/route_utils.dart';
 
 // 🚀 IMPORT YOUR NOTIFICATION SERVICE HERE
@@ -41,6 +40,7 @@ import 'package:ridel/core/utils/toast_service.dart';
 // 🏠 SAVED PLACES LOCATION PICKER
 import 'saved_places/location_picker_sheet.dart';
 import 'saved_places/places_repository.dart' as saved;
+import 'package:ridel/layout/account_settings_sheet.dart';
 
 // YE DONO FILES ISI KA HISSA HAIN (Do not change structure)
 part 'search_sheet_headers.dart';
@@ -854,7 +854,7 @@ class _MapSearchSheetState extends State<MapSearchSheet>
     });
   }
 
-  void _openDirectionsView() {
+  void openDirectionsView() {
     AppHaptics.mediumImpact();
     setState(() {
       _showDirections = true;

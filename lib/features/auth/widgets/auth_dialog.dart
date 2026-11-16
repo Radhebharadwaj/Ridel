@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -22,7 +21,7 @@ Future<void> showRidelAuthDialog(BuildContext context) {
     barrierColor: Colors.black.withValues(alpha: 0.65),
     transitionDuration: const Duration(milliseconds: 320),
     pageBuilder: (context, anim1, anim2) {
-      final content = const Center(
+      const content = Center(
         child: SingleChildScrollView(
           padding: EdgeInsets.all(24),
           child: Material(

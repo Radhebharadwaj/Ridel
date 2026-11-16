@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -495,7 +494,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white.withOpacity(0.87) : Colors.black87,
+                        color: isDark ? Colors.white.withValues(alpha: 0.87) : Colors.black87,
                       ),
                     ),
                   ],
@@ -672,7 +671,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
           ),
           Switch.adaptive(
             value: mapProvider.is3DMode,
-            activeColor: cyanAccent,
+            activeThumbColor: cyanAccent,
             onChanged: (val) {
               AppHaptics.selectionClick();
               mapProvider.toggle3DView();
@@ -814,9 +813,9 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if (place.address != null && place.address!.isNotEmpty)
+                      if (place.address.isNotEmpty)
                         Text(
-                          place.address!,
+                          place.address,
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             color: isDark ? Colors.white38 : Colors.black45,

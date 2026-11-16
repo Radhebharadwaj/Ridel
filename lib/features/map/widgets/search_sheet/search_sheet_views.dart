@@ -45,9 +45,6 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
         (_isSearchExpanded || isFocused || isEditingHistory) &&
         isEmpty;
 
-
-    final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
             child: AnimatedCrossFade(
@@ -80,33 +77,6 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                     ? _buildTransportModesRow(context, provider, isDark)
                     : _buildDefaultQuickActionsRow(context, isDark),
               ),
-            ),
-          if (showQuickActions)
-            Column(
-              children: [
-                QuickActionButtons(
-                  isDark: isDark,
-                  onRequestSearch: (actionType) {
-                    _selectedActionType = actionType;
-                    _searchFocus.requestFocus();
-                  },
-                  onDropPinTapped: () {
-                    _searchFocus.unfocus();
-                    if (_sheetController.isAttached) {
-                      _safeAnimateSheet(0.1);
-                    }
-                  },
-                  onNavigateReady: (destination) {
-                    AppHaptics.heavyImpact();
-                    _searchFocus.unfocus();
-                    rebuildState(() {
-                      _selectedPlace = destination;
-                    });
-                    _openDirectionsView();
-                  },
-                ),
-                const SizedBox(height: 12),
-              ],
             ),
           if (!isSelected && !isFocused && isEmpty)
             Container(
@@ -150,6 +120,24 @@ extension _SearchSheetViewsExt on _MapSearchSheetState {
                           ).markCurrentPosition(context),
                         );
                         _showPremiumNotification('Your current location has been pinned on the map.');
+                    },
+                  ),
+                  Divider(height: 1, color: Colors.grey.withValues(alpha: 0.2), indent: 50),
+                  ListTile(
+                    leading: const Icon(Icons.person_outline_rounded, color: Colors.blueAccent),
+                    title: const Text('Account & Settings', style: TextStyle(fontWeight: FontWeight.w500)),
+                    subtitle: Text(
+                      Supabase.instance.client.auth.currentUser != null
+                          ? (Supabase.instance.client.auth.currentUser?.email ?? 'Logged In')
+                          : 'Sign In / Preferences',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white54 : Colors.black54,
+                      ),
+                    ),
+                    trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+                    onTap: () {
+                      openAccountSettings(context);
                     },
                   ),
                 ],
@@ -666,7 +654,7 @@ Widget _buildDefaultQuickActionsRow(BuildContext context, bool isDark) {
               // CAR
               _buildGlassyTransportMode(
                 context,
-                icon: CupertinoIcons.car_detailed,
+                icon: Icons.directions_car_rounded,
                 label: 'Car',
                 isActive: provider.currentNavMode == 'driving' && provider.currentRouteResult != null,
                 onTap: () async {
