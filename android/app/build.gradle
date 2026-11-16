@@ -36,7 +36,7 @@ android {
 
     defaultConfig {
         applicationId "in.ridel"
-        minSdkVersion flutter.minSdkVersion // 🚀 Fixed for Firebase & OLA SDK
+        minSdkVersion flutter.minSdkVersion
         targetSdkVersion flutter.targetSdkVersion.toInteger()
         versionCode flutterVersionCode
         versionName flutterVersionName
