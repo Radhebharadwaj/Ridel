@@ -421,7 +421,7 @@ class _DesktopMapSidebarState extends State<DesktopMapSidebar> {
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white87 : Colors.black87,
+                        color: isDark ? Colors.white.withOpacity(0.87) : Colors.black87,
                       ),
                     ),
                   ],

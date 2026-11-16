@@ -30,6 +30,15 @@ class ThemeService with WidgetsBindingObserver {
     _updateThemeMode();
   }
 
+  // Toggle between dark and light theme
+  static void toggleTheme() {
+    if (themeNotifier.value == ThemeMode.dark) {
+      switchTheme(AppThemeMode.light);
+    } else {
+      switchTheme(AppThemeMode.dark);
+    }
+  }
+
   static Future<void> _updateThemeMode() async {
     if (appThemeNotifier.value == AppThemeMode.autoTime) {
       final now = DateTime.now();

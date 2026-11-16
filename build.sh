@@ -24,3 +24,4 @@ echo "🛠️ Building Flutter Web (Release)..."
 ./flutter/bin/flutter build web --release
 
 echo "✅ Build completed successfully! Output directory: build/web"
+
