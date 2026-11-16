@@ -2665,8 +2665,10 @@ class MapProvider extends ChangeNotifier {
     try {
       final locService = Provider.of<GlobalLocationService>(context, listen: false);
       LatLng? searchCenter;
-      if (currentCameraPosition != null) {
-        searchCenter = currentCameraPosition!.target;
+      if (controller?.cameraPosition != null) {
+        searchCenter = controller!.cameraPosition!.target;
+      } else if (currentLocation != null) {
+        searchCenter = currentLocation;
       } else if (locService.currentPosition != null) {
         searchCenter = LatLng(
           locService.currentPosition!.latitude,
@@ -2702,7 +2704,7 @@ class MapProvider extends ChangeNotifier {
       final circles = <Circle>[];
       final symbols = <Symbol>[];
 
-      final String colorHex = '#${(color.toARGB32() & 0x00FFFFFF).toRadixString(16).padLeft(6, '0')}';
+      final String colorHex = '#${(color.value & 0x00FFFFFF).toRadixString(16).padLeft(6, '0')}';
       final bool isLightMode = _currentTheme == MapThemeType.light;
 
       for (final place in places) {
