@@ -1,5 +1,3 @@
-import 'package:ridel/core/widgets/adaptive_blur.dart';
-import 'package:ridel/core/utils/responsive.dart';
 part of 'map_search_sheet.dart';
 
 // 🚀 FIX: Named the extension to fix method visibility bugs in the Dart analyzer

@@ -14,10 +14,49 @@ class MapLayerController {
   final Map<String, bool> _layerVisibilityCache = {};
 
   List<String> _poiLayers = [];
+  List<String> _labelLayers = [];
   List<String> _transitLayers = [];
   List<String> _trafficLayers = [];
   List<String> _buildingLayers = [];
   List<String> _fadeLayers = [];
+
+  List<String> get poiLayers => _poiLayers;
+  List<String> get labelLayers => _labelLayers;
+
+  static bool isPoiLayerId(String layerId) {
+    final lower = layerId.toLowerCase();
+    return lower.contains('poi') ||
+           lower.contains('shop') ||
+           lower.contains('amenity') ||
+           lower.contains('restaurant') ||
+           lower.contains('food') ||
+           lower.contains('hotel') ||
+           lower.contains('hospital') ||
+           lower.contains('bank') ||
+           lower.contains('atm') ||
+           lower.contains('fuel') ||
+           lower.contains('commercial') ||
+           lower.contains('retail') ||
+           lower.contains('entertainment') ||
+           lower.contains('leisure') ||
+           lower.contains('tourism') ||
+           lower.contains('attraction') ||
+           lower.contains('landmark') ||
+           lower == 'building_name' ||
+           lower == 'landuse_apartment_name' ||
+           lower.contains('hyperchargers');
+  }
+
+  static bool isLabelLayerId(String layerId) {
+    final lower = layerId.toLowerCase();
+    if (isPoiLayerId(layerId)) return false;
+    return lower.contains('label') ||
+           lower.contains('name') ||
+           lower.contains('shield') ||
+           lower.contains('place') ||
+           lower == 'state' ||
+           lower.startsWith('country');
+  }
 
   static const String _pinSourceId = "apple-premium-pin-source";
 
@@ -48,6 +87,7 @@ class MapLayerController {
     availableLayers.clear();
     _layerVisibilityCache.clear();
     _poiLayers.clear();
+    _labelLayers.clear();
     _transitLayers.clear();
     _trafficLayers.clear();
     _buildingLayers.clear();
@@ -56,7 +96,7 @@ class MapLayerController {
     _map = null;
   }
 
-  Future<void> initLayerSystem() async {
+  Future<void> initLayerSystem([MapModeController? mode]) async {
     if (_map == null) return;
     try {
       final layers = await _map!.getLayerIds();
@@ -67,7 +107,10 @@ class MapLayerController {
         }
 
         _poiLayers = availableLayers
-            .where((l) => l.startsWith('poi') || l.contains('place'))
+            .where((l) => isPoiLayerId(l))
+            .toList();
+        _labelLayers = availableLayers
+            .where((l) => isLabelLayerId(l))
             .toList();
         _transitLayers = availableLayers
             .where((l) => l.contains('transit') || l.contains('railway'))
@@ -79,12 +122,15 @@ class MapLayerController {
             .toList();
         _fadeLayers = availableLayers
             .where((l) =>
-                l.contains('poi') ||
+                isPoiLayerId(l) ||
                 (l.contains('label') && !l.contains('major')) ||
                 l.contains('transit'))
             .toList();
       }
       await toggle3DVisibility(false);
+      if (mode != null) {
+        await applyCustomToggles(mode);
+      }
     } catch (e) {
       debugPrint("Error loading style layers: $e");
     }

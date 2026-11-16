@@ -1,4 +1,3 @@
-import 'package:ridel/core/widgets/adaptive_blur.dart';
 part of 'map_search_sheet.dart';
 
 extension _PremiumDetailsExt on _MapSearchSheetState {

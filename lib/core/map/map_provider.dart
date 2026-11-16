@@ -16,6 +16,7 @@ import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/services/place_service.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/features/map/map_engine/map_engine.dart';
+import 'package:ridel/features/map/map_engine/controllers/map_layer_controller.dart';
 import 'map_style_interceptor.dart';
 import 'package:ridel/features/map/models/place_model.dart';
 import 'package:ridel/features/map/services/master_search_service.dart';
@@ -2350,17 +2351,44 @@ class MapProvider extends ChangeNotifier {
   bool get showPOIs => _showPOIs;
 
   Future<void> toggleLabels(bool value) async {
-    if (_showLabels == value) return;
     _showLabels = value;
     notifyListeners();
-    await _autoPushMapStyle();
+    if (engine.layers != null && engine.layers!.labelLayers.isNotEmpty) {
+      for (final layer in engine.layers!.labelLayers) {
+        await engine.layers!.setLayerVisibleSafe(layer, value);
+      }
+    } else if (controller != null) {
+      try {
+        final allLayers = await controller!.getLayerIds();
+        for (final l in allLayers) {
+          final id = l.toString();
+          if (MapLayerController.isLabelLayerId(id)) {
+            await controller!.setLayerVisibility(id, value);
+          }
+        }
+      } catch (_) {}
+    }
   }
 
   Future<void> togglePOIs(bool value) async {
-    if (_showPOIs == value) return;
     _showPOIs = value;
+    engine.mode.showPOIs.value = value;
     notifyListeners();
-    await _autoPushMapStyle();
+    if (engine.layers != null && engine.layers!.poiLayers.isNotEmpty) {
+      for (final layer in engine.layers!.poiLayers) {
+        await engine.layers!.setLayerVisibleSafe(layer, value);
+      }
+    } else if (controller != null) {
+      try {
+        final allLayers = await controller!.getLayerIds();
+        for (final l in allLayers) {
+          final id = l.toString();
+          if (MapLayerController.isPoiLayerId(id)) {
+            await controller!.setLayerVisibility(id, value);
+          }
+        }
+      } catch (_) {}
+    }
   }
 
   MapUIState get currentUIState => engine.mapUIState.value;

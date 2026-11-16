@@ -21,7 +21,7 @@ class MapModeController {
   // Detail toggles
   final ValueNotifier<bool> showTransitLayer = ValueNotifier(false);
   final ValueNotifier<bool> showTraffic = ValueNotifier(false);
-  final ValueNotifier<bool> showPOIs = ValueNotifier(true);
+  final ValueNotifier<bool> showPOIs = ValueNotifier(false);
 
   // Premium Transit States
   final ValueNotifier<bool> showTransitStations = ValueNotifier(true);

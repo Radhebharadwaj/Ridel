@@ -144,7 +144,7 @@ class MapEngine {
     try {
       // Textures (custom_pin, intermediate_pin, nav_puck, Arrow) are already
       // uploaded once in FullScreenMapPage.onStyleLoadedCallback.
-      await layers?.initLayerSystem();
+      await layers?.initLayerSystem(mode);
 
       _initGPS();
       camera

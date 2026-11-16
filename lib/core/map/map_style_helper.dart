@@ -25,19 +25,8 @@ class MapStyleHelper {
             
             layer['layout'] = layer['layout'] ?? <String, dynamic>{};
             
-            // TIER 1: NAVIGATION & TRANSIT ESSENTIALS -> LABELS BUCKET
-            // Exactly captures bus stops, metro/train stations, airports, and red/green/yellow traffic signals
-            final bool isNavEssential = id.contains('transit') || sourceLayer.contains('transit') || 
-                                        id.contains('bus') || id.contains('station') || 
-                                        id.contains('metro') || id.contains('subway') || 
-                                        id.contains('train') || id.contains('railway') || 
-                                        id.contains('aeroway') || id.contains('airport') || 
-                                        id.contains('traffic_signal') || id.contains('signal') || 
-                                        id.contains('traffic-light') || id.contains('stop_sign') || 
-                                        id.contains('yield');
-            
-            // TIER 2: COMMERCIAL & AMENITY POIS -> POIS BUCKET
-            // Strictly commercial, dining, retail, hospitality, medical, and entertainment venues
+            // TIER 1: COMMERCIAL & AMENITY POIS -> POIS BUCKET (Strictly decoupled from labels)
+            // Includes all shops, restaurants, commercial venues, building names, amenities, banks, hospitals
             final bool isCommercialPoi = id.contains('poi') || sourceLayer.contains('poi') || 
                                          id.contains('shop') || id.contains('amenity') || 
                                          id.contains('landmark') || id.contains('business') || 
@@ -48,14 +37,27 @@ class MapStyleHelper {
                                          id.contains('tourism') || id.contains('fuel') || 
                                          id.contains('bank') || id.contains('atm') || 
                                          id.contains('attraction') || id.contains('icon') || 
-                                         id.contains('marker');
+                                         id.contains('marker') ||
+                                         id == 'building_name' || sourceLayer == 'building' ||
+                                         id == 'landuse_apartment_name' || sourceLayer == 'landuse' ||
+                                         sourceLayer == 'hyperchargers';
+
+            // TIER 2: NAVIGATION & TRANSIT ESSENTIALS -> LABELS BUCKET
+            final bool isNavEssential = id.contains('transit') || sourceLayer.contains('transit') || 
+                                        id.contains('bus') || id.contains('station') || 
+                                        id.contains('metro') || id.contains('subway') || 
+                                        id.contains('train') || id.contains('railway') || 
+                                        id.contains('aeroway') || id.contains('airport') || 
+                                        id.contains('traffic_signal') || id.contains('signal') || 
+                                        id.contains('traffic-light') || id.contains('stop_sign') || 
+                                        id.contains('yield');
             
-            if (isNavEssential) {
-              layer['layout']['visibility'] = showLabels ? 'visible' : 'none';
-            } else if (isCommercialPoi) {
+            if (isCommercialPoi) {
               layer['layout']['visibility'] = showPOIs ? 'visible' : 'none';
+            } else if (isNavEssential) {
+              layer['layout']['visibility'] = showLabels ? 'visible' : 'none';
             } else {
-              // TIER 3: CATCH-ALL -> LABELS BUCKET (Street names, typography, area labels)
+              // TIER 3: ROAD LABELS & ADMINISTRATIVE GEOGRAPHY (Street names, cities, localities)
               layer['layout']['visibility'] = showLabels ? 'visible' : 'none';
             }
           }
@@ -148,6 +150,13 @@ class MapStyleHelper {
         final String type = layer['type']?.toString().toLowerCase() ?? '';
 
         if (id.contains('3d_model') || sourceLayer.contains('3d_model')) {
+          return [];
+        }
+
+        // Amputate known crashing / defective Ola layers to guarantee clean WebGL rendering
+        if (id.contains('transit_rail') || 
+            id.contains('hatching') || 
+            (id.contains('glow_casing') && !id.endsWith('-glow-casing'))) {
           return [];
         }
 
@@ -315,8 +324,61 @@ class MapStyleHelper {
           if (!layer.containsKey('layout') || layer['layout'] is! Map) {
             layer['layout'] = <String, dynamic>{};
           }
-          layer['layout']['icon-optional'] = true;
-          layer['layout']['text-optional'] = true;
+          final Map<String, dynamic> layout = layer['layout'];
+          layout['icon-optional'] = true;
+          layout['text-optional'] = true;
+
+          // 🍏 APPLE MAPS ULTRA-PREMIUM POI & LABEL STYLING
+          final bool isPoi = id.contains('poi') || sourceLayer.contains('poi') || 
+                             id.contains('shop') || id.contains('amenity') || 
+                             id.contains('landmark') || id.contains('business') || 
+                             id.contains('restaurant') || id.contains('food') || 
+                             id.contains('hotel') || id.contains('hospital') || 
+                             id.contains('commercial') || id.contains('retail') || 
+                             id.contains('entertainment') || id.contains('leisure') || 
+                             id.contains('tourism') || id.contains('fuel') || 
+                             id.contains('bank') || id.contains('atm') || 
+                             id.contains('attraction') ||
+                             id == 'building_name' || sourceLayer == 'building' ||
+                             id == 'landuse_apartment_name' || sourceLayer == 'landuse' ||
+                             sourceLayer == 'hyperchargers';
+
+          if (isPoi) {
+            // 1. Minzoom: Elevate so minor shops never crowd city-level view (zooms 10-14)
+            final bool isMajorAnchor = id.contains('hospital') || id.contains('airport') || id.contains('station');
+            final double targetMinzoom = isMajorAnchor ? 14.5 : 16.0;
+            final dynamic currentMin = layer['minzoom'];
+            if (currentMin == null || (currentMin is num && currentMin < targetMinzoom)) {
+              layer['minzoom'] = targetMinzoom;
+            }
+
+            // 2. Decluttering: Strict Apple Maps collision control (NO overlapping text walls)
+            layout['text-allow-overlap'] = false;
+            layout['text-ignore-placement'] = false;
+            layout['icon-allow-overlap'] = false;
+            layout['icon-ignore-placement'] = false;
+            layout['text-padding'] = 10.0;
+            layout['text-max-width'] = 8.0;
+            layout['symbol-spacing'] = 250;
+            layout['text-size'] = <String, dynamic>{
+              "base": 1.0,
+              "stops": [
+                [15.5, 10.0],
+                [17.0, 11.5],
+                [19.0, 12.5]
+              ]
+            };
+
+            // 3. Apple Maps Typography: Refined Slate text with deep soft halo
+            if (!layer.containsKey('paint') || layer['paint'] is! Map) {
+              layer['paint'] = <String, dynamic>{};
+            }
+            final Map<String, dynamic> paint = layer['paint'];
+            paint['text-color'] = useDark ? '#94A3B8' : '#475569';
+            paint['text-halo-color'] = useDark ? 'rgba(11, 14, 20, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+            paint['text-halo-width'] = 1.5;
+            paint['text-halo-blur'] = 0.5;
+          }
         }
 
         return glowCasingLayer != null ? [glowCasingLayer, layer] : [layer];
@@ -361,7 +423,7 @@ class MapStyleHelper {
 
     final bool useDark = themeType != null ? (themeType == MapThemeType.dark) : isSystemDark;
     final String styleName = useDark ? "default-dark-standard" : "default-light-standard";
-    final String cacheKey = "ola_v400_appleplus_$styleName";
+    final String cacheKey = "ola_v503_apple_clean_$styleName";
 
     final prefs = await SharedPreferences.getInstance();
     

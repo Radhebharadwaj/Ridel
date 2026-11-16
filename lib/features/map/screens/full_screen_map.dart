@@ -462,8 +462,13 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
       final isDark = _currentTheme != null
           ? (_currentTheme == MapThemeType.dark)
           : isSystemDark;
-      final styleUrl = await MapStyleHelper.getOlaStyle(isSystemDark,
-          themeType: _currentTheme);
+      final mapProvider = Provider.of<MapProvider>(context, listen: false);
+      final styleUrl = await MapStyleHelper.getOlaStyle(
+        isSystemDark,
+        themeType: _currentTheme,
+        showLabels: mapProvider.showLabels,
+        showPOIs: mapProvider.showPOIs,
+      );
       
       // 🚀 THE CURE: Intercept and sterilize the style JSON over the network
       final curedJson = await MapStyleInterceptor.getCuredStyle(styleUrl);
