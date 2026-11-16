@@ -1104,7 +1104,7 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   ),
                 ),
 
-                if (MediaQuery.sizeOf(context).width < 800)
+                if (!isDesktop)
                   Positioned.fill(
                     child: RepaintBoundary(
                       child: NotificationListener<DraggableScrollableNotification>(
@@ -1126,7 +1126,10 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                             }
                           },
                           onBackToPreviousTab: () {
-                            Provider.of<AppNavigationProvider>(context, listen: false).goBack();
+                            if (context.mounted) {
+                              Provider.of<MapProvider>(context, listen: false)
+                                  .clearSearchSession(context);
+                            }
                           },
                         ),
                       ),
@@ -1393,21 +1396,9 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                   },
                   child: Builder(
                     builder: (context) {
-                      final content = Listener(
-                        behavior: HitTestBehavior.opaque,
-                        onPointerDown: (_) {},
-                        onPointerMove: (_) {},
-                        onPointerUp: (_) {},
-                        onPointerSignal: (_) {},
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {},
-                          onDoubleTap: () {},
-                          onScaleStart: (_) {},
-                          onScaleUpdate: (_) {},
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
+                      final content = Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                               // 🚀 THE RELOCATED COMPASS
                               Selector<MapProvider, MapLibreMapController?>(
                                 selector: (context, provider) =>
@@ -1504,10 +1495,8 @@ class _FullScreenMapPageState extends State<FullScreenMapPage>
                                 const DesktopZoomPill(),
                               ],
                             ],
-                          ),
-                        ),
-                      );
-                      return content;
+                          );
+                      return kIsWeb ? PointerInterceptor(child: content) : content;
                     },
                   ),
                 ),

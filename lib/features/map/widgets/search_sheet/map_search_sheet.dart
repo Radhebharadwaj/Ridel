@@ -24,7 +24,7 @@ import 'package:ridel/core/utils/app_shadows.dart';
 import 'package:ridel/core/utils/ridel_bounce_button.dart';
 import 'package:ridel/features/map/models/place_model.dart';
 import 'package:ridel/features/map/services/master_search_service.dart';
-import 'package:ridel/features/commute/shared/services/database_helper.dart';
+import 'package:ridel/core/services/database_helper.dart';
 import 'package:ridel/features/map/services/map_share_service.dart';
 import 'package:ridel/core/services/place_service.dart';
 import 'package:ridel/features/map/services/place_api_services.dart';

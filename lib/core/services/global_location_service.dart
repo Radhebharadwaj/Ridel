@@ -6,11 +6,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:http/http.dart' as http; // 🚀 NEW: For IP Fallback
 // Native geocoding removed, using Ola Maps.
-import 'package:ridel/features/profile/services/profile_repository.dart';
+import 'package:ridel/core/services/profile_repository.dart';
 import 'package:ridel/core/config/app_config.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // 🚀 FIX 3: SharedPreferences
 import 'package:ridel/core/services/weather_service.dart';
-import 'package:ridel/features/commute/shared/services/database_helper.dart';
+import 'package:ridel/core/services/database_helper.dart';
 
 class GlobalLocationService extends ChangeNotifier with WidgetsBindingObserver {
   // --- STATE VARIABLES ---

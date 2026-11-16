@@ -484,10 +484,7 @@ class DesktopZoomPill extends StatelessWidget {
         ? const Color(0xFF7CA1FF).withValues(alpha: 0.15)
         : Colors.white.withValues(alpha: 0.9);
 
-    final content = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {}, // Blocks stray taps
-      child: Container(
+    final content = Container(
         // OUTER: CLEAN SHADOWS MATCHING TOP PILL
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(50),
@@ -532,11 +529,10 @@ class DesktopZoomPill extends StatelessWidget {
                       onZoomStep: () {
                         final ctrl =
                             Provider.of<MapProvider>(context, listen: false)
-                                .controller; //[cite: 1]
-                        final z =
-                            ctrl?.cameraPosition?.zoom ?? 14.0; //[cite: 1]
-                        ctrl?.moveCamera(
-                            CameraUpdate.zoomTo(z + 0.06)); //[cite: 1]
+                                .controller;
+                        final z = ctrl?.cameraPosition?.zoom ?? 14.0;
+                        ctrl?.animateCamera(
+                            CameraUpdate.zoomTo((z + 1.0).clamp(3.0, 18.5)));
                       },
                     ),
                     // CRITICAL: NO DIVIDER HERE TO MATCH THE TOP PILL
@@ -546,11 +542,10 @@ class DesktopZoomPill extends StatelessWidget {
                       onZoomStep: () {
                         final ctrl =
                             Provider.of<MapProvider>(context, listen: false)
-                                .controller; //[cite: 1]
-                        final z =
-                            ctrl?.cameraPosition?.zoom ?? 14.0; //[cite: 1]
-                        ctrl?.moveCamera(
-                            CameraUpdate.zoomTo(z - 0.06)); //[cite: 1]
+                                .controller;
+                        final z = ctrl?.cameraPosition?.zoom ?? 14.0;
+                        ctrl?.animateCamera(
+                            CameraUpdate.zoomTo((z - 1.0).clamp(3.0, 18.5)));
                       },
                     ),
                   ],
@@ -558,7 +553,6 @@ class DesktopZoomPill extends StatelessWidget {
             ),
           ),
         ),
-      ),
     );
     return kIsWeb ? PointerInterceptor(child: content) : content; //[cite: 1]
   }

@@ -10,9 +10,9 @@ import 'package:ridel/core/services/global_location_service.dart';
 
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/widgets/ridel_sheet.dart';
-import 'package:ridel/features/profile/services/profile_repository.dart';
+import 'package:ridel/core/services/profile_repository.dart';
 import 'package:ridel/core/utils/toast_service.dart';
-import 'package:ridel/features/commute/shared/services/database_helper.dart';
+import 'package:ridel/core/services/database_helper.dart';
 import 'package:ridel/core/utils/location_guard.dart';
 import 'package:ridel/core/widgets/branded_loader.dart';
 

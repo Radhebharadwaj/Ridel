@@ -10,7 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
-import 'package:ridel/features/commute/shared/services/database_helper.dart';
+import 'package:ridel/core/services/database_helper.dart';
 import 'package:ridel/core/map/map_style_helper.dart';
 import 'package:ridel/core/services/global_location_service.dart';
 import 'package:ridel/core/services/place_service.dart';

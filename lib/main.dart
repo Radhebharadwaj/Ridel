@@ -30,9 +30,7 @@ import 'core/services/global_location_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/theme_service.dart';
 import 'core/theme/app_theme.dart';
-import 'features/commute/metro/map/metro_data_provider.dart';
-import 'features/commute/metro/services/metro_service.dart';
-import 'features/commute/shared/services/database_helper.dart';
+import 'core/services/database_helper.dart';
 import 'package:ridel/core/utils/app_haptics.dart';
 import 'package:ridel/core/widgets/ridel_sheet.dart';
 import 'package:ridel/features/auth/widgets/login_approval_sheet.dart';
@@ -205,13 +203,6 @@ Future<void> main() async {
       debugPrint("❌ Supabase Error: $e");
     }
 
-    // 2. Services that depend on Supabase being initialized
-    try {
-      MetroService().initialize();
-    } catch (e) {
-      debugPrint("❌ MetroService Error: $e");
-    }
-
     // 3. Defer Heavy Services to Unawaited Tasks
     unawaited(Future(() async {
       try {
@@ -250,7 +241,6 @@ Future<void> main() async {
       MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => MapProvider()),
-          ChangeNotifierProvider(create: (_) => MetroDataProvider()),
           ChangeNotifierProvider(
               create: (_) => GlobalLocationService()..autoDetectAndSetRegion()),
           ChangeNotifierProvider(create: (_) => AppNavigationProvider()),
