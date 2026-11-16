@@ -160,12 +160,12 @@ class _MapSearchSheetState extends State<MapSearchSheet>
   double _lastHapticExtent = -1.0;
 
   double get _safeMinSize {
-    if (!mounted) return 0.14;
+    if (!mounted) return 0.12;
     final screenHeight = MediaQuery.sizeOf(context).height;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    // Grab handle (22) + Search Pill (52) + breathing padding (22) + safe area
-    final double requiredPhysicalHeight = 96.0 + bottomInset;
-    return (requiredPhysicalHeight / screenHeight).clamp(0.11, 0.34);
+    // Sleek search pill (54) + floating margin (10) + safe area bottom inset
+    final double requiredPhysicalHeight = 66.0 + (bottomInset > 0 ? bottomInset : 8.0);
+    return (requiredPhysicalHeight / screenHeight).clamp(0.08, 0.22);
   }
 
   double get _safeMidSize => 0.46;
@@ -1275,37 +1275,47 @@ class _MapSearchSheetState extends State<MapSearchSheet>
       decoration: BoxDecoration(
         color: sheetBgColor,
         borderRadius: premiumRadius,
-        border: Border(top: BorderSide(color: sheetBorderColor, width: 1.0)),
+        border: Border.all(color: sheetBorderColor, width: 1.0),
       ),
       child: child,
     );
 
-    return AdaptiveBlur(sigmaX: 35.0, sigmaY: 35.0,
+    return AdaptiveBlur(
+      sigmaX: 30.0,
+      sigmaY: 30.0,
       child: innerContainer,
     );
   }
 
-  Widget _buildDynamicDragHandle(bool isDark) {
-    return MouseRegion(
-      onEnter: (_) => _pokeDash(),
-      onHover: (_) => _pokeDash(),
-      child: GestureDetector(
-        onTapDown: (_) => _pokeDash(),
-        onVerticalDragUpdate: _handleManualDragUpdate,
-        onVerticalDragEnd: _handleManualDragEnd,
-        behavior: HitTestBehavior.translucent,
-        child: Container(
-          height: 28,
-          alignment: Alignment.center,
-          color: Colors.transparent,
+  Widget _buildDynamicDragHandle(bool isDark, {double progress = 1.0}) {
+    final double handleHeight = (progress * 20.0).clamp(0.0, 20.0);
+    final double handleOpacity = (progress * 2.5).clamp(0.0, 1.0);
+
+    if (handleHeight <= 1.0) return const SizedBox.shrink();
+
+    return Opacity(
+      opacity: handleOpacity,
+      child: MouseRegion(
+        onEnter: (_) => _pokeDash(),
+        onHover: (_) => _pokeDash(),
+        child: GestureDetector(
+          onTapDown: (_) => _pokeDash(),
+          onVerticalDragUpdate: _handleManualDragUpdate,
+          onVerticalDragEnd: _handleManualDragEnd,
+          behavior: HitTestBehavior.translucent,
           child: Container(
-            width: 36,
-            height: 4.5,
-            decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.white.withValues(alpha: _isDashVisible ? 0.36 : 0.24)
-                  : Colors.black.withValues(alpha: _isDashVisible ? 0.24 : 0.16),
-              borderRadius: BorderRadius.circular(3),
+            height: handleHeight,
+            alignment: Alignment.center,
+            color: Colors.transparent,
+            child: Container(
+              width: 36,
+              height: 4.5,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: _isDashVisible ? 0.36 : 0.24)
+                    : Colors.black.withValues(alpha: _isDashVisible ? 0.24 : 0.16),
+                borderRadius: BorderRadius.circular(3),
+              ),
             ),
           ),
         ),
@@ -1497,48 +1507,73 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                     final bool isClosedMode = progress <= (minS + 0.05);
                                     final bool isFullyOpen = progress >= (maxS - 0.02);
 
+                                    // 🚀 Smooth interpolation factor t: 0.0 = floating pill, 1.0 = docked sheet
+                                    final double t = ((progress - minS) / (midS - minS)).clamp(0.0, 1.0);
+
                                     final double staticHeaderHeight = provider.isActiveNavigation
                                         ? (_isNavSheetExpanded ? navExpandedHeight - 40 : navCollapsedHeight)
-                                        : (_showDirections ? 190.0 : 70.0);
+                                        : (_showDirections ? 190.0 : 64.0);
 
-                                    final Color sheetBgColor =
-                                        RidelSurfaceTokens.sheetBackground(isDark);
+                                    final Color sheetBgColor = isDark
+                                        ? Color.lerp(const Color(0xFF141824).withValues(alpha: 0.94), RidelSurfaceTokens.sheetBackground(isDark), t)!
+                                        : Color.lerp(Colors.white.withValues(alpha: 0.96), RidelSurfaceTokens.sheetBackground(isDark), t)!;
 
-                                    const sheetRadius = BorderRadius.vertical(
-                                      top: Radius.circular(28.0),
+                                    final double topR = 28.0;
+                                    final double bottomR = isDesktop ? 0.0 : (1.0 - t) * 28.0;
+                                    final sheetRadius = BorderRadius.only(
+                                      topLeft: Radius.circular(topR),
+                                      topRight: Radius.circular(topR),
+                                      bottomLeft: Radius.circular(bottomR),
+                                      bottomRight: Radius.circular(bottomR),
                                     );
+
+                                    final double hMargin = isDesktop ? 0.0 : (1.0 - t) * 14.0;
+                                    final double bMargin = isDesktop ? 0.0 : (1.0 - t) * (MediaQuery.paddingOf(context).bottom > 0 ? 8.0 : 12.0);
+
                                     final sheetBody = Align(
                                       alignment: Alignment.bottomCenter,
                                       child: ConstrainedBox(
                                         constraints: BoxConstraints(
                                           maxWidth: isDesktop ? 640.0 : double.infinity,
                                         ),
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            borderRadius: sheetRadius,
-                                            boxShadow: RidelSurfaceTokens.sheetShadows(isDark),
-                                          ),
-                                          child: ClipRRect(
-                                            borderRadius: sheetRadius,
-                                            child: _buildGlassyBackground(
-                                              isDark: isDark,
-                                              sheetBgColor: sheetBgColor,
-                                              premiumRadius: sheetRadius,
-                                              sheetBorderColor: RidelSurfaceTokens.border(isDark),
-                                              child: Column(
-                                                children: [
-                                                  // 1. Clean iOS Grab Handle (always inside sheet, swipeable)
-                                                  _buildDynamicDragHandle(isDark),
+                                        child: Padding(
+                                          padding: EdgeInsets.fromLTRB(hMargin, 0, hMargin, bMargin),
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              borderRadius: sheetRadius,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: isDark
+                                                      ? Colors.black.withValues(alpha: 0.38)
+                                                      : Colors.black.withValues(alpha: 0.10),
+                                                  blurRadius: 18.0,
+                                                  offset: const Offset(0, 6),
+                                                ),
+                                              ],
+                                            ),
+                                            child: ClipRRect(
+                                              borderRadius: sheetRadius,
+                                              child: _buildGlassyBackground(
+                                                isDark: isDark,
+                                                sheetBgColor: sheetBgColor,
+                                                premiumRadius: sheetRadius,
+                                                sheetBorderColor: isDark
+                                                    ? Colors.white.withValues(alpha: 0.12)
+                                                    : Colors.black.withValues(alpha: 0.08),
+                                                child: Column(
+                                                  children: [
+                                                    // 1. Clean iOS Grab Handle (smoothly expands from pill mode)
+                                                    _buildDynamicDragHandle(isDark, progress: t),
 
-                                                  // 2. Fixed Header (Search Bar / Selected Place / Directions)
-                                                  SizedBox(
-                                                    height: staticHeaderHeight,
-                                                    child: _showDirections
-                                                        ? _buildDirectionsHeader(staticHeaderHeight, isDark)
-                                                        : (_selectedPlace != null
-                                                            ? _buildSelectedPlaceHeader(staticHeaderHeight, progress, isDark)
-                                                            : _buildSearchHeader(staticHeaderHeight, progress, isDark)),
-                                                  ),
+                                                    // 2. Fixed Header (Search Bar / Selected Place / Directions)
+                                                    SizedBox(
+                                                      height: staticHeaderHeight,
+                                                      child: _showDirections
+                                                          ? _buildDirectionsHeader(staticHeaderHeight, isDark)
+                                                          : (_selectedPlace != null
+                                                              ? _buildSelectedPlaceHeader(staticHeaderHeight, progress, isDark)
+                                                              : _buildSearchHeader(staticHeaderHeight, progress, isDark)),
+                                                    ),
 
                                                   // 3. Lightweight Scrollable Content (zero ShaderMask GPU saveLayer)
                                                   Expanded(
@@ -1584,7 +1619,8 @@ class _MapSearchSheetState extends State<MapSearchSheet>
                                           ),
                                         ),
                                       ),
-                                    );
+                                    ),
+                                  );
                                     return kIsWeb
                                         ? PointerInterceptor(child: sheetBody)
                                         : sheetBody;

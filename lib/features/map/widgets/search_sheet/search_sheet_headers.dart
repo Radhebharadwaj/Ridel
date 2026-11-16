@@ -1045,22 +1045,29 @@ extension _SearchSheetHeadersExt on _MapSearchSheetState {
 
   Widget _buildSearchHeader(double headerHeight, double progress, bool isDark) {
     final isDesktop = ResponsiveLayout.isDesktop(context);
+    final minS = _safeMinSize;
+    final midS = _safeMidSize;
+    final double t = ((progress - minS) / (midS - minS)).clamp(0.0, 1.0);
+
     final pillBaseColor = isDark
-        ? const Color(0xFF1D2330)
-        : const Color(0xFFF1F3F7);
+        ? Color.lerp(Colors.white.withValues(alpha: 0.04), const Color(0xFF1D2330), t)!
+        : Color.lerp(Colors.black.withValues(alpha: 0.03), const Color(0xFFF1F3F7), t)!;
     final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.06);
+        ? Color.lerp(Colors.transparent, Colors.white.withValues(alpha: 0.08), t)!
+        : Color.lerp(Colors.transparent, Colors.black.withValues(alpha: 0.06), t)!;
 
     const double pillRadius = 999.0;
+    final double hPadding = isDesktop ? 16.0 : (14.0 * t + 8.0 * (1.0 - t));
+    final double vPaddingTop = 4.0 * t + 6.0 * (1.0 - t);
+    final double vPaddingBottom = 10.0 * t + 6.0 * (1.0 - t);
 
     return ConstrainedBox(
       key: const ValueKey('search_header'),
-      constraints: const BoxConstraints(minHeight: 62.0),
+      constraints: const BoxConstraints(minHeight: 54.0),
       child: SizedBox(
         height: headerHeight,
         child: Padding(
-        padding: const EdgeInsets.fromLTRB(16.0, 4.0, 16.0, 10.0),
+        padding: EdgeInsets.fromLTRB(hPadding, vPaddingTop, hPadding, vPaddingBottom),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(pillRadius),
           child: RepaintBoundary(

@@ -108,8 +108,8 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
   }
 
   double? _dragHeight;
-  final double _compactHeight = 36;
-  final double _compactWidth = 76;
+  final double _compactHeight = 46.0;
+  final double _compactWidth = 118.0;
   final double _expandedHeight = 260;
   final double _fullHeight = 460;
 
@@ -421,12 +421,21 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
     final bool isDarkMode = !isLightMode;
     final bool isDragging = _dragHeight != null;
-    final glassColor = RidelSurfaceTokens.pillBackground(
-      isDarkMode,
-      elevated: isDragging || _currentState != WeatherState.compact,
-    );
-    final borderColor = RidelSurfaceTokens.border(isDarkMode);
-    final pillShadows = RidelSurfaceTokens.pillShadows(isDarkMode);
+    final glassColor = isDarkMode
+        ? const Color(0xFF141824).withValues(alpha: 0.92)
+        : Colors.white.withValues(alpha: 0.95);
+    final borderColor = isDarkMode
+        ? Colors.white.withValues(alpha: 0.12)
+        : Colors.black.withValues(alpha: 0.08);
+    final pillShadows = [
+      BoxShadow(
+        color: isDarkMode
+            ? Colors.black.withValues(alpha: 0.35)
+            : Colors.black.withValues(alpha: 0.08),
+        blurRadius: 14.0,
+        offset: const Offset(0, 4),
+      ),
+    ];
 
     final bool isDesktop = ResponsiveLayout.isDesktop(context);
     final screenSize = MediaQuery.sizeOf(context);
@@ -464,18 +473,18 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                 width: _compactWidth,
                 height: _compactHeight,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: BorderRadius.circular(24),
                   boxShadow: pillShadows,
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(22),
-                  child: AdaptiveBlur(sigmaX: 14.0, sigmaY: 14.0,
+                  borderRadius: BorderRadius.circular(24),
+                  child: AdaptiveBlur(sigmaX: 16.0, sigmaY: 16.0,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
                       decoration: BoxDecoration(
                         color: glassColor,
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(color: borderColor, width: 0.75),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: borderColor, width: 1.0),
                       ),
                       child: Center(
                         child: _isLoading && !isLocationDisabled
@@ -491,21 +500,36 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Container(
-                                        width: 18,
-                                        height: 18,
+                                        width: 22,
+                                        height: 22,
                                         decoration: const BoxDecoration(
                                           color: Colors.white,
                                           shape: BoxShape.circle,
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      Container(
-                                        width: 56,
-                                        height: 11,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
+                                      Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Container(
+                                            width: 28,
+                                            height: 11,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Container(
+                                            width: 44,
+                                            height: 8,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(3),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
@@ -519,16 +543,16 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
                                     color: isLightMode
                                         ? Colors.black54
                                         : Colors.white70,
-                                    size: 17,
+                                    size: 20,
                                   ),
-                                  const SizedBox(width: 6),
+                                  const SizedBox(width: 8),
                                   Text(
                                     isLocationDisabled ? "--°" : "Weather",
                                     style: GoogleFonts.inter(
                                       color: isLightMode
                                           ? Colors.black54
                                           : Colors.white70,
-                                      fontSize: 12,
+                                      fontSize: 13,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -549,7 +573,7 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
     final double rawTargetHeight = _dragHeight ?? _getCurrentTargetHeight();
     final double targetHeight =
         isCompact ? _compactHeight : rawTargetHeight.clamp(_expandedHeight, safeFullHeight);
-    final double currentRadius = isCompact ? 22.0 : 28.0;
+    final double currentRadius = isCompact ? 24.0 : 28.0;
 
     return TapRegion(
       onTapOutside: (_) {
@@ -612,25 +636,56 @@ class WeatherFloatingWidgetState extends State<WeatherFloatingWidget> {
 
   Widget _buildCompactView(bool isNight, bool isLightMode) {
     final textPrimary = isLightMode ? const Color(0xFF111318) : Colors.white;
+    final textSecondary = isLightMode ? const Color(0xFF6B7280) : const Color(0xFF94A3B8);
+
+    String conditionText = _weather!.condition.trim();
+    if (conditionText.isEmpty || conditionText == "--") {
+      conditionText = _weather!.aqi > 0 ? "AQI ${_weather!.aqi}" : (isNight ? "Clear" : "Sunny");
+    }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           PremiumWeatherIcon(
-              code: _weather!.weatherCode, size: 17, isNight: isNight),
-          const SizedBox(width: 5),
-          Text(
-            "${_weather!.temp.toInt()}°",
-            style: GoogleFonts.inter(
-              color: textPrimary,
-              fontWeight: FontWeight.w700,
-              fontSize: 13.5,
-              letterSpacing: -0.3,
-              height: 1.0,
-            ),
+            code: _weather!.weatherCode,
+            size: 24,
+            isNight: isNight,
+          ),
+          const SizedBox(width: 8),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                "${_weather!.temp.toInt()}°",
+                style: GoogleFonts.inter(
+                  color: textPrimary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14.5,
+                  letterSpacing: -0.3,
+                  height: 1.1,
+                ),
+              ),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 58),
+                child: Text(
+                  conditionText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: textSecondary,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 10.5,
+                    letterSpacing: 0.1,
+                    height: 1.1,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
